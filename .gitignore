@@ -16,3 +16,6 @@
 
 # Local cache of schemas
 schemas
+
+# The generated binary:
+schema-tools
