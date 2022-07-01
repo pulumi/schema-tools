@@ -188,7 +188,8 @@ func compare(provider string, oldCommit string, newCommit string) error {
 	}
 
 	if len(newResources) > 0 {
-		fmt.Println("\n#### New resources:\n")
+		fmt.Println("\n#### New resources:")
+		fmt.Println("")
 		sort.Strings(newResources)
 		for _, v := range newResources {
 			fmt.Printf("- `%s`\n", v)
@@ -196,7 +197,8 @@ func compare(provider string, oldCommit string, newCommit string) error {
 	}
 
 	if len(newFunctions) > 0 {
-		fmt.Println("\n#### New functions:\n")
+		fmt.Println("\n#### New functions:")
+		fmt.Println("")
 		sort.Strings(newFunctions)
 		for _, v := range newFunctions {
 			fmt.Printf("- `%s`\n", v)
