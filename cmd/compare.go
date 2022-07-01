@@ -16,7 +16,7 @@ func compareCmd() *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "compare",
-		Short: "Compare two versions of a Pulumi schema",
+		Short: "Compare 2 versions of a Pulumi schema",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return compare(provider, oldCommit, newCommit)
 		},
