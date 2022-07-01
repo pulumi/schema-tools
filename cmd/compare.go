@@ -52,14 +52,20 @@ func compare(provider string, oldCommit string, newCommit string) error {
 		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi", usr.HomeDir)
 		path := fmt.Sprintf("pulumi-%s/provider/cmd/pulumi-resource-%[1]s", provider)
 		schemaPath := filepath.Join(basePath, path, "schema.json")
-		schNew = loadLocalPackageSpec(schemaPath)
+		schNew, err = pkg.LoadLocalPackageSpec(schemaPath)
+		if err != nil {
+			return err
+		}
 	} else if strings.HasPrefix(newCommit, "--local-path=") {
 		parts := strings.Split(newCommit, "=")
 		schemaPath, err := filepath.Abs(parts[1])
 		if err != nil {
 			panic("unable to construct absolute path to schema.json")
 		}
-		schNew = loadLocalPackageSpec(schemaPath)
+		schNew, err = pkg.LoadLocalPackageSpec(schemaPath)
+		if err != nil {
+			return err
+		}
 	} else {
 		schemaUrlNew := fmt.Sprintf("https://raw.githubusercontent.com/pulumi/pulumi-%s/%s/provider/cmd/pulumi-resource-%[1]s/schema.json", provider, newCommit)
 		schNew, err = pkg.DownloadSchema(schemaUrlNew)
@@ -205,20 +211,6 @@ func compare(provider string, oldCommit string, newCommit string) error {
 	}
 
 	return nil
-}
-
-func loadLocalPackageSpec(filePath string) schema.PackageSpec {
-	body, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		panic(err)
-	}
-
-	var sch schema.PackageSpec
-	if err = json.Unmarshal(body, &sch); err != nil {
-		panic(err)
-	}
-
-	return sch
 }
 
 func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, prefix string) (violations []string) {
