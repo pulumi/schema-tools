@@ -12,8 +12,8 @@ func statsCmd() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "stats",
 		Short: "Get the stats of a current schema",
-		Run: func(command *cobra.Command, args []string) {
-			stats(provider)
+		RunE: func(command *cobra.Command, args []string) error {
+			return stats(provider)
 		},
 	}
 
@@ -24,13 +24,18 @@ func statsCmd() *cobra.Command {
 	return command
 }
 
-func stats(provider string) {
+func stats(provider string) error {
 	schemaUrl := fmt.Sprintf("https://raw.githubusercontent.com/pulumi/pulumi-%s/master/provider/cmd/pulumi-resource-%[1]s/schema.json", provider)
-	sch := downloadSchema(schemaUrl)
+	sch, err := pkg.DownloadSchema(schemaUrl)
+	if err != nil {
+		return err
+	}
 
 	schemaStats := pkg.CountStats(sch)
 
 	fmt.Printf("Provider: %s\n", provider)
 	fmt.Printf("Total resource types: %d\n", schemaStats.TotalResources)
 	fmt.Printf("Total input properties: %d\n", schemaStats.TotalResourceInputs)
+
+	return nil
 }

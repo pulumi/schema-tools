@@ -10,9 +10,6 @@ func rootCmd() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "schema-tools",
 		Short: "schema-tools is a CLI utility to analyze Pulumi schemas",
-		Run: func(cmd *cobra.Command, args []string) {
-			// Do Stuff Here
-		},
 	}
 
 	command.AddCommand(compareCmd())
