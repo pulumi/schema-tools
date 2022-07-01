@@ -7,7 +7,7 @@ import (
 )
 
 func TestCountStats(t *testing.T) {
-	schema := schema.PackageSpec{
+	testSchema := schema.PackageSpec{
 		Functions: map[string]schema.FunctionSpec{
 			"test:index/getFoo:getFoo": {
 				Description: "0123456789",
@@ -33,7 +33,7 @@ func TestCountStats(t *testing.T) {
 		},
 	}
 
-	stats := CountStats(schema)
+	stats := CountStats(testSchema)
 
 	assert.Equal(t, 3, stats.TotalResourceInputs)
 	assert.Equal(t, 2, stats.ResourceInputsMissingDesc)
