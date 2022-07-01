@@ -1,8 +1,12 @@
 name: ci
 on:
   pull_request:
+    branches:
+      - main
+      - master
   push:
     branches:
+      - main
       - master
 env:
   GO_VERSION: '1.18.x'
