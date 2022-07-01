@@ -1,13 +1,10 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/pulumi/schema-tools/pkg"
 	"github.com/spf13/cobra"
-	"io/ioutil"
-	"net/http"
 	"os/user"
 	"path/filepath"
 	"sort"
@@ -19,7 +16,7 @@ func compareCmd() *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "compare",
-		Short: "Compare 2 versions of a Pulumi schema",
+		Short: "Compare two versions of a Pulumi schema",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return compare(provider, oldCommit, newCommit)
 		},
@@ -60,7 +57,7 @@ func compare(provider string, oldCommit string, newCommit string) error {
 		parts := strings.Split(newCommit, "=")
 		schemaPath, err := filepath.Abs(parts[1])
 		if err != nil {
-			panic("unable to construct absolute path to schema.json")
+			return fmt.Errorf("unable to construct absolute path to schema.json: %w", err)
 		}
 		schNew, err = pkg.LoadLocalPackageSpec(schemaPath)
 		if err != nil {
@@ -243,61 +240,4 @@ func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, prefix string) (v
 
 func formatName(provider, s string) string {
 	return strings.ReplaceAll(strings.TrimPrefix(s, fmt.Sprintf("%s:", provider)), ":", ".")
-}
-
-func downloadAzureMeta(schemaUrl string) azureAPIMetadata {
-	resp, err := http.Get(schemaUrl)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
-
-	var meta azureAPIMetadata
-	if err = json.Unmarshal(body, &meta); err != nil {
-		panic(err)
-	}
-
-	return meta
-}
-
-func loadLocalAzureMeta(filePath string) azureAPIMetadata {
-	body, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		panic(err)
-	}
-
-	var meta azureAPIMetadata
-	if err = json.Unmarshal(body, &meta); err != nil {
-		panic(err)
-	}
-
-	return meta
-}
-
-type azureAPIMetadata struct {
-	Resources map[string]azureAPIResource `json:"resources"`
-	Invokes   map[string]azureAPIInvoke   `json:"invokes"`
-}
-
-type azureAPIResource struct {
-	APIVersion string `json:"apiVersion"`
-}
-
-type azureAPIInvoke struct {
-	APIVersion string `json:"apiVersion"`
-}
-
-func versionlessName(name string) string {
-	parts := strings.Split(name, ":")
-	mod := parts[1]
-	modParts := strings.Split(mod, "/")
-	if len(modParts) == 2 {
-		mod = modParts[0]
-	}
-	return fmt.Sprintf("%s:%s", mod, parts[2])
 }
