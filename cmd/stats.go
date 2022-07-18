@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/pulumi/schema-tools/pkg"
 	"github.com/spf13/cobra"
@@ -34,8 +35,9 @@ func stats(provider string) error {
 	schemaStats := pkg.CountStats(sch)
 
 	fmt.Printf("Provider: %s\n", provider)
-	fmt.Printf("Total resource types: %d\n", schemaStats.TotalResources)
-	fmt.Printf("Total input properties: %d\n", schemaStats.TotalResourceInputs)
+	statsBytes, _ := json.MarshalIndent(schemaStats, "", "  ")
+	statsString := string(statsBytes)
+	fmt.Printf(statsString)
 
 	return nil
 }

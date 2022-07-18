@@ -8,44 +8,123 @@ import (
 )
 
 type PulumiSchemaStats struct {
-	TotalResources            int
-	TotalResourceInputs       int
-	ResourceInputsMissingDesc int
-	TotalFunctions            int
+	Functions FunctionStats
+	Resources ResourceStats
+}
+
+// ResourceStats contains statistics relating to the resources section of a Pulumi schema.
+type ResourceStats struct {
+	// TotalResources is the total number of Pulumi resources in the schema.
+	TotalResources int
+
+	// TotalDescriptionBytes is the sum total of all bytes in the descriptions of the resources themselves, not
+	// including any inputs and outputs.
+	TotalDescriptionBytes int
+
+	// TotalInputProperties is the total number of inputs across all resources, including nested types.
+	TotalInputProperties int
+
+	// InputPropertiesMissingDescriptions is the total number of all resource input properties missing descriptions,
+	// including nested types.
+	InputPropertiesMissingDescriptions int
+
+	// TotalOutputProperties is the total number of outputs across all resources, including nested types.
+	TotalOutputProperties int
+
+	// OutputPropertiesMissingDescriptions is the total number of all resource output properties missing descriptions.
+	OutputPropertiesMissingDescriptions int
+}
+
+// FunctionStats contain statistics relating to the functions section of a Pulumi schema.
+type FunctionStats struct {
+	// TotalFunctions is the total number of Pulumi Functions in the schema.
+	TotalFunctions int
+
+	// TotalDescriptionBytes is the sum total of all bytes in the descriptions of the functions themselves,
+	// not including inputs and outputs.
+	TotalDescriptionBytes int
+
+	// TotalInputPropertyDescriptionBytes is the sum total of all bytes in descriptions of function input properties,
+	// not including the input type description.
+	TotalInputPropertyDescriptionBytes int
+
+	// InputPropertiesMissingDescriptions is the total number of all function input properties missing descriptions.
+	InputPropertiesMissingDescriptions int
+
+	// TotalOutputPropertyDescriptionBytes is the sum total of all bytes in description of function output properties,
+	// not include the output type description.
+	TotalOutputPropertyDescriptionBytes int
+
+	// OutputPropertiesMissingDescriptions is the total number of all function output properties missing descriptions.
+	OutputPropertiesMissingDescriptions int
 }
 
 func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
-	stats := PulumiSchemaStats{}
+	stats := PulumiSchemaStats{
+		Resources: ResourceStats{},
+		Functions: FunctionStats{},
+	}
 
 	uniques := codegen.NewStringSet()
 	visitedTypes := codegen.NewStringSet()
 
-	var propCount func(string) (int, int)
-	propCount = func(typeName string) (totalProperties int, propertiesMissingDesc int) {
+	type propCountResult struct {
+		totalInputs        int
+		inputsMissingDesc  int
+		totalOutputs       int
+		outputsMissingDesc int
+	}
+
+	var propCount func(string) propCountResult
+	propCount = func(typeName string) propCountResult {
 		if visitedTypes.Has(typeName) {
-			return 0, 0
+			return propCountResult{}
 		}
+
+		res := propCountResult{}
 
 		visitedTypes.Add(typeName)
 
 		t := sch.Types[typeName]
 
-		totalProperties = len(t.Properties)
-		propertiesMissingDesc = 0
+		res.totalInputs = len(t.Properties)
 
-		for _, p := range t.Properties {
-			if p.Description == "" {
-				propertiesMissingDesc++
+		for _, input := range t.Properties {
+			if input.Description == "" {
+				res.inputsMissingDesc++
 			}
 
-			if p.Ref != "" {
-				tn := strings.TrimPrefix(p.Ref, "#/types/")
-				nestedTotalProps, nestedPropsMissingDesc := propCount(tn)
-				totalProperties += nestedTotalProps
-				propertiesMissingDesc += nestedPropsMissingDesc
+			if input.Ref != "" {
+				tn := strings.TrimPrefix(input.Ref, "#/types/")
+				nestedRes := propCount(tn)
+
+				res.totalInputs += nestedRes.totalInputs
+				res.totalOutputs += nestedRes.totalOutputs
+				res.inputsMissingDesc += nestedRes.inputsMissingDesc
+				res.outputsMissingDesc += nestedRes.outputsMissingDesc
 			}
 		}
-		return totalProperties, propertiesMissingDesc
+
+		res.totalOutputs = len(t.ObjectTypeSpec.Properties)
+
+		for _, output := range t.ObjectTypeSpec.Properties {
+			if output.Description == "" {
+				res.outputsMissingDesc++
+			}
+
+			// TODO: Determine if outputs linking to a type is an actual schema capability
+			if output.Ref != "" {
+				tn := strings.TrimPrefix(output.Ref, "#/types/")
+				nestedRes := propCount(tn)
+
+				res.totalInputs += nestedRes.totalInputs
+				res.totalOutputs += nestedRes.totalOutputs
+				res.inputsMissingDesc += nestedRes.inputsMissingDesc
+				res.outputsMissingDesc += nestedRes.outputsMissingDesc
+			}
+		}
+
+		return res
 	}
 
 	for n, r := range sch.Resources {
@@ -54,23 +133,65 @@ func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
 			continue
 		}
 		uniques.Add(baseName)
-		stats.TotalResourceInputs += len(r.InputProperties)
-		for _, p := range r.InputProperties {
-			if p.Description == "" {
-				stats.ResourceInputsMissingDesc++
+
+		stats.Resources.TotalInputProperties += len(r.InputProperties)
+		stats.Resources.TotalDescriptionBytes += len(r.Description)
+
+		for _, input := range r.InputProperties {
+			if input.Description == "" {
+				stats.Resources.InputPropertiesMissingDescriptions++
 			}
 
-			if p.Ref != "" {
-				typeName := strings.TrimPrefix(p.Ref, "#/types/")
-				nestedTotalProps, nestedPropsMissingDesc := propCount(typeName)
-				stats.TotalResourceInputs += nestedTotalProps
-				stats.ResourceInputsMissingDesc += nestedPropsMissingDesc
+			if input.Ref != "" {
+				typeName := strings.TrimPrefix(input.Ref, "#/types/")
+				res := propCount(typeName)
+				stats.Resources.TotalInputProperties += res.totalInputs
+				stats.Resources.InputPropertiesMissingDescriptions += res.inputsMissingDesc
+				stats.Resources.TotalOutputProperties += res.totalOutputs
+				stats.Resources.OutputPropertiesMissingDescriptions += res.outputsMissingDesc
+			}
+		}
+
+		stats.Resources.TotalOutputProperties += len(r.ObjectTypeSpec.Properties)
+
+		for _, output := range r.ObjectTypeSpec.Properties {
+			if output.Description == "" {
+				stats.Resources.OutputPropertiesMissingDescriptions++
+			}
+
+			if output.Ref != "" {
+				typeName := strings.TrimPrefix(output.Ref, "#/types/")
+				res := propCount(typeName)
+				stats.Resources.TotalInputProperties += res.totalInputs
+				stats.Resources.InputPropertiesMissingDescriptions += res.inputsMissingDesc
+				stats.Resources.TotalOutputProperties += res.totalOutputs
+				stats.Resources.OutputPropertiesMissingDescriptions += res.outputsMissingDesc
 			}
 		}
 	}
 
-	stats.TotalResources = len(uniques)
-	stats.TotalFunctions = len(sch.Functions)
+	stats.Resources.TotalResources = len(uniques)
+
+	stats.Functions.TotalFunctions = len(sch.Functions)
+	for _, v := range sch.Functions {
+		stats.Functions.TotalDescriptionBytes += len(v.Description)
+
+		if v.Inputs != nil && v.Inputs.Properties != nil {
+			for _, vv := range v.Inputs.Properties {
+				stats.Functions.TotalInputPropertyDescriptionBytes += len(vv.Description)
+				if vv.Description == "" {
+					stats.Functions.InputPropertiesMissingDescriptions++
+				}
+			}
+		}
+
+		for _, vv := range v.Outputs.Properties {
+			stats.Functions.TotalOutputPropertyDescriptionBytes += len(vv.Description)
+			if vv.Description == "" {
+				stats.Functions.OutputPropertiesMissingDescriptions++
+			}
+		}
+	}
 
 	return stats
 }
