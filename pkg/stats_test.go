@@ -123,4 +123,27 @@ func TestCountStats(t *testing.T) {
 	assert.Equal(t, 13, stats.Functions.TotalOutputPropertyDescriptionBytes)
 }
 
-// TODO: Add a test case that throoughly tests all possible type references.
+// TODO: Add test cases that thoroughly test all possible type references.
+
+func TestCountStats_ExternalRef(t *testing.T) {
+	testSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"awsx:cloudtrail:Trail": {
+				InputProperties: map[string]schema.PropertySpec{
+					"bucket": {
+						TypeSpec: schema.TypeSpec{
+							Ref: "/aws/v5.4.0/schema.json#/resources/aws:s3%2Fbucket:Bucket",
+						},
+						Description: "The managed S3 Bucket where the Trail will place its logs.",
+					},
+				},
+			},
+		},
+	}
+
+	stats := CountStats(testSchema)
+
+	// We are mostly testing that we did not get a panic because of the external type ref
+	assert.Equal(t, stats.Resources.TotalResources, 1)
+	assert.Equal(t, stats.Resources.TotalInputProperties, 1)
+}
