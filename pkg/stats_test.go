@@ -123,7 +123,84 @@ func TestCountStats(t *testing.T) {
 	assert.Equal(t, 13, stats.Functions.TotalOutputPropertyDescriptionBytes)
 }
 
-// TODO: Add test cases that thoroughly test all possible type references.
+func TestCountStats_InternalRefs_Inputs(t *testing.T) {
+	testSchema := schema.PackageSpec{
+		Types: map[string]schema.ComplexTypeSpec{
+			"test:index/myType:myType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"myProperty": {
+							TypeSpec: schema.TypeSpec{
+								Type: "integer",
+							},
+						},
+					},
+				},
+			},
+		},
+		Resources: map[string]schema.ResourceSpec{
+			"test:index/myResource:/myResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"myProperty": {
+						TypeSpec: schema.TypeSpec{
+							Ref: "#/types/test:index/myType:myType",
+						},
+					},
+					"myProperty2": {
+						TypeSpec: schema.TypeSpec{
+							Ref: "#/types/test:index/myType:myType",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	stats := CountStats(testSchema)
+
+	assert.Equal(t, 3, stats.Resources.TotalInputProperties)
+}
+
+func TestCountStats_InternalRefs_Outputs(t *testing.T) {
+	testSchema := schema.PackageSpec{
+		Types: map[string]schema.ComplexTypeSpec{
+			"test:index/myType:myType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"myProperty": {
+							TypeSpec: schema.TypeSpec{
+								Type: "integer",
+							},
+						},
+					},
+				},
+			},
+		},
+		Resources: map[string]schema.ResourceSpec{
+			"test:index/myResource:/myResource": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Description: "0123456789",
+					Properties: map[string]schema.PropertySpec{
+						"myProperty": {
+							TypeSpec: schema.TypeSpec{
+								Ref: "#/types/test:index/myType:myType",
+							},
+						},
+						"myProperty2": {
+							TypeSpec: schema.TypeSpec{
+								Ref: "#/types/test:index/myType:myType",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	stats := CountStats(testSchema)
+
+	assert.Equal(t, 3, stats.Resources.TotalOutputProperties)
+}
 
 func TestCountStats_ExternalRef(t *testing.T) {
 	testSchema := schema.PackageSpec{
@@ -146,4 +223,8 @@ func TestCountStats_ExternalRef(t *testing.T) {
 	// We are mostly testing that we did not get a panic because of the external type ref
 	assert.Equal(t, stats.Resources.TotalResources, 1)
 	assert.Equal(t, stats.Resources.TotalInputProperties, 1)
+}
+
+func TestVersionlessName(t *testing.T) {
+	assert.Equal(t, "config:assumeRoleWithWebIdentity", versionlessName("#/types/aws:config/assumeRoleWithWebIdentity:assumeRoleWithWebIdentity"))
 }

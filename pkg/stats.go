@@ -22,6 +22,7 @@ type ResourceStats struct {
 	TotalDescriptionBytes int
 
 	// TotalInputProperties is the total number of inputs across all resources, including nested types.
+	// Given a complex input type Foo with one property, Foo.Bar, both Foo and Foo.Bar are counted as inputs.
 	TotalInputProperties int
 
 	// InputPropertiesMissingDescriptions is the total number of all resource input properties missing descriptions,
@@ -29,6 +30,7 @@ type ResourceStats struct {
 	InputPropertiesMissingDescriptions int
 
 	// TotalOutputProperties is the total number of outputs across all resources, including nested types.
+	// Given a complex output type Foo with one property, Foo.Bar, both Foo and Foo.Bar are counted as outputs.
 	TotalOutputProperties int
 
 	// OutputPropertiesMissingDescriptions is the total number of all resource output properties missing descriptions.
@@ -112,7 +114,6 @@ func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
 				res.outputsMissingDesc++
 			}
 
-			// TODO: Determine if outputs linking to a type is an actual schema capability
 			if output.Ref != "" {
 				tn := strings.TrimPrefix(output.Ref, "#/types/")
 				nestedRes := propCount(tn)
