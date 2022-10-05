@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
-	"github.com/pulumi/schema-tools/pkg"
-	"github.com/spf13/cobra"
 	"os/user"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
+	"github.com/pulumi/schema-tools/pkg"
+	"github.com/spf13/cobra"
 )
 
 func compareCmd() *cobra.Command {
@@ -217,10 +218,10 @@ func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, prefix string) (v
 	case old == nil && new == nil:
 		return
 	case old != nil && new == nil:
-		violations = append(violations, fmt.Sprintf("had no type but now has %+v", new))
+		violations = append(violations, fmt.Sprintf("had %+v but now has no type", old))
 		return
 	case old == nil && new != nil:
-		violations = append(violations, fmt.Sprintf("had %+v but now has no type", new))
+		violations = append(violations, fmt.Sprintf("had no type but now has %+v", new))
 		return
 	}
 
