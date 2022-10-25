@@ -115,6 +115,11 @@ func compare(provider string, oldCommit string, newCommit string) error {
 		}
 
 		for propName, prop := range f.Inputs.Properties {
+			if newFunc.Inputs == nil {
+				violations = append(violations, fmt.Sprintf("Function %q missing input %q", funcName, propName))
+				continue
+			}
+
 			newProp, ok := newFunc.Inputs.Properties[propName]
 			if !ok {
 				violations = append(violations, fmt.Sprintf("Function %q missing input %q", funcName, propName))
