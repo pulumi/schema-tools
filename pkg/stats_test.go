@@ -202,6 +202,37 @@ func TestCountStats_InternalRefs_Outputs(t *testing.T) {
 	assert.Equal(t, 3, stats.Resources.TotalOutputProperties)
 }
 
+func TestCountStats_NoInputs(t *testing.T) {
+	testSchema := schema.PackageSpec{
+		Functions: map[string]schema.FunctionSpec{
+			"test:index/getFooNoInputs:getFooNoInputs": {
+				Description: "This is a function that has no inputs, like getGlobalClient on the auth0 provider.",
+				Outputs: &schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"output1": {
+							Description: "0123456789",
+						},
+					},
+				},
+			},
+		},
+		Resources: map[string]schema.ResourceSpec{
+			"test:index/noInputs:noInputs": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Description: "This is a resource that has no inputs. Not known whether this case exists in the wild, but it sure shouldn't panic if we hit it!",
+					Properties: map[string]schema.PropertySpec{
+						"output1": {
+							Description: "0123456789",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_ = CountStats(testSchema)
+}
+
 func TestCountStats_ExternalRef(t *testing.T) {
 	testSchema := schema.PackageSpec{
 		Resources: map[string]schema.ResourceSpec{
