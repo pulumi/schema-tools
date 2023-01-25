@@ -15,6 +15,7 @@ func rootCmd() *cobra.Command {
 	command.AddCommand(compareCmd())
 	command.AddCommand(statsCmd())
 	command.AddCommand(versionCmd())
+	command.AddCommand(experimentalCmd())
 
 	return command
 }
