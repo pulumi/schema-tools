@@ -115,7 +115,10 @@ func compareAll() error {
 	for _, name := range sortedKeys {
 		group := resourceMap[name]
 		unique := calculateUniqueVersions(sch, group)
-		fmt.Printf("%s can be reduced from %d to %d\n", name, len(group), len(unique))
+		reduced := group.Subtract(unique)
+		for r := range reduced {
+			fmt.Println(r)
+		}
 	}
 
 	return nil
@@ -139,7 +142,7 @@ func compareResources(sch *schema.PackageSpec, oldName string, newName string) (
 			continue
 		}
 
-		vs := validateTypesDeep(sch, &prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Resource %q input %q", newName, propName))
+		vs := validateTypesDeep(sch, &prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Resource %q input %q", newName, propName), true)
 		violations = append(violations, vs...)
 	}
 
@@ -150,9 +153,24 @@ func compareResources(sch *schema.PackageSpec, oldName string, newName string) (
 			continue
 		}
 
-		vs := validateTypesDeep(sch, &prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Resource %q output %q", newName, propName))
+		vs := validateTypesDeep(sch, &prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Resource %q output %q", newName, propName), false)
 		violations = append(violations, vs...)
 	}
+
+	oldRequiredSet := codegen.NewStringSet(oldRes.RequiredInputs...)
+	for _, propName := range newRes.RequiredInputs {
+		if !oldRequiredSet.Has(propName) {
+			violations = append(violations, fmt.Sprintf("Resource %q has a new required input %q", newName, propName))
+		}
+	}
+
+	newRequiredSet := codegen.NewStringSet(newRes.Required...)
+	for _, propName := range oldRes.Required {
+		if !newRequiredSet.Has(propName) {
+			violations = append(violations, fmt.Sprintf("Resource %q has output %q that is not required anymore", newName, propName))
+		}
+	}
+
 	return violations, nil
 }
 
@@ -175,7 +193,7 @@ outer:
 	return uniqueVersions
 }
 
-func validateTypesDeep(sch *schema.PackageSpec, old *schema.TypeSpec, new *schema.TypeSpec, prefix string) (violations []string) {
+func validateTypesDeep(sch *schema.PackageSpec, old *schema.TypeSpec, new *schema.TypeSpec, prefix string, input bool) (violations []string) {
 	switch {
 	case old == nil && new == nil:
 		return
@@ -196,9 +214,9 @@ func validateTypesDeep(sch *schema.PackageSpec, old *schema.TypeSpec, new *schem
 		newType = new.Ref
 	}
 	if oldType != newType {
-		if strings.HasPrefix(oldType, "#/types/azure-native") &&
+		if strings.HasPrefix(oldType, "#/types/azure-native") && //azure-native:resources/v20210101:MyType
 			strings.HasPrefix(newType, "#/types/azure-native") &&
-			pkg.VersionlessName(oldType) == pkg.VersionlessName(newType) {
+			pkg.VersionlessName(oldType) == pkg.VersionlessName(newType) { // resources:MyType
 			// Both are reference types, let's do a deep comparison
 			oldTypeRef := sch.Types[oldType]
 			newTypeRef := sch.Types[newType]
@@ -209,15 +227,31 @@ func validateTypesDeep(sch *schema.PackageSpec, old *schema.TypeSpec, new *schem
 					continue
 				}
 
-				vs := validateTypesDeep(sch, &prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Type %q input %q", newType, propName))
+				vs := validateTypesDeep(sch, &prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Type %q input %q", newType, propName), input)
 				violations = append(violations, vs...)
+			}
+
+			if input {
+				oldRequiredSet := codegen.NewStringSet(oldTypeRef.Required...)
+				for _, propName := range newTypeRef.Required {
+					if !oldRequiredSet.Has(propName) {
+						violations = append(violations, fmt.Sprintf("Type %q has a new required input %q", newType, propName))
+					}
+				}
+			} else {
+				newRequiredSet := codegen.NewStringSet(newTypeRef.Required...)
+				for _, propName := range oldTypeRef.Required {
+					if !newRequiredSet.Has(propName) {
+						violations = append(violations, fmt.Sprintf("Type %q has output %q that is not required anymore", newType, propName))
+					}
+				}
 			}
 		} else {
 			violations = append(violations, fmt.Sprintf("%s type changed from %q to %q", prefix, oldType, newType))
 		}
 	}
-	violations = append(violations, validateTypesDeep(sch, old.Items, new.Items, prefix+" items")...)
-	violations = append(violations, validateTypesDeep(sch, old.AdditionalProperties, new.AdditionalProperties, prefix+" additional properties")...)
+	violations = append(violations, validateTypesDeep(sch, old.Items, new.Items, prefix+" items", input)...)
+	violations = append(violations, validateTypesDeep(sch, old.AdditionalProperties, new.AdditionalProperties, prefix+" additional properties", input)...)
 	return
 }
 
