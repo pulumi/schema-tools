@@ -2,9 +2,10 @@ package pkg
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/pulumi/pulumi/pkg/v3/codegen"
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
-	"strings"
 )
 
 type PulumiSchemaStats struct {
@@ -186,10 +187,12 @@ func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
 			}
 		}
 
-		for _, vv := range v.Outputs.Properties {
-			stats.Functions.TotalOutputPropertyDescriptionBytes += len(vv.Description)
-			if vv.Description == "" {
-				stats.Functions.OutputPropertiesMissingDescriptions++
+		if v.Outputs != nil && v.Outputs.Properties != nil {
+			for _, vv := range v.Outputs.Properties {
+				stats.Functions.TotalOutputPropertyDescriptionBytes += len(vv.Description)
+				if vv.Description == "" {
+					stats.Functions.OutputPropertiesMissingDescriptions++
+				}
 			}
 		}
 	}
