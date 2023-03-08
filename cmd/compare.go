@@ -130,6 +130,9 @@ func compare(provider string, oldCommit string, newCommit string) error {
 			violations = append(violations, vs...)
 		}
 
+		if f.Outputs == nil {
+			continue
+		}
 		for propName, prop := range f.Outputs.Properties {
 			newProp, ok := newFunc.Outputs.Properties[propName]
 			if !ok {
