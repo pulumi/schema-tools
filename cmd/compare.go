@@ -130,18 +130,17 @@ func compare(provider string, oldCommit string, newCommit string) error {
 			violations = append(violations, vs...)
 		}
 
-		if f.Outputs == nil {
-			continue
-		}
-		for propName, prop := range f.Outputs.Properties {
-			newProp, ok := newFunc.Outputs.Properties[propName]
-			if !ok {
-				violations = append(violations, fmt.Sprintf("Function %q missing output %q", funcName, propName))
-				continue
-			}
+		if f.Outputs != nil {
+			for propName, prop := range f.Outputs.Properties {
+				newProp, ok := newFunc.Outputs.Properties[propName]
+				if !ok {
+					violations = append(violations, fmt.Sprintf("Function %q missing output %q", funcName, propName))
+					continue
+				}
 
-			vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Function %q output %q", funcName, propName))
-			violations = append(violations, vs...)
+				vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Function %q output %q", funcName, propName))
+				violations = append(violations, vs...)
+			}
 		}
 	}
 
