@@ -130,6 +130,11 @@ func compare(provider string, oldCommit string, newCommit string) error {
 
 		if f.Outputs != nil {
 			for propName, prop := range f.Outputs.Properties {
+				if newFunc.Outputs == nil {
+					violations = append(violations, fmt.Sprintf("Function %q missing output %q", funcName, propName))
+					continue
+				}
+
 				newProp, ok := newFunc.Outputs.Properties[propName]
 				if !ok {
 					violations = append(violations, fmt.Sprintf("Function %q missing output %q", funcName, propName))
