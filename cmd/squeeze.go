@@ -1,17 +1,19 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/pulumi/pulumi/pkg/v3/codegen"
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/pulumi/schema-tools/pkg"
 	"github.com/spf13/cobra"
+	"io/ioutil"
 	"os/user"
 	"path/filepath"
 	"strings"
 )
 
-func experimentalCmd() *cobra.Command {
+func squeezeCmd() *cobra.Command {
 	var oldRes, newRes, res string
 	command := &cobra.Command{
 		Use:   "squeeze",
@@ -112,6 +114,7 @@ func compareAll() error {
 	}
 
 	sortedKeys := codegen.SortedKeys(resourceMap)
+	replacements := map[string]string{}
 	for _, name := range sortedKeys {
 		group := resourceMap[name]
 		unique := calculateUniqueVersions(sch, group)
@@ -119,9 +122,17 @@ func compareAll() error {
 		for r := range reduced {
 			fmt.Println(r)
 		}
+		for k := range reduced {
+			for _, a := range codegen.SortedKeys(unique) {
+				if a > k {
+					replacements[k] = a
+					break
+				}
+			}
+		}
 	}
 
-	return nil
+	return writeJSONToFile("replacements.json", replacements)
 }
 
 func compareResources(sch *schema.PackageSpec, oldName string, newName string) ([]string, error) {
@@ -266,4 +277,18 @@ func readSchema() (*schema.PackageSpec, error) {
 		return nil, err
 	}
 	return &sch, nil
+}
+
+func writeJSONToFile(filename string, data interface{}) error {
+	jsonData, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("error serializing to JSON: %w", err)
+	}
+
+	err = ioutil.WriteFile(filename, jsonData, 0644)
+	if err != nil {
+		return fmt.Errorf("error writing JSON data to file: %w", err)
+	}
+
+	return nil
 }
