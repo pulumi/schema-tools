@@ -9,14 +9,14 @@ go install
 go build
 ```
 ## Usage
-
+```
 Available Commands:
   compare     Compare two versions of a Pulumi schema
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
   stats       Get the stats of a current schema
   version     Print the version number of schema-tools
-
+```
 ## Resource Stats
 
 ```
