@@ -257,5 +257,5 @@ func TestCountStats_ExternalRef(t *testing.T) {
 }
 
 func TestVersionlessName(t *testing.T) {
-	assert.Equal(t, "config:assumeRoleWithWebIdentity", versionlessName("#/types/aws:config/assumeRoleWithWebIdentity:assumeRoleWithWebIdentity"))
+	assert.Equal(t, "config:assumeRoleWithWebIdentity", VersionlessName("#/types/aws:config/assumeRoleWithWebIdentity:assumeRoleWithWebIdentity"))
 }

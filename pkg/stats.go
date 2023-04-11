@@ -130,7 +130,7 @@ func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
 	}
 
 	for n, r := range sch.Resources {
-		baseName := versionlessName(n)
+		baseName := VersionlessName(n)
 		if uniques.Has(baseName) {
 			continue
 		}
@@ -200,7 +200,7 @@ func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
 	return stats
 }
 
-func versionlessName(name string) string {
+func VersionlessName(name string) string {
 	parts := strings.Split(name, ":")
 	mod := parts[1]
 	modParts := strings.Split(mod, "/")
