@@ -13,7 +13,7 @@ import (
 )
 
 func squeezeCmd() *cobra.Command {
-	var oldRes, newRes, res, source string
+	var oldRes, newRes, res, source, out string
 	command := &cobra.Command{
 		Use:   "squeeze",
 		Short: "Utilities to compare Azure Native versions on backward compatibility",
@@ -27,13 +27,14 @@ func squeezeCmd() *cobra.Command {
 			if res != "" {
 				return compareGroup(source, res)
 			}
-			return compareAll(source)
+			return compareAll(source, out)
 		},
 	}
 	command.Flags().StringVarP(&oldRes, "old", "o", "", "old resource name")
 	command.Flags().StringVarP(&newRes, "new", "n", "", "new resource name")
 	command.Flags().StringVarP(&source, "source", "s", "", "source schema path")
 	command.Flags().StringVarP(&res, "resource", "r", "", "resource (default) name")
+	command.Flags().StringVar(&out, "out", "", "replacements output path (when comparing all resources)")
 
 	return command
 }
@@ -100,7 +101,7 @@ func compareGroup(path, groupName string) error {
 	return nil
 }
 
-func compareAll(path string) error {
+func compareAll(path, out string) error {
 	sch, err := readSchema(path)
 	if err != nil {
 		return err
@@ -135,7 +136,10 @@ func compareAll(path string) error {
 		}
 	}
 
-	return writeJSONToFile("replacements.json", replacements)
+	if out != "" {
+		return writeJSONToFile(out, replacements)
+	}
+	return nil
 }
 
 func compareResources(sch *schema.PackageSpec, oldName string, newName string) ([]string, error) {
