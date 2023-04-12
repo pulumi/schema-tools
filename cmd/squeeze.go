@@ -3,40 +3,43 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"strings"
+
 	"github.com/pulumi/pulumi/pkg/v3/codegen"
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/pulumi/schema-tools/pkg"
 	"github.com/spf13/cobra"
-	"io/ioutil"
-	"os/user"
-	"path/filepath"
-	"strings"
 )
 
 func squeezeCmd() *cobra.Command {
-	var oldRes, newRes, res string
+	var oldRes, newRes, res, source string
 	command := &cobra.Command{
 		Use:   "squeeze",
 		Short: "Utilities to compare Azure Native versions on backward compatibility",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if source == "" {
+				return fmt.Errorf("source path is required")
+			}
 			if oldRes != "" && newRes != "" {
-				return compareTwo(oldRes, newRes)
+				return compareTwo(source, oldRes, newRes)
 			}
 			if res != "" {
-				return compareGroup(res)
+				return compareGroup(source, res)
 			}
-			return compareAll()
+			return compareAll(source)
 		},
 	}
 	command.Flags().StringVarP(&oldRes, "old", "o", "", "old resource name")
 	command.Flags().StringVarP(&newRes, "new", "n", "", "new resource name")
+	command.Flags().StringVarP(&source, "source", "s", "", "source schema path")
 	command.Flags().StringVarP(&res, "resource", "r", "", "resource (default) name")
 
 	return command
 }
 
-func compareTwo(oldName string, newName string) error {
-	sch, err := readSchema()
+func compareTwo(path, oldName, newName string) error {
+	sch, err := readSchema(path)
 	if err != nil {
 		return err
 	}
@@ -67,8 +70,8 @@ func compareTwo(oldName string, newName string) error {
 	return nil
 }
 
-func compareGroup(groupName string) error {
-	sch, err := readSchema()
+func compareGroup(path, groupName string) error {
+	sch, err := readSchema(path)
 	if err != nil {
 		return err
 	}
@@ -97,8 +100,8 @@ func compareGroup(groupName string) error {
 	return nil
 }
 
-func compareAll() error {
-	sch, err := readSchema()
+func compareAll(path string) error {
+	sch, err := readSchema(path)
 	if err != nil {
 		return err
 	}
@@ -266,13 +269,8 @@ func validateTypesDeep(sch *schema.PackageSpec, old *schema.TypeSpec, new *schem
 	return
 }
 
-func readSchema() (*schema.PackageSpec, error) {
-	var sch schema.PackageSpec
-	usr, _ := user.Current()
-	basePath := fmt.Sprintf("%s/go/src/github.com/pulumi", usr.HomeDir)
-	path := fmt.Sprintf("pulumi-%s/provider/cmd/pulumi-resource-%[1]s", "azure-native")
-	schemaPath := filepath.Join(basePath, path, "schema-full.json")
-	sch, err := pkg.LoadLocalPackageSpec(schemaPath)
+func readSchema(path string) (*schema.PackageSpec, error) {
+	sch, err := pkg.LoadLocalPackageSpec(path)
 	if err != nil {
 		return nil, err
 	}
