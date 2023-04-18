@@ -79,7 +79,7 @@ func compareGroup(path, groupName string) error {
 
 	resVersions := codegen.StringSet{}
 	for name := range sch.Resources {
-		if !strings.Contains(name, "/") {
+		if !pkg.IsVersionedName(name) {
 			continue
 		}
 		if groupName == pkg.VersionlessName(name) {
@@ -109,6 +109,10 @@ func compareAll(path, out string) error {
 
 	resourceMap := map[string]codegen.StringSet{}
 	for name := range sch.Resources {
+		if !pkg.IsVersionedName(name) {
+			continue
+		}
+
 		vls := pkg.VersionlessName(name)
 		if existing, ok := resourceMap[vls]; ok {
 			existing.Add(name)

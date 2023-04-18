@@ -200,6 +200,7 @@ func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
 	return stats
 }
 
+// "azure-native:appplatform/v20230101preview" -> "appplatform"
 func VersionlessName(name string) string {
 	parts := strings.Split(name, ":")
 	mod := parts[1]
@@ -208,4 +209,9 @@ func VersionlessName(name string) string {
 		mod = modParts[0]
 	}
 	return fmt.Sprintf("%s:%s", mod, parts[2])
+}
+
+// Is it of the form "azure-native:appplatform/v20230101preview" or just "azure-native:appplatform"?
+func IsVersionedName(name string) bool {
+	return strings.Contains(name, "/v")
 }
