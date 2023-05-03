@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/pulumi/schema-tools/internal/pkg"
+	"github.com/pulumi/schema-tools/internal/util/set"
 )
 
 func compareCmd() *cobra.Command {
@@ -120,14 +121,14 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 			violations = append(violations, vs...)
 		}
 
-		oldRequiredInputs := setFromSlice(res.RequiredInputs)
+		oldRequiredInputs := set.FromSlice(res.RequiredInputs)
 		for _, input := range newRes.RequiredInputs {
 			if !oldRequiredInputs.Has(input) {
 				violation(changedToRequired("input", input))
 			}
 		}
 
-		newRequiredProperties := setFromSlice(newRes.Required)
+		newRequiredProperties := set.FromSlice(newRes.Required)
 		for _, prop := range res.Required {
 			if !newRequiredProperties.Has(prop) {
 				violation(changedToOptional("property", prop))
@@ -163,7 +164,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 			}
 
 			if newFunc.Inputs != nil {
-				oldRequired := setFromSlice(f.Inputs.Required)
+				oldRequired := set.FromSlice(f.Inputs.Required)
 				for _, req := range newFunc.Inputs.Required {
 					if !oldRequired.Has(req) {
 						violation(changedToRequired("input", req))
@@ -189,9 +190,9 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 				violations = append(violations, vs...)
 			}
 
-			var newRequired set[string]
+			var newRequired set.Set[string]
 			if newFunc.Outputs != nil {
-				newRequired = setFromSlice(newFunc.Outputs.Required)
+				newRequired = set.FromSlice(newFunc.Outputs.Required)
 			}
 			for _, req := range f.Outputs.Required {
 				if !newRequired.Has(req) {
@@ -225,13 +226,13 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 		// Since we don't know if this type will be consumed by pulumi (as an
 		// input) or by the user (as an output), this inherits the strictness of
 		// both inputs and outputs.
-		newRequired := setFromSlice(newTyp.Required)
+		newRequired := set.FromSlice(newTyp.Required)
 		for _, r := range typ.Required {
 			if !newRequired.Has(r) {
 				violation(changedToOptional("property", r))
 			}
 		}
-		required := setFromSlice(typ.Required)
+		required := set.FromSlice(typ.Required)
 		for _, r := range newTyp.Required {
 			if !required.Has(r) {
 				violation(changedToRequired("property", r))
@@ -329,23 +330,4 @@ func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, prefix string) (v
 
 func formatName(provider, s string) string {
 	return strings.ReplaceAll(strings.TrimPrefix(s, fmt.Sprintf("%s:", provider)), ":", ".")
-}
-
-type set[T comparable] struct{ m map[T]struct{} }
-
-func setFromSlice[T comparable](slice []T) set[T] {
-	m := make(map[T]struct{}, len(slice))
-	for _, v := range slice {
-		m[v] = struct{}{}
-	}
-
-	return set[T]{m}
-}
-
-func (s *set[T]) Has(e T) bool {
-	if s == nil || s.m == nil {
-		return false
-	}
-	_, has := s.m[e]
-	return has
 }
