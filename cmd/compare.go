@@ -120,14 +120,14 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 			violations = append(violations, vs...)
 		}
 
-		oldRequiredInputs := setFromList(res.RequiredInputs)
+		oldRequiredInputs := setFromSlice(res.RequiredInputs)
 		for _, input := range newRes.RequiredInputs {
 			if !oldRequiredInputs.Has(input) {
 				violation(changedToRequired("input", input))
 			}
 		}
 
-		newRequiredProperties := setFromList(newRes.Required)
+		newRequiredProperties := setFromSlice(newRes.Required)
 		for _, prop := range res.Required {
 			if !newRequiredProperties.Has(prop) {
 				violation(changedToOptional("property", prop))
@@ -163,7 +163,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 			}
 
 			if newFunc.Inputs != nil {
-				oldRequired := setFromList(f.Inputs.Required)
+				oldRequired := setFromSlice(f.Inputs.Required)
 				for _, req := range newFunc.Inputs.Required {
 					if !oldRequired.Has(req) {
 						violation(changedToRequired("input", req))
@@ -191,7 +191,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 
 			var newRequired set[string]
 			if newFunc.Outputs != nil {
-				newRequired = setFromList(newFunc.Outputs.Required)
+				newRequired = setFromSlice(newFunc.Outputs.Required)
 			}
 			for _, req := range f.Outputs.Required {
 				if !newRequired.Has(req) {
@@ -225,13 +225,13 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 		// Since we don't know if this type will be consumed by pulumi (as an
 		// input) or by the user (as an output), this inherits the strictness of
 		// both inputs and outputs.
-		newRequired := setFromList(newTyp.Required)
+		newRequired := setFromSlice(newTyp.Required)
 		for _, r := range typ.Required {
 			if !newRequired.Has(r) {
 				violation(changedToOptional("property", r))
 			}
 		}
-		required := setFromList(typ.Required)
+		required := setFromSlice(typ.Required)
 		for _, r := range newTyp.Required {
 			if !required.Has(r) {
 				violation(changedToRequired("property", r))
@@ -333,9 +333,9 @@ func formatName(provider, s string) string {
 
 type set[T comparable] struct{ m map[T]struct{} }
 
-func setFromList[T comparable](elems []T) set[T] {
-	m := make(map[T]struct{}, len(elems))
-	for _, v := range elems {
+func setFromSlice[T comparable](slice []T) set[T] {
+	m := make(map[T]struct{}, len(slice))
+	for _, v := range slice {
 		m[v] = struct{}{}
 	}
 
