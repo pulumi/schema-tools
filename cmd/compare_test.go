@@ -17,7 +17,7 @@ func TestBreakingResourceRequired(t *testing.T) {
 		},
 		{ // Making an output optional is breaking
 			OldRequired:    []string{"value"},
-			ExpectedOutput: []string{`Resource "my-pkg:index:MyResource" missing required output "value"`},
+			ExpectedOutput: []string{`Resource "my-pkg:index:MyResource" property "value" is no longer Required`},
 		},
 		{ // Making an output required is not breaking
 			NewRequired: []string{"value"},
@@ -25,7 +25,7 @@ func TestBreakingResourceRequired(t *testing.T) {
 		{ // But making an input required is breaking
 			NewRequiredInputs: []string{"list"},
 			ExpectedOutput: []string{
-				`Resource "my-pkg:index:MyResource" added new required input "list"`,
+				`Resource "my-pkg:index:MyResource" input "list" has changed to Required`,
 			},
 		},
 		{ // Making an input optional is not breaking
@@ -63,7 +63,7 @@ func TestBreakingFunctionRequired(t *testing.T) {
 		},
 		{ // Making an output optional is breaking
 			OldRequired:    []string{"value"},
-			ExpectedOutput: []string{`Function "my-pkg:index:MyFunction" missing required output "value"`},
+			ExpectedOutput: []string{`Function "my-pkg:index:MyFunction" property "value" is no longer Required`},
 		},
 		{ // Making an output required is not breaking
 			NewRequired: []string{"value"},
@@ -72,7 +72,7 @@ func TestBreakingFunctionRequired(t *testing.T) {
 			OldRequiredInputs: []string{},
 			NewRequiredInputs: []string{"list"},
 			ExpectedOutput: []string{
-				`Function "my-pkg:index:MyFunction" added new required input "list"`,
+				`Function "my-pkg:index:MyFunction" input "list" has changed to Required`,
 			},
 		},
 		{ // Making an input optional is not breaking
@@ -108,14 +108,14 @@ func TestBreakingTypeRequired(t *testing.T) {
 			OldRequired: []string{"value"},
 			NewRequired: []string{"value", "list"},
 			ExpectedOutput: []string{
-				`Type "my-pkg:index:MyResource" added new required property "list"`,
+				`Type "my-pkg:index:MyResource" property "list" has changed to Required`,
 			},
 		},
 		{ // Removing a requirement is breaking
 			OldRequired: []string{"value", "list"},
 			NewRequired: []string{"value"},
 			ExpectedOutput: []string{
-				`Type "my-pkg:index:MyResource" missing required property "list"`,
+				`Type "my-pkg:index:MyResource" property "list" is no longer Required`,
 			},
 		},
 	}

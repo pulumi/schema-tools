@@ -80,6 +80,14 @@ func compare(provider string, oldCommit string, newCommit string) error {
 
 func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 	var violations []string
+
+	changedToRequired := func(kind, name string) string {
+		return fmt.Sprintf("%s %q has changed to Required", kind, name)
+	}
+	changedToOptional := func(kind, name string) string {
+		return fmt.Sprintf("%s %q is no longer Required", kind, name)
+	}
+
 	for resName, res := range oldSchema.Resources {
 		violation := func(msg string, args ...any) {
 			violations = append(violations, fmt.Sprintf("Resource %q "+msg, append([]any{resName}, args...)...))
@@ -112,17 +120,17 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 			violations = append(violations, vs...)
 		}
 
-		oldRequiredInputs := newSetFromList(res.RequiredInputs)
+		oldRequiredInputs := setFromList(res.RequiredInputs)
 		for _, input := range newRes.RequiredInputs {
 			if !oldRequiredInputs.Has(input) {
-				violation("added new required input %q", input)
+				violation(changedToRequired("input", input))
 			}
 		}
 
-		newRequiredProperties := newSetFromList(newRes.Required)
+		newRequiredProperties := setFromList(newRes.Required)
 		for _, prop := range res.Required {
 			if !newRequiredProperties.Has(prop) {
-				violation("missing required output %q", prop)
+				violation(changedToOptional("property", prop))
 			}
 		}
 	}
@@ -155,10 +163,10 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 			}
 
 			if newFunc.Inputs != nil {
-				oldRequired := newSetFromList(f.Inputs.Required)
+				oldRequired := setFromList(f.Inputs.Required)
 				for _, req := range newFunc.Inputs.Required {
 					if !oldRequired.Has(req) {
-						violation("added new required input %q", req)
+						violation(changedToRequired("input", req))
 					}
 				}
 			}
@@ -183,11 +191,11 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 
 			var newRequired set[string]
 			if newFunc.Outputs != nil {
-				newRequired = newSetFromList(newFunc.Outputs.Required)
+				newRequired = setFromList(newFunc.Outputs.Required)
 			}
 			for _, req := range f.Outputs.Required {
 				if !newRequired.Has(req) {
-					violation("missing required output %q", req)
+					violation(changedToOptional("property", req))
 				}
 			}
 		}
@@ -210,23 +218,23 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 				continue
 			}
 
-			vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Type %q input %q", typName, propName))
+			vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Type %q property %q", typName, propName))
 			violations = append(violations, vs...)
 		}
 
 		// Since we don't know if this type will be consumed by pulumi (as an
 		// input) or by the user (as an output), this inherits the strictness of
 		// both inputs and outputs.
-		newRequired := newSetFromList(newTyp.Required)
+		newRequired := setFromList(newTyp.Required)
 		for _, r := range typ.Required {
 			if !newRequired.Has(r) {
-				violation("missing required property %q", r)
+				violation(changedToOptional("property", r))
 			}
 		}
-		required := newSetFromList(typ.Required)
+		required := setFromList(typ.Required)
 		for _, r := range newTyp.Required {
 			if !required.Has(r) {
-				violation("added new required property %q", r)
+				violation(changedToRequired("property", r))
 			}
 		}
 	}
@@ -325,7 +333,7 @@ func formatName(provider, s string) string {
 
 type set[T comparable] struct{ m map[T]struct{} }
 
-func newSetFromList[T comparable](elems []T) set[T] {
+func setFromList[T comparable](elems []T) set[T] {
 	m := make(map[T]struct{}, len(elems))
 	for _, v := range elems {
 		m[v] = struct{}{}
