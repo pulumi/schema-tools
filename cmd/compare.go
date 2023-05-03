@@ -2,14 +2,17 @@ package cmd
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"os/user"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
-	"github.com/pulumi/schema-tools/pkg"
 	"github.com/spf13/cobra"
+
+	"github.com/pulumi/schema-tools/pkg"
 )
 
 func compareCmd() *cobra.Command {
@@ -71,13 +74,18 @@ func compare(provider string, oldCommit string, newCommit string) error {
 			return err
 		}
 	}
+	compareSchemas(os.Stdout, provider, schOld, schNew)
+	return nil
+}
+
+func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec) {
 
 	var violations []string
-	for resName, res := range schOld.Resources {
+	for resName, res := range oldSchema.Resources {
 		violation := func(msg string, args ...any) {
 			violations = append(violations, fmt.Sprintf("Resource %q "+msg, append([]any{resName}, args...)...))
 		}
-		newRes, ok := schNew.Resources[resName]
+		newRes, ok := newSchema.Resources[resName]
 		if !ok {
 			violation("missing")
 			continue
@@ -120,11 +128,11 @@ func compare(provider string, oldCommit string, newCommit string) error {
 		}
 	}
 
-	for funcName, f := range schOld.Functions {
+	for funcName, f := range oldSchema.Functions {
 		violation := func(msg string, args ...any) {
 			violations = append(violations, fmt.Sprintf("Function %q "+msg, append([]any{funcName}, args...)...))
 		}
-		newFunc, ok := schNew.Functions[funcName]
+		newFunc, ok := newSchema.Functions[funcName]
 		if !ok {
 			violation("missing")
 			continue
@@ -189,11 +197,11 @@ func compare(provider string, oldCommit string, newCommit string) error {
 		}
 	}
 
-	for typName, typ := range schOld.Types {
+	for typName, typ := range oldSchema.Types {
 		violation := func(msg string, a ...any) {
 			violations = append(violations, fmt.Sprintf("Type %q "+msg, append([]any{typName}, a...)...))
 		}
-		newTyp, ok := schNew.Types[typName]
+		newTyp, ok := newSchema.Types[typName]
 		if !ok {
 			violation("missing")
 			continue
@@ -229,11 +237,11 @@ func compare(provider string, oldCommit string, newCommit string) error {
 
 	switch len(violations) {
 	case 0:
-		fmt.Println("Looking good! No breaking changes found.")
+		fmt.Fprintln(out, "Looking good! No breaking changes found.")
 	case 1:
-		fmt.Println("Found 1 breaking change:")
+		fmt.Fprintln(out, "Found 1 breaking change:")
 	default:
-		fmt.Printf("Found %d breaking changes:\n", len(violations))
+		fmt.Fprintf(out, "Found %d breaking changes:\n", len(violations))
 	}
 
 	var violationDetails []string
@@ -244,44 +252,42 @@ func compare(provider string, oldCommit string, newCommit string) error {
 	}
 
 	for _, v := range violationDetails {
-		fmt.Println(v)
+		fmt.Fprintln(out, v)
 	}
 
 	var newResources, newFunctions []string
-	for resName := range schNew.Resources {
-		if _, ok := schOld.Resources[resName]; !ok {
+	for resName := range newSchema.Resources {
+		if _, ok := oldSchema.Resources[resName]; !ok {
 			newResources = append(newResources, formatName(provider, resName))
 		}
 	}
-	for resName := range schNew.Functions {
-		if _, ok := schOld.Functions[resName]; !ok {
+	for resName := range newSchema.Functions {
+		if _, ok := oldSchema.Functions[resName]; !ok {
 			newFunctions = append(newFunctions, formatName(provider, resName))
 		}
 	}
 
 	if len(newResources) > 0 {
-		fmt.Println("\n#### New resources:")
-		fmt.Println("")
+		fmt.Fprintln(out, "\n#### New resources:")
+		fmt.Fprintln(out, "")
 		sort.Strings(newResources)
 		for _, v := range newResources {
-			fmt.Printf("- `%s`\n", v)
+			fmt.Fprintf(out, "- `%s`\n", v)
 		}
 	}
 
 	if len(newFunctions) > 0 {
-		fmt.Println("\n#### New functions:")
-		fmt.Println("")
+		fmt.Fprintln(out, "\n#### New functions:")
+		fmt.Fprintln(out, "")
 		sort.Strings(newFunctions)
 		for _, v := range newFunctions {
-			fmt.Printf("- `%s`\n", v)
+			fmt.Fprintf(out, "- `%s`\n", v)
 		}
 	}
 
 	if len(newResources) == 0 && len(newFunctions) == 0 {
-		fmt.Println("No new resources/functions.")
+		fmt.Fprintln(out, "No new resources/functions.")
 	}
-
-	return nil
 }
 
 func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, prefix string) (violations []string) {
