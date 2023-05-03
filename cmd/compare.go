@@ -78,8 +78,7 @@ func compare(provider string, oldCommit string, newCommit string) error {
 	return nil
 }
 
-func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec) {
-
+func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 	var violations []string
 	for resName, res := range oldSchema.Resources {
 		violation := func(msg string, args ...any) {
@@ -116,11 +115,11 @@ func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.
 		oldRequiredInputs := newSetFromList(res.RequiredInputs)
 		for _, input := range newRes.RequiredInputs {
 			if !oldRequiredInputs.Has(input) {
-				violation("new required input %q", input)
+				violation("added new required input %q", input)
 			}
 		}
 
-		newRequiredProperties := newSetFromList(res.Required)
+		newRequiredProperties := newSetFromList(newRes.Required)
 		for _, prop := range res.Required {
 			if !newRequiredProperties.Has(prop) {
 				violation("missing required output %q", prop)
@@ -156,13 +155,10 @@ func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.
 			}
 
 			if newFunc.Inputs != nil {
-				var oldRequired set[string]
-				if f.Inputs != nil {
-					oldRequired = newSetFromList(f.Inputs.Required)
-				}
+				oldRequired := newSetFromList(f.Inputs.Required)
 				for _, req := range newFunc.Inputs.Required {
 					if !oldRequired.Has(req) {
-						violation("new required input %q", req)
+						violation("added new required input %q", req)
 					}
 				}
 			}
@@ -230,11 +226,16 @@ func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.
 		required := newSetFromList(typ.Required)
 		for _, r := range newTyp.Required {
 			if !required.Has(r) {
-				violation("new required property %q", r)
+				violation("added new required property %q", r)
 			}
 		}
 	}
 
+	return violations
+}
+
+func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec) {
+	violations := breakingChanges(oldSchema, newSchema)
 	switch len(violations) {
 	case 0:
 		fmt.Fprintln(out, "Looking good! No breaking changes found.")
