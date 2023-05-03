@@ -8,8 +8,9 @@ import (
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen"
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
-	"github.com/pulumi/schema-tools/pkg"
 	"github.com/spf13/cobra"
+
+	"github.com/pulumi/schema-tools/internal/pkg"
 )
 
 func squeezeCmd() *cobra.Command {

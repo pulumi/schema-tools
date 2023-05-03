@@ -3,9 +3,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/pulumi/pulumi/pkg/v3/codegen"
-	"github.com/pulumi/schema-tools/pkg"
 	"github.com/spf13/cobra"
+
+	"github.com/pulumi/schema-tools/internal/pkg"
 )
 
 func statsCmd() *cobra.Command {
