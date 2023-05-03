@@ -3,7 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen"
@@ -292,7 +292,7 @@ func writeJSONToFile(filename string, data interface{}) error {
 		return fmt.Errorf("error serializing to JSON: %w", err)
 	}
 
-	err = ioutil.WriteFile(filename, jsonData, 0644)
+	err = os.WriteFile(filename, jsonData, 0644)
 	if err != nil {
 		return fmt.Errorf("error writing JSON data to file: %w", err)
 	}

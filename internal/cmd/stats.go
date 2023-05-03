@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen"
 	"github.com/spf13/cobra"
@@ -43,8 +44,10 @@ func stats(provider string, details bool) error {
 
 	fmt.Printf("Provider: %s\n", provider)
 	statsBytes, _ := json.MarshalIndent(schemaStats, "", "  ")
-	statsString := string(statsBytes)
-	fmt.Printf(statsString)
+	_, err = os.Stdout.Write(statsBytes)
+	if err != nil {
+		return fmt.Errorf("main stats: %w", err)
+	}
 
 	if details {
 		fmt.Printf("\n\n### All Resources:\n\n")
