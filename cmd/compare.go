@@ -74,16 +74,19 @@ func compare(provider string, oldCommit string, newCommit string) error {
 
 	var violations []string
 	for resName, res := range schOld.Resources {
+		violation := func(msg string, args ...any) {
+			violations = append(violations, fmt.Sprintf("Resource %q "+msg, append([]any{resName}, args...)...))
+		}
 		newRes, ok := schNew.Resources[resName]
 		if !ok {
-			violations = append(violations, fmt.Sprintf("Resource %q missing", resName))
+			violation("missing")
 			continue
 		}
 
 		for propName, prop := range res.InputProperties {
 			newProp, ok := newRes.InputProperties[propName]
 			if !ok {
-				violations = append(violations, fmt.Sprintf("Resource %q missing input %q", resName, propName))
+				violation("missing input %q", propName)
 				continue
 			}
 
@@ -94,56 +97,77 @@ func compare(provider string, oldCommit string, newCommit string) error {
 		for propName, prop := range res.Properties {
 			newProp, ok := newRes.Properties[propName]
 			if !ok {
-				violations = append(violations, fmt.Sprintf("Resource %q missing output %q", resName, propName))
+				violation("missing output %q", propName)
 				continue
 			}
 
 			vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Resource %q output %q", resName, propName))
 			violations = append(violations, vs...)
 		}
+
+		oldRequiredInputs := newSetFromList(res.RequiredInputs)
+		for _, input := range newRes.RequiredInputs {
+			if !oldRequiredInputs.Has(input) {
+				violation("new required input %q", input)
+			}
+		}
+
+		newRequiredProperties := newSetFromList(res.Required)
+		for _, prop := range res.Required {
+			if !newRequiredProperties.Has(prop) {
+				violation("missing required output %q", prop)
+			}
+		}
 	}
 
 	for funcName, f := range schOld.Functions {
+		violation := func(msg string, args ...any) {
+			violations = append(violations, fmt.Sprintf("Function %q "+msg, append([]any{funcName}, args...)...))
+		}
 		newFunc, ok := schNew.Functions[funcName]
 		if !ok {
-			violations = append(violations, fmt.Sprintf("Function %q missing", funcName))
+			violation("missing")
 			continue
 		}
 
 		if f.Inputs != nil {
 			for propName, prop := range f.Inputs.Properties {
 				if newFunc.Inputs == nil {
-					violations = append(violations, fmt.Sprintf("Function %q missing input %q", funcName, propName))
+					violation("missing input %q", propName)
 					continue
 				}
 
 				newProp, ok := newFunc.Inputs.Properties[propName]
 				if !ok {
-					violations = append(violations, fmt.Sprintf("Function %q missing input %q", funcName, propName))
+					violation("missing input %q", propName)
 					continue
 				}
 
 				vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Function %q input %q", funcName, propName))
 				violations = append(violations, vs...)
 			}
+
+			// TODO: Validate that no new required properties have been added
 		}
 
 		if f.Outputs != nil {
 			for propName, prop := range f.Outputs.Properties {
 				if newFunc.Outputs == nil {
-					violations = append(violations, fmt.Sprintf("Function %q missing output %q", funcName, propName))
+					violation("missing output %q", propName)
 					continue
 				}
 
 				newProp, ok := newFunc.Outputs.Properties[propName]
 				if !ok {
-					violations = append(violations, fmt.Sprintf("Function %q missing output %q", funcName, propName))
+					violation("missing output %q", propName)
 					continue
 				}
 
 				vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Function %q output %q", funcName, propName))
 				violations = append(violations, vs...)
 			}
+
+			// TODO: Validate that no required properties have been removed
 		}
 	}
 
@@ -164,6 +188,12 @@ func compare(provider string, oldCommit string, newCommit string) error {
 			vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Type %q input %q", typName, propName))
 			violations = append(violations, vs...)
 		}
+
+		// TODO: Validate that no required properties have been added or removed
+		//
+		// Thinking more on this one, since we don't know if this type will be
+		// consumed by pulumi (as an input) or by the user (as an output), this
+		// inherits the strictness of both inputs and outputs.
 	}
 
 	switch len(violations) {
@@ -253,4 +283,23 @@ func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, prefix string) (v
 
 func formatName(provider, s string) string {
 	return strings.ReplaceAll(strings.TrimPrefix(s, fmt.Sprintf("%s:", provider)), ":", ".")
+}
+
+type set[T comparable] struct{ m map[T]struct{} }
+
+func newSetFromList[T comparable](elems []T) set[T] {
+	m := make(map[T]struct{}, len(elems))
+	for _, v := range elems {
+		m[v] = struct{}{}
+	}
+
+	return set[T]{m}
+}
+
+func (s *set[T]) Has(e T) bool {
+	if s == nil || s.m == nil {
+		return false
+	}
+	_, has := s.m[e]
+	return has
 }
