@@ -2,14 +2,17 @@ package cmd
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"os/user"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
-	"github.com/pulumi/schema-tools/pkg"
 	"github.com/spf13/cobra"
+
+	"github.com/pulumi/schema-tools/pkg"
 )
 
 func compareCmd() *cobra.Command {
@@ -71,19 +74,34 @@ func compare(provider string, oldCommit string, newCommit string) error {
 			return err
 		}
 	}
+	compareSchemas(os.Stdout, provider, schOld, schNew)
+	return nil
+}
 
+func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 	var violations []string
-	for resName, res := range schOld.Resources {
-		newRes, ok := schNew.Resources[resName]
+
+	changedToRequired := func(kind, name string) string {
+		return fmt.Sprintf("%s %q has changed to Required", kind, name)
+	}
+	changedToOptional := func(kind, name string) string {
+		return fmt.Sprintf("%s %q is no longer Required", kind, name)
+	}
+
+	for resName, res := range oldSchema.Resources {
+		violation := func(msg string, args ...any) {
+			violations = append(violations, fmt.Sprintf("Resource %q "+msg, append([]any{resName}, args...)...))
+		}
+		newRes, ok := newSchema.Resources[resName]
 		if !ok {
-			violations = append(violations, fmt.Sprintf("Resource %q missing", resName))
+			violation("missing")
 			continue
 		}
 
 		for propName, prop := range res.InputProperties {
 			newProp, ok := newRes.InputProperties[propName]
 			if !ok {
-				violations = append(violations, fmt.Sprintf("Resource %q missing input %q", resName, propName))
+				violation("missing input %q", propName)
 				continue
 			}
 
@@ -94,85 +112,145 @@ func compare(provider string, oldCommit string, newCommit string) error {
 		for propName, prop := range res.Properties {
 			newProp, ok := newRes.Properties[propName]
 			if !ok {
-				violations = append(violations, fmt.Sprintf("Resource %q missing output %q", resName, propName))
+				violation("missing output %q", propName)
 				continue
 			}
 
 			vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Resource %q output %q", resName, propName))
 			violations = append(violations, vs...)
 		}
+
+		oldRequiredInputs := setFromSlice(res.RequiredInputs)
+		for _, input := range newRes.RequiredInputs {
+			if !oldRequiredInputs.Has(input) {
+				violation(changedToRequired("input", input))
+			}
+		}
+
+		newRequiredProperties := setFromSlice(newRes.Required)
+		for _, prop := range res.Required {
+			if !newRequiredProperties.Has(prop) {
+				violation(changedToOptional("property", prop))
+			}
+		}
 	}
 
-	for funcName, f := range schOld.Functions {
-		newFunc, ok := schNew.Functions[funcName]
+	for funcName, f := range oldSchema.Functions {
+		violation := func(msg string, args ...any) {
+			violations = append(violations, fmt.Sprintf("Function %q "+msg, append([]any{funcName}, args...)...))
+		}
+		newFunc, ok := newSchema.Functions[funcName]
 		if !ok {
-			violations = append(violations, fmt.Sprintf("Function %q missing", funcName))
+			violation("missing")
 			continue
 		}
 
 		if f.Inputs != nil {
 			for propName, prop := range f.Inputs.Properties {
 				if newFunc.Inputs == nil {
-					violations = append(violations, fmt.Sprintf("Function %q missing input %q", funcName, propName))
+					violation("missing input %q", propName)
 					continue
 				}
 
 				newProp, ok := newFunc.Inputs.Properties[propName]
 				if !ok {
-					violations = append(violations, fmt.Sprintf("Function %q missing input %q", funcName, propName))
+					violation("missing input %q", propName)
 					continue
 				}
 
 				vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Function %q input %q", funcName, propName))
 				violations = append(violations, vs...)
 			}
+
+			if newFunc.Inputs != nil {
+				oldRequired := setFromSlice(f.Inputs.Required)
+				for _, req := range newFunc.Inputs.Required {
+					if !oldRequired.Has(req) {
+						violation(changedToRequired("input", req))
+					}
+				}
+			}
 		}
 
 		if f.Outputs != nil {
 			for propName, prop := range f.Outputs.Properties {
 				if newFunc.Outputs == nil {
-					violations = append(violations, fmt.Sprintf("Function %q missing output %q", funcName, propName))
+					violation("missing output %q", propName)
 					continue
 				}
 
 				newProp, ok := newFunc.Outputs.Properties[propName]
 				if !ok {
-					violations = append(violations, fmt.Sprintf("Function %q missing output %q", funcName, propName))
+					violation("missing output %q", propName)
 					continue
 				}
 
 				vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Function %q output %q", funcName, propName))
 				violations = append(violations, vs...)
 			}
+
+			var newRequired set[string]
+			if newFunc.Outputs != nil {
+				newRequired = setFromSlice(newFunc.Outputs.Required)
+			}
+			for _, req := range f.Outputs.Required {
+				if !newRequired.Has(req) {
+					violation(changedToOptional("property", req))
+				}
+			}
 		}
 	}
 
-	for typName, typ := range schOld.Types {
-		newTyp, ok := schNew.Types[typName]
+	for typName, typ := range oldSchema.Types {
+		violation := func(msg string, a ...any) {
+			violations = append(violations, fmt.Sprintf("Type %q "+msg, append([]any{typName}, a...)...))
+		}
+		newTyp, ok := newSchema.Types[typName]
 		if !ok {
-			violations = append(violations, fmt.Sprintf("Type %q missing", typName))
+			violation("missing")
 			continue
 		}
 
 		for propName, prop := range typ.Properties {
 			newProp, ok := newTyp.Properties[propName]
 			if !ok {
-				violations = append(violations, fmt.Sprintf("Type %q missing property %q", typName, propName))
+				violation("missing property %q", propName)
 				continue
 			}
 
-			vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Type %q input %q", typName, propName))
+			vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Type %q property %q", typName, propName))
 			violations = append(violations, vs...)
+		}
+
+		// Since we don't know if this type will be consumed by pulumi (as an
+		// input) or by the user (as an output), this inherits the strictness of
+		// both inputs and outputs.
+		newRequired := setFromSlice(newTyp.Required)
+		for _, r := range typ.Required {
+			if !newRequired.Has(r) {
+				violation(changedToOptional("property", r))
+			}
+		}
+		required := setFromSlice(typ.Required)
+		for _, r := range newTyp.Required {
+			if !required.Has(r) {
+				violation(changedToRequired("property", r))
+			}
 		}
 	}
 
+	return violations
+}
+
+func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec) {
+	violations := breakingChanges(oldSchema, newSchema)
 	switch len(violations) {
 	case 0:
-		fmt.Println("Looking good! No breaking changes found.")
+		fmt.Fprintln(out, "Looking good! No breaking changes found.")
 	case 1:
-		fmt.Println("Found 1 breaking change:")
+		fmt.Fprintln(out, "Found 1 breaking change:")
 	default:
-		fmt.Printf("Found %d breaking changes:\n", len(violations))
+		fmt.Fprintf(out, "Found %d breaking changes:\n", len(violations))
 	}
 
 	var violationDetails []string
@@ -183,44 +261,42 @@ func compare(provider string, oldCommit string, newCommit string) error {
 	}
 
 	for _, v := range violationDetails {
-		fmt.Println(v)
+		fmt.Fprintln(out, v)
 	}
 
 	var newResources, newFunctions []string
-	for resName := range schNew.Resources {
-		if _, ok := schOld.Resources[resName]; !ok {
+	for resName := range newSchema.Resources {
+		if _, ok := oldSchema.Resources[resName]; !ok {
 			newResources = append(newResources, formatName(provider, resName))
 		}
 	}
-	for resName := range schNew.Functions {
-		if _, ok := schOld.Functions[resName]; !ok {
+	for resName := range newSchema.Functions {
+		if _, ok := oldSchema.Functions[resName]; !ok {
 			newFunctions = append(newFunctions, formatName(provider, resName))
 		}
 	}
 
 	if len(newResources) > 0 {
-		fmt.Println("\n#### New resources:")
-		fmt.Println("")
+		fmt.Fprintln(out, "\n#### New resources:")
+		fmt.Fprintln(out, "")
 		sort.Strings(newResources)
 		for _, v := range newResources {
-			fmt.Printf("- `%s`\n", v)
+			fmt.Fprintf(out, "- `%s`\n", v)
 		}
 	}
 
 	if len(newFunctions) > 0 {
-		fmt.Println("\n#### New functions:")
-		fmt.Println("")
+		fmt.Fprintln(out, "\n#### New functions:")
+		fmt.Fprintln(out, "")
 		sort.Strings(newFunctions)
 		for _, v := range newFunctions {
-			fmt.Printf("- `%s`\n", v)
+			fmt.Fprintf(out, "- `%s`\n", v)
 		}
 	}
 
 	if len(newResources) == 0 && len(newFunctions) == 0 {
-		fmt.Println("No new resources/functions.")
+		fmt.Fprintln(out, "No new resources/functions.")
 	}
-
-	return nil
 }
 
 func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, prefix string) (violations []string) {
@@ -253,4 +329,23 @@ func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, prefix string) (v
 
 func formatName(provider, s string) string {
 	return strings.ReplaceAll(strings.TrimPrefix(s, fmt.Sprintf("%s:", provider)), ":", ".")
+}
+
+type set[T comparable] struct{ m map[T]struct{} }
+
+func setFromSlice[T comparable](slice []T) set[T] {
+	m := make(map[T]struct{}, len(slice))
+	for _, v := range slice {
+		m[v] = struct{}{}
+	}
+
+	return set[T]{m}
+}
+
+func (s *set[T]) Has(e T) bool {
+	if s == nil || s.m == nil {
+		return false
+	}
+	_, has := s.m[e]
+	return has
 }
