@@ -217,9 +217,9 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 		// Since we don't know if this type will be consumed by pulumi (as an
 		// input) or by the user (as an output), this inherits the strictness of
 		// both inputs and outputs.
-		newRequred := newSetFromList(newTyp.Required)
+		newRequired := newSetFromList(newTyp.Required)
 		for _, r := range typ.Required {
-			if !newRequred.Has(r) {
+			if !newRequired.Has(r) {
 				violation("missing required property %q", r)
 			}
 		}
