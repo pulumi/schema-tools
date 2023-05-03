@@ -147,7 +147,17 @@ func compare(provider string, oldCommit string, newCommit string) error {
 				violations = append(violations, vs...)
 			}
 
-			// TODO: Validate that no new required properties have been added
+			if newFunc.Inputs != nil {
+				var oldRequired set[string]
+				if f.Inputs != nil {
+					oldRequired = newSetFromList(f.Inputs.Required)
+				}
+				for _, req := range newFunc.Inputs.Required {
+					if !oldRequired.Has(req) {
+						violation("new required input %q", req)
+					}
+				}
+			}
 		}
 
 		if f.Outputs != nil {
@@ -167,21 +177,32 @@ func compare(provider string, oldCommit string, newCommit string) error {
 				violations = append(violations, vs...)
 			}
 
-			// TODO: Validate that no required properties have been removed
+			var newRequired set[string]
+			if newFunc.Outputs != nil {
+				newRequired = newSetFromList(newFunc.Outputs.Required)
+			}
+			for _, req := range f.Outputs.Required {
+				if !newRequired.Has(req) {
+					violation("missing required output %q", req)
+				}
+			}
 		}
 	}
 
 	for typName, typ := range schOld.Types {
+		violation := func(msg string, a ...any) {
+			violations = append(violations, fmt.Sprintf("Type %q "+msg, append([]any{typName}, a...)...))
+		}
 		newTyp, ok := schNew.Types[typName]
 		if !ok {
-			violations = append(violations, fmt.Sprintf("Type %q missing", typName))
+			violation("missing")
 			continue
 		}
 
 		for propName, prop := range typ.Properties {
 			newProp, ok := newTyp.Properties[propName]
 			if !ok {
-				violations = append(violations, fmt.Sprintf("Type %q missing property %q", typName, propName))
+				violation("missing property %q", propName)
 				continue
 			}
 
@@ -189,11 +210,21 @@ func compare(provider string, oldCommit string, newCommit string) error {
 			violations = append(violations, vs...)
 		}
 
-		// TODO: Validate that no required properties have been added or removed
-		//
-		// Thinking more on this one, since we don't know if this type will be
-		// consumed by pulumi (as an input) or by the user (as an output), this
-		// inherits the strictness of both inputs and outputs.
+		// Since we don't know if this type will be consumed by pulumi (as an
+		// input) or by the user (as an output), this inherits the strictness of
+		// both inputs and outputs.
+		newRequred := newSetFromList(newTyp.Required)
+		for _, r := range typ.Required {
+			if !newRequred.Has(r) {
+				violation("missing required property %q", r)
+			}
+		}
+		required := newSetFromList(typ.Required)
+		for _, r := range newTyp.Required {
+			if !required.Has(r) {
+				violation("new required property %q", r)
+			}
+		}
 	}
 
 	switch len(violations) {
