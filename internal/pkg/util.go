@@ -3,9 +3,11 @@ package pkg
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
-	"io/ioutil"
+	"io"
 	"net/http"
+	"os"
+
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
 func DownloadSchema(schemaUrl string) (schema.PackageSpec, error) {
@@ -21,7 +23,7 @@ func DownloadSchema(schemaUrl string) (schema.PackageSpec, error) {
 		return schema.PackageSpec{}, err
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return schema.PackageSpec{}, err
 	}
@@ -35,7 +37,7 @@ func DownloadSchema(schemaUrl string) (schema.PackageSpec, error) {
 }
 
 func LoadLocalPackageSpec(filePath string) (schema.PackageSpec, error) {
-	body, err := ioutil.ReadFile(filePath)
+	body, err := os.ReadFile(filePath)
 	if err != nil {
 		return schema.PackageSpec{}, err
 	}
