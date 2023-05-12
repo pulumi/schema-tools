@@ -34,23 +34,41 @@ func TestBreakingResourceRequired(t *testing.T) {
 	}
 
 	testBreakingRequired(t, tests, func(required, requiredInputs []string) schema.PackageSpec {
-		props := map[string]schema.PropertySpec{
+		return simpleResourceSchema(simpleResource(required, requiredInputs))
+	})
+}
+
+func simpleResource(required, requiredInputs []string) schema.ResourceSpec {
+	props := func() map[string]schema.PropertySpec {
+		return map[string]schema.PropertySpec{
 			"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
 			"list": {TypeSpec: schema.TypeSpec{
 				Type:  "array",
 				Items: &schema.TypeSpec{Type: "number"},
 			}},
 		}
-		r := schema.ResourceSpec{
-			ObjectTypeSpec: schema.ObjectTypeSpec{
-				Properties: props,
-				Required:   required,
-			},
-			InputProperties: props,
-			RequiredInputs:  requiredInputs,
-		}
-		return simpleResourceSchema(r)
-	})
+	}
+	r := schema.ResourceSpec{
+		ObjectTypeSpec: schema.ObjectTypeSpec{
+			Properties: props(),
+			Required:   required,
+		},
+		InputProperties: props(),
+		RequiredInputs:  requiredInputs,
+	}
+	return r
+}
+
+func TestRemovedProperty(t *testing.T) {
+	old := simpleResource([]string{"field1"}, nil)
+	old.Properties["field1"] = schema.PropertySpec{TypeSpec: schema.TypeSpec{Type: "string"}}
+	oldSchema := simpleResourceSchema(old)
+	newSchema := simpleResourceSchema(simpleResource(nil, nil))
+	changes := breakingChanges(oldSchema, newSchema)
+	assert.Equal(t, []string{
+		"Resource \"my-pkg:index:MyResource\" missing output \"field1\"",
+	}, changes)
+
 }
 
 func TestBreakingFunctionRequired(t *testing.T) {
@@ -81,17 +99,21 @@ func TestBreakingFunctionRequired(t *testing.T) {
 	}
 
 	testBreakingRequired(t, tests, func(required, requiredInputs []string) schema.PackageSpec {
-		f := schema.FunctionSpec{}
-		if required != nil {
-			f.Outputs = &schema.ObjectTypeSpec{
+		f := schema.FunctionSpec{
+			Outputs: &schema.ObjectTypeSpec{
 				Required: required,
-			}
-		}
-		if requiredInputs != nil {
-			f.Inputs = &schema.ObjectTypeSpec{
+				Properties: map[string]schema.PropertySpec{
+					"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+			Inputs: &schema.ObjectTypeSpec{
 				Required: requiredInputs,
-			}
+				Properties: map[string]schema.PropertySpec{
+					"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
 		}
+
 		return simpleFunctionSchema(f)
 	})
 }
@@ -123,6 +145,9 @@ func TestBreakingTypeRequired(t *testing.T) {
 	testBreakingRequired(t, tests, func(required, _ []string) schema.PackageSpec {
 		t := schema.ComplexTypeSpec{
 			ObjectTypeSpec: schema.ObjectTypeSpec{
+				Properties: map[string]schema.PropertySpec{
+					"list": {TypeSpec: schema.TypeSpec{Type: "array"}},
+				},
 				Required: required,
 			},
 		}

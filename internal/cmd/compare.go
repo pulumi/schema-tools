@@ -130,7 +130,13 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 
 		newRequiredProperties := set.FromSlice(newRes.Required)
 		for _, prop := range res.Required {
-			if !newRequiredProperties.Has(prop) {
+			// It is a breaking change to move an output property from
+			// required to optional.
+			//
+			// If the property was removed, but that breaking change will
+			// already warned on, so we don't need to warn here.
+			_, stillExists := newRes.Properties[prop]
+			if !newRequiredProperties.Has(prop) && stillExists {
 				violation(changedToOptional("property", prop))
 			}
 		}
@@ -195,7 +201,8 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 				newRequired = set.FromSlice(newFunc.Outputs.Required)
 			}
 			for _, req := range f.Outputs.Required {
-				if !newRequired.Has(req) {
+				_, stillExists := f.Outputs.Properties[req]
+				if !newRequired.Has(req) && stillExists {
 					violation(changedToOptional("property", req))
 				}
 			}
@@ -228,7 +235,8 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 		// both inputs and outputs.
 		newRequired := set.FromSlice(newTyp.Required)
 		for _, r := range typ.Required {
-			if !newRequired.Has(r) {
+			_, stillExists := typ.Properties[r]
+			if !newRequired.Has(r) && stillExists {
 				violation(changedToOptional("property", r))
 			}
 		}
