@@ -75,6 +75,10 @@ func (m *Node) Display(out io.Writer, max int) int {
 }
 
 func (m *Node) display(out io.Writer, level int, prefix bool, max int) int {
+	write := func(s string) {
+		_, err := out.Write([]byte(s))
+		contract.AssertNoErrorf(err, "failed to write display")
+	}
 	if m == nil || !m.doDisplay || max <= 0 {
 		// Nothing to display
 		return 0
@@ -92,12 +96,12 @@ func (m *Node) display(out io.Writer, level int, prefix bool, max int) int {
 			display += " " + m.Description
 		}
 
-		out.Write([]byte(display))
+		write(display)
 	}
 
 	if level > 1 && m.Severity == None {
 		if s := m.uniqueSuccessor(); s != nil {
-			out.Write([]byte(": "))
+			write(": ")
 			return s.display(out, level, false, max-displayed) + displayed
 		}
 	}
@@ -117,9 +121,9 @@ func (m *Node) display(out io.Writer, level int, prefix bool, max int) int {
 	for _, i := range order {
 		if m.subfields[i].doDisplay && !didEndLine {
 			if level > 1 {
-				out.Write([]byte(":\n"))
+				write(":\n")
 			} else {
-				out.Write([]byte("\n"))
+				write("\n")
 			}
 			didEndLine = true
 		}
@@ -128,7 +132,7 @@ func (m *Node) display(out io.Writer, level int, prefix bool, max int) int {
 	}
 
 	if !didEndLine {
-		out.Write([]byte("\n"))
+		write("\n")
 	}
 
 	return displayed

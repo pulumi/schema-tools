@@ -210,7 +210,7 @@ func testBreakingRequired(
 			tt.ExpectedOutput.Display(expected, 10_000)
 			violations.Display(actual, 10_000)
 
-			assert.Equal(t, string(expected.Bytes()), string(actual.Bytes()))
+			assert.Equal(t, expected.String(), actual.String())
 		})
 	}
 }

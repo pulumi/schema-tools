@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/spf13/cobra"
 
 	"github.com/pulumi/schema-tools/internal/pkg"
@@ -272,7 +273,8 @@ func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.
 		fmt.Fprintf(out, "Found %d breaking changes:\n", lenViolations)
 	}
 
-	out.Write(displayedViolations.Bytes())
+	_, err := out.Write(displayedViolations.Bytes())
+	contract.AssertNoErrorf(err, "writing to a bytes.Buffer failing indicates OOM")
 
 	var newResources, newFunctions []string
 	for resName := range newSchema.Resources {
