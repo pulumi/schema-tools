@@ -13,15 +13,15 @@ type Node struct {
 	Title       string
 	Description string
 	Severity    Severity
-	Subfields   []*Node
 
+	subfields []*Node
 	doDisplay bool
 	parent    *Node
 }
 
 func (m *Node) subfield(name string) *Node {
 	contract.Assertf(name != "", "we cannot display an empty name")
-	for _, v := range m.Subfields {
+	for _, v := range m.subfields {
 		if v.Title == name {
 			return v
 		}
@@ -30,7 +30,7 @@ func (m *Node) subfield(name string) *Node {
 		Title:  name,
 		parent: m,
 	}
-	m.Subfields = append(m.Subfields, v)
+	m.subfields = append(m.subfields, v)
 	return v
 }
 
@@ -42,17 +42,32 @@ func (m *Node) Value(value string) *Node {
 	return m.subfield(fmt.Sprintf("%q", value))
 }
 
+func (m *Node) Prune() {
+	sfs := []*Node{}
+	for _, v := range m.subfields {
+		if !v.doDisplay {
+			continue
+		}
+		sfs = append(sfs, v)
+		v.Prune()
+	}
+	if len(sfs) == 0 {
+		sfs = nil
+	}
+	m.subfields = sfs
+}
+
 func (m *Node) levelPrefix(level int) string {
 	switch level {
 	case 0:
-		return "###"
+		return "### "
 	case 1:
-		return "####"
+		return "#### "
 	}
 	if level < 0 {
 		return ""
 	}
-	return strings.Repeat("  ", (level-2)*2) + "-"
+	return strings.Repeat("  ", (level-2)*2) + "- "
 }
 
 func (m *Node) Display(out io.Writer, max int) int {
@@ -69,14 +84,12 @@ func (m *Node) display(out io.Writer, level int, prefix bool, max int) int {
 	var display string
 	if m.Title != "" {
 		if prefix {
-			display = fmt.Sprintf("%s %s ",
-				m.levelPrefix(level),
-				m.severity())
+			display = m.levelPrefix(level) + m.severity()
 		}
-		display += m.Title + ": "
+		display += m.Title
 		if m.Description != "" {
 			displayed += 1
-			display += m.Description
+			display += " " + m.Description
 		}
 
 		out.Write([]byte(display))
@@ -84,33 +97,49 @@ func (m *Node) display(out io.Writer, level int, prefix bool, max int) int {
 
 	if level > 1 && m.Severity == None {
 		if s := m.uniqueSuccessor(); s != nil {
+			out.Write([]byte(": "))
 			return s.display(out, level, false, max-displayed) + displayed
 		}
 	}
 
-	out.Write([]byte{'\n'})
-
-	order := make([]int, len(m.Subfields))
+	order := make([]int, len(m.subfields))
 	for i := range order {
 		order[i] = i
 	}
 	if level > 0 {
 		// Obtain an ordering on the subfields without mutating `.Subfields`.
 		sort.Slice(order, func(i, j int) bool {
-			return m.Subfields[order[i]].Title < m.Subfields[order[j]].Title
+			return m.subfields[order[i]].Title < m.subfields[order[j]].Title
 		})
 	}
 
-	for _, f := range order {
-		n := m.Subfields[f].display(out, level+1, true, max-displayed)
+	var didEndLine bool
+	for _, i := range order {
+		if m.subfields[i].doDisplay && !didEndLine {
+			if level > 1 {
+				out.Write([]byte(":\n"))
+			} else {
+				out.Write([]byte("\n"))
+			}
+			didEndLine = true
+		}
+		n := m.subfields[i].display(out, level+1, true, max-displayed)
 		displayed += n
 	}
+
+	if !didEndLine {
+		out.Write([]byte("\n"))
+	}
+
 	return displayed
 }
 
+// Find the unique successor node for m.
+//
+// If there is no successor or if there are multiple successors, nil is returned.
 func (m *Node) uniqueSuccessor() *Node {
 	var us *Node
-	for _, s := range m.Subfields {
+	for _, s := range m.subfields {
 		if !s.doDisplay {
 			continue
 		}
@@ -122,17 +151,26 @@ func (m *Node) uniqueSuccessor() *Node {
 	return us
 }
 
-func (m *Node) severity() Severity {
+// Get the string to display the severity of a node.
+//
+// If a node has a unique successor, it's severity is used. This is applied recursively.
+func (m *Node) severity() string {
 	for m != nil {
 		s := m.uniqueSuccessor()
 		if s == nil {
-			return m.Severity
+			if m.Severity == "" {
+				return ""
+			}
+			return string(m.Severity) + " "
 		}
 		m = s
 	}
-	return None
+	return ""
 }
 
+// The severity of a node.
+//
+// Nodes with their own (non-None) severity are always displayed on their own level.
 type Severity string
 
 const (

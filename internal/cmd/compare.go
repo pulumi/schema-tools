@@ -84,11 +84,11 @@ func compare(provider string, oldCommit string, newCommit string) error {
 func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 	msg := &diagtree.Node{Title: ""}
 
-	changedToRequired := func(kind, name string) string {
-		return fmt.Sprintf("%s %q has changed to Required", kind, name)
+	changedToRequired := func(kind string) string {
+		return fmt.Sprintf("%s has changed to Required", kind)
 	}
-	changedToOptional := func(kind, name string) string {
-		return fmt.Sprintf("%s %q is no longer Required", kind, name)
+	changedToOptional := func(kind string) string {
+		return fmt.Sprintf("%s is no longer Required", kind)
 	}
 
 	for resName, res := range oldSchema.Resources {
@@ -114,7 +114,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			msg := msg.Label("properties").Value(propName)
 			newProp, ok := newRes.Properties[propName]
 			if !ok {
-				msg.SetDescription("missing output %q", propName)
+				msg.SetDescription(diagtree.Warn, "missing output %q", propName)
 				continue
 			}
 
@@ -125,7 +125,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 		for _, input := range newRes.RequiredInputs {
 			msg := msg.Label("required inputs").Value(input)
 			if !oldRequiredInputs.Has(input) {
-				msg.SetDescription(diagtree.Info, changedToRequired("input", input))
+				msg.SetDescription(diagtree.Info, changedToRequired("input"))
 			}
 		}
 
@@ -139,7 +139,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			// already warned on, so we don't need to warn here.
 			_, stillExists := newRes.Properties[prop]
 			if !newRequiredProperties.Has(prop) && stillExists {
-				msg.SetDescription(diagtree.Info, changedToOptional("property", prop))
+				msg.SetDescription(diagtree.Info, changedToOptional("property"))
 			}
 		}
 	}
@@ -155,7 +155,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 		if f.Inputs != nil {
 			msg := msg.Label("inputs")
 			for propName, prop := range f.Inputs.Properties {
-				msg := msg.Label("properties").Value(propName)
+				msg := msg.Value(propName)
 				if newFunc.Inputs == nil {
 					msg.SetDescription("missing input %q", propName)
 					continue
@@ -174,9 +174,9 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 				msg := msg.Label("required")
 				oldRequired := set.FromSlice(f.Inputs.Required)
 				for _, req := range newFunc.Inputs.Required {
-					msg.Value(req)
 					if !oldRequired.Has(req) {
-						msg.SetDescription(diagtree.Info, changedToRequired("input", req))
+						msg.Value(req).SetDescription(diagtree.Info,
+							changedToRequired("input"))
 					}
 				}
 			}
@@ -185,7 +185,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 		if f.Outputs != nil {
 			msg := msg.Label("outputs")
 			for propName, prop := range f.Outputs.Properties {
-				msg := msg.Label("properties").Value(propName)
+				msg := msg.Value(propName)
 				if newFunc.Outputs == nil {
 					msg.SetDescription(diagtree.Warn, "missing output")
 					continue
@@ -204,11 +204,12 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			if newFunc.Outputs != nil {
 				newRequired = set.FromSlice(newFunc.Outputs.Required)
 			}
+			msg = msg.Label("required")
 			for _, req := range f.Outputs.Required {
 				_, stillExists := f.Outputs.Properties[req]
 				if !newRequired.Has(req) && stillExists {
-					msg.Label("required").Value(req).SetDescription(
-						diagtree.Info, changedToOptional("property", req))
+					msg.Value(req).SetDescription(
+						diagtree.Info, changedToOptional("property"))
 				}
 			}
 		}
@@ -241,18 +242,19 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			_, stillExists := typ.Properties[r]
 			if !newRequired.Has(r) && stillExists {
 				msg.Label("required").Value(r).SetDescription(
-					diagtree.Info, changedToOptional("property", r))
+					diagtree.Info, changedToOptional("property"))
 			}
 		}
 		required := set.FromSlice(typ.Required)
 		for _, r := range newTyp.Required {
 			if !required.Has(r) {
 				msg.Label("required").Value(r).SetDescription(
-					diagtree.Info, changedToRequired("property", r))
+					diagtree.Info, changedToRequired("property"))
 			}
 		}
 	}
 
+	msg.Prune()
 	return msg
 }
 
