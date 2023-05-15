@@ -133,7 +133,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 			// It is a breaking change to move an output property from
 			// required to optional.
 			//
-			// If the property was removed, but that breaking change will
+			// If the property was removed, that breaking change is
 			// already warned on, so we don't need to warn here.
 			_, stillExists := newRes.Properties[prop]
 			if !newRequiredProperties.Has(prop) && stillExists {
