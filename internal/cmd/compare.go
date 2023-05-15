@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -10,9 +11,11 @@ import (
 	"strings"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/spf13/cobra"
 
 	"github.com/pulumi/schema-tools/internal/pkg"
+	"github.com/pulumi/schema-tools/internal/util/diagtree"
 	"github.com/pulumi/schema-tools/internal/util/set"
 )
 
@@ -79,57 +82,57 @@ func compare(provider string, oldCommit string, newCommit string) error {
 	return nil
 }
 
-func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
-	var violations []string
+func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
+	msg := &diagtree.Node{Title: ""}
 
-	changedToRequired := func(kind, name string) string {
-		return fmt.Sprintf("%s %q has changed to Required", kind, name)
+	changedToRequired := func(kind string) string {
+		return fmt.Sprintf("%s has changed to Required", kind)
 	}
-	changedToOptional := func(kind, name string) string {
-		return fmt.Sprintf("%s %q is no longer Required", kind, name)
+	changedToOptional := func(kind string) string {
+		return fmt.Sprintf("%s is no longer Required", kind)
 	}
 
 	for resName, res := range oldSchema.Resources {
-		violation := func(msg string, args ...any) {
-			violations = append(violations, fmt.Sprintf("Resource %q "+msg, append([]any{resName}, args...)...))
-		}
+		msg := msg.Label("Resources").Value(resName)
 		newRes, ok := newSchema.Resources[resName]
 		if !ok {
-			violation("missing")
+			msg.SetDescription(diagtree.Danger, "missing")
 			continue
 		}
 
 		for propName, prop := range res.InputProperties {
+			msg := msg.Label("inputs").Value(propName)
 			newProp, ok := newRes.InputProperties[propName]
 			if !ok {
-				violation("missing input %q", propName)
+				msg.SetDescription(diagtree.Warn, "missing")
 				continue
 			}
 
-			vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Resource %q input %q", resName, propName))
-			violations = append(violations, vs...)
+			validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg)
 		}
 
 		for propName, prop := range res.Properties {
+			msg := msg.Label("properties").Value(propName)
 			newProp, ok := newRes.Properties[propName]
 			if !ok {
-				violation("missing output %q", propName)
+				msg.SetDescription(diagtree.Warn, "missing output %q", propName)
 				continue
 			}
 
-			vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Resource %q output %q", resName, propName))
-			violations = append(violations, vs...)
+			validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg)
 		}
 
 		oldRequiredInputs := set.FromSlice(res.RequiredInputs)
 		for _, input := range newRes.RequiredInputs {
+			msg := msg.Label("required inputs").Value(input)
 			if !oldRequiredInputs.Has(input) {
-				violation(changedToRequired("input", input))
+				msg.SetDescription(diagtree.Info, changedToRequired("input"))
 			}
 		}
 
 		newRequiredProperties := set.FromSlice(newRes.Required)
 		for _, prop := range res.Required {
+			msg := msg.Label("required").Value(prop)
 			// It is a breaking change to move an output property from
 			// required to optional.
 			//
@@ -137,97 +140,99 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 			// already warned on, so we don't need to warn here.
 			_, stillExists := newRes.Properties[prop]
 			if !newRequiredProperties.Has(prop) && stillExists {
-				violation(changedToOptional("property", prop))
+				msg.SetDescription(diagtree.Info, changedToOptional("property"))
 			}
 		}
 	}
 
 	for funcName, f := range oldSchema.Functions {
-		violation := func(msg string, args ...any) {
-			violations = append(violations, fmt.Sprintf("Function %q "+msg, append([]any{funcName}, args...)...))
-		}
+		msg := msg.Label("Functions").Value(funcName)
 		newFunc, ok := newSchema.Functions[funcName]
 		if !ok {
-			violation("missing")
+			msg.SetDescription(diagtree.Danger, "missing")
 			continue
 		}
 
 		if f.Inputs != nil {
+			msg := msg.Label("inputs")
 			for propName, prop := range f.Inputs.Properties {
+				msg := msg.Value(propName)
 				if newFunc.Inputs == nil {
-					violation("missing input %q", propName)
+					msg.SetDescription("missing input %q", propName)
 					continue
 				}
 
 				newProp, ok := newFunc.Inputs.Properties[propName]
 				if !ok {
-					violation("missing input %q", propName)
+					msg.SetDescription("missing input %q", propName)
 					continue
 				}
 
-				vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Function %q input %q", funcName, propName))
-				violations = append(violations, vs...)
+				validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg)
 			}
 
 			if newFunc.Inputs != nil {
+				msg := msg.Label("required")
 				oldRequired := set.FromSlice(f.Inputs.Required)
 				for _, req := range newFunc.Inputs.Required {
 					if !oldRequired.Has(req) {
-						violation(changedToRequired("input", req))
+						msg.Value(req).SetDescription(diagtree.Info,
+							changedToRequired("input"))
 					}
 				}
 			}
 		}
 
 		if f.Outputs != nil {
+			msg := msg.Label("outputs")
 			for propName, prop := range f.Outputs.Properties {
+				msg := msg.Value(propName)
 				if newFunc.Outputs == nil {
-					violation("missing output %q", propName)
+					msg.SetDescription(diagtree.Warn, "missing output")
 					continue
 				}
 
 				newProp, ok := newFunc.Outputs.Properties[propName]
 				if !ok {
-					violation("missing output %q", propName)
+					msg.SetDescription(diagtree.Warn, "missing output")
 					continue
 				}
 
-				vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Function %q output %q", funcName, propName))
-				violations = append(violations, vs...)
+				validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg)
 			}
 
 			var newRequired set.Set[string]
 			if newFunc.Outputs != nil {
 				newRequired = set.FromSlice(newFunc.Outputs.Required)
 			}
+			msg = msg.Label("required")
 			for _, req := range f.Outputs.Required {
 				_, stillExists := f.Outputs.Properties[req]
 				if !newRequired.Has(req) && stillExists {
-					violation(changedToOptional("property", req))
+					msg.Value(req).SetDescription(
+						diagtree.Info, changedToOptional("property"))
 				}
 			}
 		}
 	}
 
 	for typName, typ := range oldSchema.Types {
-		violation := func(msg string, a ...any) {
-			violations = append(violations, fmt.Sprintf("Type %q "+msg, append([]any{typName}, a...)...))
-		}
+		msg := msg.Label("Types").Value(typName)
 		newTyp, ok := newSchema.Types[typName]
 		if !ok {
-			violation("missing")
+			msg.SetDescription(diagtree.Danger, "missing")
 			continue
 		}
 
 		for propName, prop := range typ.Properties {
+			msg := msg.Label("properties").Value(propName)
 			newProp, ok := newTyp.Properties[propName]
 			if !ok {
-				violation("missing property %q", propName)
+				msg.SetDescription(diagtree.Warn, "missing")
 				continue
 			}
 
-			vs := validateTypes(&prop.TypeSpec, &newProp.TypeSpec, fmt.Sprintf("Type %q property %q", typName, propName))
-			violations = append(violations, vs...)
+			validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg)
 		}
 
 		// Since we don't know if this type will be consumed by pulumi (as an
@@ -237,41 +242,39 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) []string {
 		for _, r := range typ.Required {
 			_, stillExists := typ.Properties[r]
 			if !newRequired.Has(r) && stillExists {
-				violation(changedToOptional("property", r))
+				msg.Label("required").Value(r).SetDescription(
+					diagtree.Info, changedToOptional("property"))
 			}
 		}
 		required := set.FromSlice(typ.Required)
 		for _, r := range newTyp.Required {
 			if !required.Has(r) {
-				violation(changedToRequired("property", r))
+				msg.Label("required").Value(r).SetDescription(
+					diagtree.Info, changedToRequired("property"))
 			}
 		}
 	}
 
-	return violations
+	msg.Prune()
+	return msg
 }
 
 func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec) {
+	fmt.Fprintf(out, "### Does the PR have any schema changes?\n\n")
 	violations := breakingChanges(oldSchema, newSchema)
-	switch len(violations) {
+	displayedViolations := new(bytes.Buffer)
+	lenViolations := violations.Display(displayedViolations, 500)
+	switch lenViolations {
 	case 0:
 		fmt.Fprintln(out, "Looking good! No breaking changes found.")
 	case 1:
-		fmt.Fprintln(out, "Found 1 breaking change:")
+		fmt.Fprintln(out, "Found 1 breaking change: ")
 	default:
-		fmt.Fprintf(out, "Found %d breaking changes:\n", len(violations))
+		fmt.Fprintf(out, "Found %d breaking changes:\n", lenViolations)
 	}
 
-	var violationDetails []string
-	if len(violations) > 500 {
-		violationDetails = violations[0:499]
-	} else {
-		violationDetails = violations
-	}
-
-	for _, v := range violationDetails {
-		fmt.Fprintln(out, v)
-	}
+	_, err := out.Write(displayedViolations.Bytes())
+	contract.AssertNoErrorf(err, "writing to a bytes.Buffer failing indicates OOM")
 
 	var newResources, newFunctions []string
 	for resName := range newSchema.Resources {
@@ -308,15 +311,15 @@ func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.
 	}
 }
 
-func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, prefix string) (violations []string) {
+func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, msg *diagtree.Node) {
 	switch {
 	case old == nil && new == nil:
 		return
 	case old != nil && new == nil:
-		violations = append(violations, fmt.Sprintf("had %+v but now has no type", old))
+		msg.SetDescription(diagtree.Warn, "had %+v but now has no type", old)
 		return
 	case old == nil && new != nil:
-		violations = append(violations, fmt.Sprintf("had no type but now has %+v", new))
+		msg.SetDescription(diagtree.Warn, "had no type but now has %+v", new)
 		return
 	}
 
@@ -329,11 +332,11 @@ func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, prefix string) (v
 		newType = new.Ref
 	}
 	if oldType != newType {
-		violations = append(violations, fmt.Sprintf("%s type changed from %q to %q", prefix, oldType, newType))
+		msg.SetDescription("type changed from %q to %q", oldType, newType)
 	}
-	violations = append(violations, validateTypes(old.Items, new.Items, prefix+" items")...)
-	violations = append(violations, validateTypes(old.AdditionalProperties, new.AdditionalProperties, prefix+" additional properties")...)
-	return
+
+	validateTypes(old.Items, new.Items, msg.Label("items"))
+	validateTypes(old.AdditionalProperties, new.AdditionalProperties, msg.Label("additional properties"))
 }
 
 func formatName(provider, s string) string {
