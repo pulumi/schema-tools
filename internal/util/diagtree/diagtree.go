@@ -88,7 +88,12 @@ func (m *Node) display(out io.Writer, level int, prefix bool, max int) int {
 	var display string
 	if m.Title != "" {
 		if prefix {
-			display = m.levelPrefix(level) + m.severity()
+			display = m.levelPrefix(level)
+			// levels 0 & 1 are always top level, so we special case them
+			// here.
+			if level > 1 || m.Severity != None {
+				display += m.severity()
+			}
 		}
 		display += m.Title
 		if m.Description != "" {

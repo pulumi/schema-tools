@@ -22,7 +22,7 @@ func TestBreakingResourceRequired(t *testing.T) {
 			ExpectedOutput: expectedRes(func(n *diagtree.Node) {
 				n.Label("required").Value("value").
 					SetDescription(diagtree.Info, "property is no longer Required")
-			}), // []string{`Resource "my-pkg:index:MyResource" property "value" is no longer Required`},
+			}),
 		},
 		{ // Making an output required is not breaking
 			NewRequired: []string{"value"},
