@@ -44,8 +44,8 @@ func compareCmd() *cobra.Command {
 }
 
 func compare(provider string, oldCommit string, newCommit string) error {
-	schemaUrlOld := fmt.Sprintf("https://raw.githubusercontent.com/pulumi/pulumi-%s/%s/provider/cmd/pulumi-resource-%[1]s/schema.json", provider, oldCommit)
-	schOld, err := pkg.DownloadSchema(schemaUrlOld)
+	repositoryUrl := fmt.Sprintf("github://api.github.com/pulumi/pulumi-%s", provider)
+	schOld, err := pkg.DownloadSchema(repositoryUrl, provider, oldCommit)
 	if err != nil {
 		return err
 	}
@@ -54,9 +54,9 @@ func compare(provider string, oldCommit string, newCommit string) error {
 
 	if newCommit == "--local" {
 		usr, _ := user.Current()
-		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi", usr.HomeDir)
-		path := fmt.Sprintf("pulumi-%s/provider/cmd/pulumi-resource-%[1]s", provider)
-		schemaPath := filepath.Join(basePath, path, "schema.json")
+		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi/%s", usr.HomeDir, provider)
+		schemaFile := pkg.StandardSchemaPath(provider)
+		schemaPath := filepath.Join(basePath, schemaFile)
 		schNew, err = pkg.LoadLocalPackageSpec(schemaPath)
 		if err != nil {
 			return err
@@ -72,8 +72,7 @@ func compare(provider string, oldCommit string, newCommit string) error {
 			return err
 		}
 	} else {
-		schemaUrlNew := fmt.Sprintf("https://raw.githubusercontent.com/pulumi/pulumi-%s/%s/provider/cmd/pulumi-resource-%[1]s/schema.json", provider, newCommit)
-		schNew, err = pkg.DownloadSchema(schemaUrlNew)
+		schNew, err = pkg.DownloadSchema(repositoryUrl, provider, newCommit)
 		if err != nil {
 			return err
 		}

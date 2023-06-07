@@ -34,8 +34,8 @@ func statsCmd() *cobra.Command {
 }
 
 func stats(provider string, details bool) error {
-	schemaUrl := fmt.Sprintf("https://raw.githubusercontent.com/pulumi/pulumi-%s/master/provider/cmd/pulumi-resource-%[1]s/schema.json", provider)
-	sch, err := pkg.DownloadSchema(schemaUrl)
+	repositoryUrl := fmt.Sprintf("github://api.github.com/pulumi/pulumi-%s", provider)
+	sch, err := pkg.DownloadSchema(repositoryUrl, provider, "master")
 	if err != nil {
 		return err
 	}
