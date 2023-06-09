@@ -25,6 +25,73 @@ type GitSource interface {
 		getHTTPResponse func(*http.Request) (io.ReadCloser, int64, error)) (io.ReadCloser, int64, error)
 }
 
+// gitlabSource can download a plugin from gitlab releases.
+// type gitlabSource struct {
+// 	host    string
+// 	project string
+// 	name    string
+
+// 	token string
+// }
+
+// Creates a new GitLab source from a gitlab://<host>/<project_id> url.
+// Uses the GITLAB_TOKEN environment variable for authentication if it's set.
+// func newGitlabSource(url *url.URL, name string) (*gitlabSource, error) {
+// 	contract.Requiref(url.Scheme == "gitlab", "url", `scheme must be "gitlab", was %q`, url.Scheme)
+
+// 	host := url.Host
+// 	if host == "" {
+// 		return nil, fmt.Errorf("gitlab:// url must have a host part, was: %s", url)
+// 	}
+
+// 	project := strings.Trim(url.Path, "/")
+// 	if project == "" || strings.Contains(project, "/") {
+// 		return nil, fmt.Errorf(
+// 			"gitlab:// url must have the format <host>/<project>, was: %s",
+// 			url)
+// 	}
+
+// 	return &gitlabSource{
+// 		host:    host,
+// 		project: project,
+// 		name:    name,
+
+// 		token: os.Getenv("GITLAB_TOKEN"),
+// 	}, nil
+// }
+
+// func (source *gitlabSource) newHTTPRequest(url, accept string) (*http.Request, error) {
+// 	var authorization string
+// 	if source.token != "" {
+// 		authorization = fmt.Sprintf("Bearer %s", source.token)
+// 	}
+
+// 	req, err := buildHTTPRequest(url, authorization)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	req.Header.Set("Accept", accept)
+// 	return req, nil
+// }
+
+// func (source *gitlabSource) Download(
+// 	commit string,
+// 	getHTTPResponse func(*http.Request) (io.ReadCloser, int64, error),
+// ) (io.ReadCloser, int64, error) {
+// 	assetName := standardSchemaPath(source.name)
+
+// 	assetURL := fmt.Sprintf(
+// 		"https://%s/api/v4/projects/%s/releases/v%s/downloads/%s",
+// 		source.host, source.project, commit, assetName)
+// 	logging.V(1).Infof("%s downloading from %s", source.name, assetURL)
+
+// 	req, err := source.newHTTPRequest(assetURL, "application/octet-stream")
+// 	if err != nil {
+// 		return nil, -1, err
+// 	}
+// 	return getHTTPResponse(req)
+// }
+
 // githubSource can download a plugin from github releases
 type githubSource struct {
 	host         string
@@ -178,6 +245,29 @@ func getHTTPResponse(req *http.Request) (io.ReadCloser, int64, error) {
 
 	return resp.Body, resp.ContentLength, nil
 }
+
+// func getHTTPResponseWithRetry(req *http.Request) (io.ReadCloser, int64, error) {
+// 	logging.V(9).Infof("full plugin download url: %s", req.URL)
+// 	// This logs at level 11 because it could include authentication headers, we reserve log level 11 for
+// 	// detailed api logs that may include credentials.
+// 	logging.V(11).Infof("plugin install request headers: %v", req.Header)
+
+// 	resp, err := httputil.DoWithRetry(req, http.DefaultClient)
+// 	if err != nil {
+// 		return nil, -1, err
+// 	}
+
+// 	// As above this might include authentication information, but also to be consistent at what level headers
+// 	// print at.
+// 	logging.V(11).Infof("plugin install response headers: %v", resp.Header)
+
+// 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+// 		contract.IgnoreClose(resp.Body)
+// 		return nil, -1, newDownloadError(resp.StatusCode, req.URL, resp.Header)
+// 	}
+
+// 	return resp.Body, resp.ContentLength, nil
+// }
 
 // downloadError is an error that happened during the HTTP download of a plugin.
 type downloadError struct {

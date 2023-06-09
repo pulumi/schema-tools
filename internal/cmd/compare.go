@@ -20,17 +20,20 @@ import (
 )
 
 func compareCmd() *cobra.Command {
-	var provider, oldCommit, newCommit string
+	var provider, repository, oldCommit, newCommit string
 
 	command := &cobra.Command{
 		Use:   "compare",
 		Short: "Compare two versions of a Pulumi schema",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return compare(provider, oldCommit, newCommit)
+			return compare(provider, repository, oldCommit, newCommit)
 		},
 	}
 
 	command.Flags().StringVarP(&provider, "provider", "p", "", "the provider whose schema we are comparing")
+	_ = command.MarkFlagRequired("provider")
+
+	command.Flags().StringVarP(&repository, "repository", "r", "github://api.github.com/pulumi", "the Git repository to download the schema file from")
 	_ = command.MarkFlagRequired("provider")
 
 	command.Flags().StringVarP(&oldCommit, "old-commit", "o", "master",
@@ -43,9 +46,8 @@ func compareCmd() *cobra.Command {
 	return command
 }
 
-func compare(provider string, oldCommit string, newCommit string) error {
-	repositoryUrl := fmt.Sprintf("github://api.github.com/pulumi/pulumi-%s", provider)
-	schOld, err := pkg.DownloadSchema(repositoryUrl, provider, oldCommit)
+func compare(provider string, repository string, oldCommit string, newCommit string) error {
+	schOld, err := pkg.DownloadSchema(repository, provider, oldCommit)
 	if err != nil {
 		return err
 	}
@@ -72,7 +74,7 @@ func compare(provider string, oldCommit string, newCommit string) error {
 			return err
 		}
 	} else {
-		schNew, err = pkg.DownloadSchema(repositoryUrl, provider, newCommit)
+		schNew, err = pkg.DownloadSchema(repository, provider, newCommit)
 		if err != nil {
 			return err
 		}

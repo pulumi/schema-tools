@@ -12,19 +12,22 @@ import (
 )
 
 func statsCmd() *cobra.Command {
-	var provider string
+	var provider, repository string
 	var details bool
 
 	command := &cobra.Command{
 		Use:   "stats",
 		Short: "Get the stats of a current schema",
 		RunE: func(command *cobra.Command, args []string) error {
-			return stats(provider, details)
+			return stats(provider, repository, details)
 		},
 	}
 
 	command.Flags().StringVarP(&provider, "provider", "p", "",
 		"the provider whose schema we should analyze")
+	_ = command.MarkFlagRequired("provider")
+
+	command.Flags().StringVarP(&repository, "repository", "r", "github://api.github.com/pulumi", "the Git repository to download the schema file from")
 	_ = command.MarkFlagRequired("provider")
 
 	command.Flags().BoolVarP(&details, "details", "d", false,
@@ -33,8 +36,7 @@ func statsCmd() *cobra.Command {
 	return command
 }
 
-func stats(provider string, details bool) error {
-	repositoryUrl := fmt.Sprintf("github://api.github.com/pulumi/pulumi-%s", provider)
+func stats(provider string, repositoryUrl string, details bool) error {
 	sch, err := pkg.DownloadSchema(repositoryUrl, provider, "master")
 	if err != nil {
 		return err
