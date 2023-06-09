@@ -26,71 +26,88 @@ type GitSource interface {
 }
 
 // gitlabSource can download a plugin from gitlab releases.
-// type gitlabSource struct {
-// 	host    string
-// 	project string
-// 	name    string
+type gitlabSource struct {
+	host    string
+	owner   string
+	project string
+	name    string
 
-// 	token string
-// }
+	token string
+}
 
 // Creates a new GitLab source from a gitlab://<host>/<project_id> url.
 // Uses the GITLAB_TOKEN environment variable for authentication if it's set.
-// func newGitlabSource(url *url.URL, name string) (*gitlabSource, error) {
-// 	contract.Requiref(url.Scheme == "gitlab", "url", `scheme must be "gitlab", was %q`, url.Scheme)
+func newGitlabSource(url *url.URL, name string) (*gitlabSource, error) {
+	contract.Requiref(url.Scheme == "gitlab", "url", `scheme must be "gitlab", was %q`, url.Scheme)
 
-// 	host := url.Host
-// 	if host == "" {
-// 		return nil, fmt.Errorf("gitlab:// url must have a host part, was: %s", url)
-// 	}
+	host := url.Host
+	parts := strings.Split(strings.Trim(url.Path, "/"), "/")
 
-// 	project := strings.Trim(url.Path, "/")
-// 	if project == "" || strings.Contains(project, "/") {
-// 		return nil, fmt.Errorf(
-// 			"gitlab:// url must have the format <host>/<project>, was: %s",
-// 			url)
-// 	}
+	if host == "" {
+		return nil, fmt.Errorf("gitlab:// url must have a host part, was: %s", url)
+	}
 
-// 	return &gitlabSource{
-// 		host:    host,
-// 		project: project,
-// 		name:    name,
+	if len(parts) != 1 && len(parts) != 2 {
+		return nil, fmt.Errorf(
+			"gitlab:// url must have the format <host>/<owner>[/<repository>], was: %s",
+			url)
+	}
 
-// 		token: os.Getenv("GITLAB_TOKEN"),
-// 	}, nil
-// }
+	owner := parts[0]
+	if owner == "" {
+		return nil, fmt.Errorf(
+			"gitlab:// url must have the format <host>/<owner>[/<repository>], was: %s",
+			url)
+	}
 
-// func (source *gitlabSource) newHTTPRequest(url, accept string) (*http.Request, error) {
-// 	var authorization string
-// 	if source.token != "" {
-// 		authorization = fmt.Sprintf("Bearer %s", source.token)
-// 	}
+	repository := "pulumi-" + name
+	if len(parts) == 2 {
+		repository = parts[1]
+	}
 
-// 	req, err := buildHTTPRequest(url, authorization)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	req.Header.Set("Accept", accept)
-// 	return req, nil
-// }
+	return &gitlabSource{
+		host:    host,
+		owner:   owner,
+		project: repository,
+		name:    name,
 
-// func (source *gitlabSource) Download(
-// 	commit string,
-// 	getHTTPResponse func(*http.Request) (io.ReadCloser, int64, error),
-// ) (io.ReadCloser, int64, error) {
-// 	assetName := standardSchemaPath(source.name)
+		token: os.Getenv("GITLAB_TOKEN"),
+	}, nil
+}
 
-// 	assetURL := fmt.Sprintf(
-// 		"https://%s/api/v4/projects/%s/releases/v%s/downloads/%s",
-// 		source.host, source.project, commit, assetName)
-// 	logging.V(1).Infof("%s downloading from %s", source.name, assetURL)
+func (source *gitlabSource) newHTTPRequest(url, accept string) (*http.Request, error) {
+	var authorization string
+	if source.token != "" {
+		authorization = fmt.Sprintf("Bearer %s", source.token)
+	}
 
-// 	req, err := source.newHTTPRequest(assetURL, "application/octet-stream")
-// 	if err != nil {
-// 		return nil, -1, err
-// 	}
-// 	return getHTTPResponse(req)
-// }
+	req, err := buildHTTPRequest(url, authorization)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", accept)
+	return req, nil
+}
+
+func (source *gitlabSource) Download(
+	commit string,
+	getHTTPResponse func(*http.Request) (io.ReadCloser, int64, error),
+) (io.ReadCloser, int64, error) {
+	assetName := url.QueryEscape(StandardSchemaPath(source.name))
+	project := url.QueryEscape(fmt.Sprintf("%s/%s", source.owner, source.project))
+
+	// Gitlab Files API: https://docs.gitlab.com/ee/api/repository_files.html
+	assetURL := fmt.Sprintf(
+		"https://%s/api/v4/projects/%s/repository/files/%s?ref=%s",
+		source.host, project, assetName, commit)
+	logging.V(1).Infof("%s downloading from %s", source.name, assetURL)
+
+	req, err := source.newHTTPRequest(assetURL, "application/octet-stream")
+	if err != nil {
+		return nil, -1, err
+	}
+	return getHTTPResponse(req)
+}
 
 // githubSource can download a plugin from github releases
 type githubSource struct {

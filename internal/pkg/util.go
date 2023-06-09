@@ -21,8 +21,8 @@ func DownloadSchema(repositoryUrl string, provider string, commit string) (schem
 		switch url.Scheme {
 		case "github":
 			return newGithubSource(url, provider)
-		// case "gitlab":
-		// 	return newGitlabSource(url, provider)
+		case "gitlab":
+			return newGitlabSource(url, provider)
 		default:
 			return nil, fmt.Errorf("unknown schema source scheme: %s", url.Scheme)
 		}
