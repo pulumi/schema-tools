@@ -13,13 +13,14 @@ import (
 
 func statsCmd() *cobra.Command {
 	var provider string
+	var tag string
 	var details bool
 
 	command := &cobra.Command{
 		Use:   "stats",
 		Short: "Get the stats of a current schema",
 		RunE: func(command *cobra.Command, args []string) error {
-			return stats(provider, details)
+			return stats(provider, tag, details)
 		},
 	}
 
@@ -27,14 +28,18 @@ func statsCmd() *cobra.Command {
 		"the provider whose schema we should analyze")
 	_ = command.MarkFlagRequired("provider")
 
+	command.Flags().StringVarP(&tag, "tag", "t", "",
+	"the tag of the provider whose schema we should analyze")
+_ = command.MarkFlagRequired("tag")
+
 	command.Flags().BoolVarP(&details, "details", "d", false,
 		"show the details with a list of all resources and functions")
 
 	return command
 }
 
-func stats(provider string, details bool) error {
-	schemaUrl := fmt.Sprintf("https://raw.githubusercontent.com/pulumi/pulumi-%s/master/provider/cmd/pulumi-resource-%[1]s/schema.json", provider)
+func stats(provider string, tag string, details bool) error {
+	schemaUrl := fmt.Sprintf("https://raw.githubusercontent.com/pulumi/pulumi-%s/%s/provider/cmd/pulumi-resource-%[1]s/schema.json", provider, tag)
 	sch, err := pkg.DownloadSchema(schemaUrl)
 	if err != nil {
 		return err
