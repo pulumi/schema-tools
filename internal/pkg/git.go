@@ -98,7 +98,7 @@ func (source *gitlabSource) Download(
 
 	// Gitlab Files API: https://docs.gitlab.com/ee/api/repository_files.html
 	assetURL := fmt.Sprintf(
-		"https://%s/api/v4/projects/%s/repository/files/%s?ref=%s",
+		"https://%s/api/v4/projects/%s/repository/files/%s/raw?ref=%s",
 		source.host, project, assetName, commit)
 	logging.V(1).Infof("%s downloading from %s", source.name, assetURL)
 
