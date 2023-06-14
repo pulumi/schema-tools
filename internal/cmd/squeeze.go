@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen"
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
@@ -200,9 +202,12 @@ func compareResources(sch *schema.PackageSpec, oldName string, newName string) (
 func calculateUniqueVersions(sch *schema.PackageSpec, resVersions codegen.StringSet) codegen.StringSet {
 	uniqueVersions := codegen.StringSet{}
 
+	sortedVersions := resVersions.SortedValues()
+	sortApiVersions(sortedVersions)
+
 outer:
-	for _, oldName := range resVersions.SortedValues() {
-		for _, newName := range resVersions.SortedValues() {
+	for _, oldName := range sortedVersions {
+		for _, newName := range sortedVersions {
 			if oldName >= newName {
 				continue
 			}
@@ -214,6 +219,64 @@ outer:
 		uniqueVersions.Add(oldName)
 	}
 	return uniqueVersions
+}
+
+func apiVersionToDate(apiVersion string) (time.Time, error) {
+	if len(apiVersion) < 9 {
+		return time.Time{}, fmt.Errorf("invalid API version %q", apiVersion)
+	}
+	// The API version is in the format YYYY-MM-DD - ignore suffixes like "-preview".
+	return time.Parse("20060102", apiVersion[1:9])
+}
+
+func compareApiVersions(a, b string) int {
+	timeA, err := apiVersionToDate(a)
+	if err != nil {
+		return strings.Compare(a, b)
+	}
+	timeB, err := apiVersionToDate(b)
+	if err != nil {
+		return strings.Compare(a, b)
+	}
+	timeDiff := timeA.Compare(timeB)
+	if timeDiff != 0 {
+		return timeDiff
+	}
+
+	// Sort private first, preview second, stable last.
+	aPrivate := isPrivate(a)
+	bPrivate := isPrivate(b)
+	if aPrivate != bPrivate {
+		if aPrivate {
+			return -1
+		}
+		return 1
+	}
+	aPreview := isPreview(a)
+	bPreview := isPreview(b)
+	if aPreview != bPreview {
+		if aPreview {
+			return -1
+		}
+		return 1
+	}
+	return 0
+}
+
+func isPreview(apiVersion string) bool {
+	lower := strings.ToLower(apiVersion)
+	return strings.Contains(lower, "preview") || strings.Contains(lower, "beta")
+}
+
+func isPrivate(apiVersion string) bool {
+	lower := strings.ToLower(apiVersion)
+	return strings.Contains(lower, "private")
+}
+
+func sortApiVersions(versions []string) {
+	sort.SliceStable(versions, func(i, j int) bool {
+		return compareApiVersions(versions[i], versions[j]) < 0
+	})
 }
 
 func validateTypesDeep(sch *schema.PackageSpec, old *schema.TypeSpec, new *schema.TypeSpec, prefix string, input bool) (violations []string) {
