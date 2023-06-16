@@ -25,9 +25,9 @@ func TestPrunedDisplay(t *testing.T) {
 	tests := []testCase{
 		{
 			input: n(func(n *diagtree.Node) {
-				n.SetDescription(diagtree.Info, "A top level value")
+				n.SetDescription(diagtree.Info, "A top level value (%d)", 1)
 			}),
-			expected:      "### `🟢` Top Level A top level value\n",
+			expected:      "### `🟢` Top Level A top level value (1)\n",
 			maxItems:      10,
 			expectedCount: 1,
 		},
