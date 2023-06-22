@@ -4,26 +4,40 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
-func DownloadSchema(schemaUrl string) (schema.PackageSpec, error) {
-	resp, err := http.Get(schemaUrl)
+func DownloadSchema(repositoryUrl string, provider string, commit string) (schema.PackageSpec, error) {
+	baseSource, err := func() (GitSource, error) {
+		// Support schematised URLS if the URL has a "schema" part we recognize
+		url, err := url.Parse(repositoryUrl)
+		if err != nil {
+			return nil, err
+		}
+
+		switch url.Scheme {
+		case "github":
+			return newGithubSource(url, provider)
+		case "gitlab":
+			return newGitlabSource(url, provider)
+		default:
+			return nil, fmt.Errorf("unknown schema source scheme: %s", url.Scheme)
+		}
+	}()
 	if err != nil {
 		return schema.PackageSpec{}, err
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode == 404 {
-		err := fmt.Errorf("received a 404 response attempting to download schema from '%s'",
-			schemaUrl)
+	resp, _, err := baseSource.Download(commit, getHTTPResponse)
+	if err != nil {
 		return schema.PackageSpec{}, err
 	}
+	defer resp.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp)
 	if err != nil {
 		return schema.PackageSpec{}, err
 	}

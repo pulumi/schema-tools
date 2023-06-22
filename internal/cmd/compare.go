@@ -20,17 +20,20 @@ import (
 )
 
 func compareCmd() *cobra.Command {
-	var provider, oldCommit, newCommit string
+	var provider, repository, oldCommit, newCommit string
 
 	command := &cobra.Command{
 		Use:   "compare",
 		Short: "Compare two versions of a Pulumi schema",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return compare(provider, oldCommit, newCommit)
+			return compare(provider, repository, oldCommit, newCommit)
 		},
 	}
 
 	command.Flags().StringVarP(&provider, "provider", "p", "", "the provider whose schema we are comparing")
+	_ = command.MarkFlagRequired("provider")
+
+	command.Flags().StringVarP(&repository, "repository", "r", "github://api.github.com/pulumi", "the Git repository to download the schema file from")
 	_ = command.MarkFlagRequired("provider")
 
 	command.Flags().StringVarP(&oldCommit, "old-commit", "o", "master",
@@ -43,9 +46,8 @@ func compareCmd() *cobra.Command {
 	return command
 }
 
-func compare(provider string, oldCommit string, newCommit string) error {
-	schemaUrlOld := fmt.Sprintf("https://raw.githubusercontent.com/pulumi/pulumi-%s/%s/provider/cmd/pulumi-resource-%[1]s/schema.json", provider, oldCommit)
-	schOld, err := pkg.DownloadSchema(schemaUrlOld)
+func compare(provider string, repository string, oldCommit string, newCommit string) error {
+	schOld, err := pkg.DownloadSchema(repository, provider, oldCommit)
 	if err != nil {
 		return err
 	}
@@ -54,9 +56,9 @@ func compare(provider string, oldCommit string, newCommit string) error {
 
 	if newCommit == "--local" {
 		usr, _ := user.Current()
-		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi", usr.HomeDir)
-		path := fmt.Sprintf("pulumi-%s/provider/cmd/pulumi-resource-%[1]s", provider)
-		schemaPath := filepath.Join(basePath, path, "schema.json")
+		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi/%s", usr.HomeDir, provider)
+		schemaFile := pkg.StandardSchemaPath(provider)
+		schemaPath := filepath.Join(basePath, schemaFile)
 		schNew, err = pkg.LoadLocalPackageSpec(schemaPath)
 		if err != nil {
 			return err
@@ -72,8 +74,7 @@ func compare(provider string, oldCommit string, newCommit string) error {
 			return err
 		}
 	} else {
-		schemaUrlNew := fmt.Sprintf("https://raw.githubusercontent.com/pulumi/pulumi-%s/%s/provider/cmd/pulumi-resource-%[1]s/schema.json", provider, newCommit)
-		schNew, err = pkg.DownloadSchema(schemaUrlNew)
+		schNew, err = pkg.DownloadSchema(repository, provider, newCommit)
 		if err != nil {
 			return err
 		}
