@@ -159,13 +159,13 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			for propName, prop := range f.Inputs.Properties {
 				msg := msg.Value(propName)
 				if newFunc.Inputs == nil {
-					msg.SetDescription("missing input %q", propName)
+					msg.SetDescription(diagtree.Warn, "missing input %q", propName)
 					continue
 				}
 
 				newProp, ok := newFunc.Inputs.Properties[propName]
 				if !ok {
-					msg.SetDescription("missing input %q", propName)
+					msg.SetDescription(diagtree.Warn, "missing input %q", propName)
 					continue
 				}
 
@@ -333,7 +333,7 @@ func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, msg *diagtree.Nod
 		newType = new.Ref
 	}
 	if oldType != newType {
-		msg.SetDescription("type changed from %q to %q", oldType, newType)
+		msg.SetDescription(diagtree.Warn, "type changed from %q to %q", oldType, newType)
 	}
 
 	validateTypes(old.Items, new.Items, msg.Label("items"))

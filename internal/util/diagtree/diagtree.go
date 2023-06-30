@@ -167,10 +167,10 @@ func (m *Node) severity() string {
 	for m != nil {
 		s := m.uniqueSuccessor()
 		if s == nil {
-			if m.Severity == "" {
+			if m.Severity == None {
 				return ""
 			}
-			return string(m.Severity) + " "
+			return m.Severity.String() + " "
 		}
 		m = s
 	}
@@ -180,20 +180,23 @@ func (m *Node) severity() string {
 // The severity of a node.
 //
 // Nodes with their own (non-None) severity are always displayed on their own level.
-type Severity string
+type Severity struct{ s string }
 
-const (
-	None   Severity = ""
-	Info   Severity = "`🟢`"
-	Warn   Severity = "`🟡`"
-	Danger Severity = "`🔴`"
+var (
+	None   = Severity{""}
+	Info   = Severity{"`🟢`"}
+	Warn   = Severity{"`🟡`"}
+	Danger = Severity{"`🔴`"}
 )
 
+func (s Severity) String() string {
+	return s.s
+}
+
 func (m *Node) SetDescription(level Severity, msg string, a ...any) {
-	for v := m.parent; v != nil && !v.doDisplay; v = v.parent {
+	for v := m; v != nil && !v.doDisplay; v = v.parent {
 		v.doDisplay = true
 	}
-	m.doDisplay = true
 	m.Description = fmt.Sprintf(msg, a...)
 	m.Severity = level
 }
