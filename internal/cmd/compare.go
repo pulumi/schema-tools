@@ -261,7 +261,6 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 }
 
 func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec) {
-	fmt.Fprintf(out, "### Does the PR have any schema changes?\n\n")
 	violations := breakingChanges(oldSchema, newSchema)
 	displayedViolations := new(bytes.Buffer)
 	lenViolations := violations.Display(displayedViolations, 500)
