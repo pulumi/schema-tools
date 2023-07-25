@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -37,7 +38,8 @@ func statsCmd() *cobra.Command {
 }
 
 func stats(provider string, repositoryUrl string, details bool) error {
-	sch, err := pkg.DownloadSchema(repositoryUrl, provider, "master")
+	ctx := context.Background()
+	sch, err := pkg.DownloadSchema(ctx, repositoryUrl, provider, "master")
 	if err != nil {
 		return err
 	}

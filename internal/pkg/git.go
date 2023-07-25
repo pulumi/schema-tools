@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -21,7 +22,7 @@ import (
 type GitSource interface {
 	// Download fetches an io.ReadCloser for the schema file to download and also returns the size of the response (if known).
 	Download(
-		commit string,
+		ctx context.Context, commit string,
 		getHTTPResponse func(*http.Request) (io.ReadCloser, int64, error)) (io.ReadCloser, int64, error)
 }
 
@@ -75,13 +76,13 @@ func newGitlabSource(url *url.URL, name string) (*gitlabSource, error) {
 	}, nil
 }
 
-func (source *gitlabSource) newHTTPRequest(url, accept string) (*http.Request, error) {
+func (source *gitlabSource) newHTTPRequest(ctx context.Context, url, accept string) (*http.Request, error) {
 	var authorization string
 	if source.token != "" {
 		authorization = fmt.Sprintf("Bearer %s", source.token)
 	}
 
-	req, err := buildHTTPRequest(url, authorization)
+	req, err := buildHTTPRequest(ctx, url, authorization)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +91,7 @@ func (source *gitlabSource) newHTTPRequest(url, accept string) (*http.Request, e
 }
 
 func (source *gitlabSource) Download(
-	commit string,
+	ctx context.Context, commit string,
 	getHTTPResponse func(*http.Request) (io.ReadCloser, int64, error),
 ) (io.ReadCloser, int64, error) {
 	assetName := url.QueryEscape(StandardSchemaPath(source.name))
@@ -102,7 +103,7 @@ func (source *gitlabSource) Download(
 		source.host, project, assetName, commit)
 	logging.V(1).Infof("%s downloading from %s", source.name, assetURL)
 
-	req, err := source.newHTTPRequest(assetURL, "application/octet-stream")
+	req, err := source.newHTTPRequest(ctx, assetURL, "application/octet-stream")
 	if err != nil {
 		return nil, -1, err
 	}
@@ -158,13 +159,13 @@ func newGithubSource(url *url.URL, name string) (*githubSource, error) {
 	}, nil
 }
 
-func (source *githubSource) newHTTPRequest(url, accept string) (*http.Request, error) {
+func (source *githubSource) newHTTPRequest(ctx context.Context, url, accept string) (*http.Request, error) {
 	var authorization string
 	if source.token != "" {
 		authorization = fmt.Sprintf("token %s", source.token)
 	}
 
-	req, err := buildHTTPRequest(url, authorization)
+	req, err := buildHTTPRequest(ctx, url, authorization)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +210,7 @@ func (source *githubSource) getHTTPResponse(
 }
 
 func (source *githubSource) Download(
-	commit string,
+	ctx context.Context, commit string,
 	getHTTPResponse func(*http.Request) (io.ReadCloser, int64, error),
 ) (io.ReadCloser, int64, error) {
 	schemaURL := fmt.Sprintf(
@@ -217,15 +218,15 @@ func (source *githubSource) Download(
 		source.host, source.organization, source.repository, StandardSchemaPath(source.name), commit)
 	logging.V(9).Infof("plugin GitHub schema url: %s", schemaURL)
 
-	req, err := source.newHTTPRequest(schemaURL, "application/vnd.github.v4.raw")
+	req, err := source.newHTTPRequest(ctx, schemaURL, "application/vnd.github.v4.raw")
 	if err != nil {
 		return nil, -1, err
 	}
 	return source.getHTTPResponse(getHTTPResponse, req)
 }
 
-func buildHTTPRequest(pluginEndpoint string, authorization string) (*http.Request, error) {
-	req, err := http.NewRequest("GET", pluginEndpoint, nil)
+func buildHTTPRequest(ctx context.Context, pluginEndpoint string, authorization string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", pluginEndpoint, nil)
 	if err != nil {
 		return nil, err
 	}

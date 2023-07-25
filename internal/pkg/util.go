@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,7 +11,8 @@ import (
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
-func DownloadSchema(repositoryUrl string, provider string, commit string) (schema.PackageSpec, error) {
+func DownloadSchema(ctx context.Context, repositoryUrl string,
+	provider string, commit string) (schema.PackageSpec, error) {
 	baseSource, err := func() (GitSource, error) {
 		// Support schematised URLS if the URL has a "schema" part we recognize
 		url, err := url.Parse(repositoryUrl)
@@ -31,7 +33,7 @@ func DownloadSchema(repositoryUrl string, provider string, commit string) (schem
 		return schema.PackageSpec{}, err
 	}
 
-	resp, _, err := baseSource.Download(commit, getHTTPResponse)
+	resp, _, err := baseSource.Download(ctx, commit, getHTTPResponse)
 	if err != nil {
 		return schema.PackageSpec{}, err
 	}
