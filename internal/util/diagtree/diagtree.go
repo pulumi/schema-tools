@@ -70,16 +70,36 @@ func (m *Node) levelPrefix(level int) string {
 	return strings.Repeat("  ", (level-2)*2) + "- "
 }
 
-func (m *Node) Display(out io.Writer, max int) int {
-	return m.display(out, 0, true, max)
+type cappedWriter struct {
+	max int
+	out io.Writer
 }
 
-func (m *Node) display(out io.Writer, level int, prefix bool, max int) int {
+func (c *cappedWriter) incr() {
+	if c.max > 0 {
+		c.max--
+	}
+}
+
+func (c *cappedWriter) Write(p []byte) (n int, err error) {
+	if c.max > 0 {
+		return c.out.Write(p)
+	}
+	// We pretend we finished the write, but we do nothing.
+	return len(p), nil
+}
+
+func (m *Node) Display(out io.Writer, max int) int {
+	writer := &cappedWriter{max, out}
+	return m.display(writer, 0, true)
+}
+
+func (m *Node) display(out *cappedWriter, level int, prefix bool) int {
 	write := func(s string) {
 		_, err := out.Write([]byte(s))
 		contract.AssertNoErrorf(err, "failed to write display")
 	}
-	if m == nil || !m.doDisplay || max <= 0 {
+	if m == nil || !m.doDisplay {
 		// Nothing to display
 		return 0
 	}
@@ -102,12 +122,13 @@ func (m *Node) display(out io.Writer, level int, prefix bool, max int) int {
 		}
 
 		write(display)
+		out.incr()
 	}
 
 	if level > 1 && m.Severity == None {
 		if s := m.uniqueSuccessor(); s != nil {
 			write(": ")
-			return s.display(out, level, false, max-displayed) + displayed
+			return s.display(out, level, false) + displayed
 		}
 	}
 
@@ -132,7 +153,7 @@ func (m *Node) display(out io.Writer, level int, prefix bool, max int) int {
 			}
 			didEndLine = true
 		}
-		n := m.subfields[i].display(out, level+1, true, max-displayed)
+		n := m.subfields[i].display(out, level+1, true)
 		displayed += n
 	}
 
