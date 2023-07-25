@@ -214,10 +214,10 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 		}
 		type nonZeroArgs struct{ old, new bool }
 		switch (nonZeroArgs{old: isNonZeroArgs(f.Inputs), new: isNonZeroArgs(newFunc.Inputs)}) {
-		case nonZeroArgs{true, false}:
+		case nonZeroArgs{false, true}:
 			msg.SetDescription(diagtree.Danger,
 				"signature change (pulumi.InvokeOptions)->T => (Args, pulumi.InvokeOptions)->T")
-		case nonZeroArgs{false, true}:
+		case nonZeroArgs{true, false}:
 			msg.SetDescription(diagtree.Danger,
 				"signature change (Args, pulumi.InvokeOptions)->T => (pulumi.InvokeOptions)->T")
 		}
