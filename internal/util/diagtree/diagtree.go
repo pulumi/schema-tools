@@ -78,12 +78,13 @@ type cappedWriter struct {
 
 func (c *cappedWriter) incr() {
 	if c.remaining > 0 {
+		// We never step past 0, because -1 indicates that we should always print
 		c.remaining--
 	}
 }
 
 func (c *cappedWriter) Write(p []byte) (n int, err error) {
-	if c.remaining > 0 {
+	if c.remaining > 0 || c.remaining == -1 {
 		return c.out.Write(p)
 	}
 	// We pretend we finished the write, but we do nothing.

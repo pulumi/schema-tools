@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -21,19 +22,21 @@ import (
 
 func compareCmd() *cobra.Command {
 	var provider, repository, oldCommit, newCommit string
+	var maxChanges int
 
 	command := &cobra.Command{
 		Use:   "compare",
 		Short: "Compare two versions of a Pulumi schema",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return compare(provider, repository, oldCommit, newCommit)
+			return compare(provider, repository, oldCommit, newCommit, maxChanges)
 		},
 	}
 
 	command.Flags().StringVarP(&provider, "provider", "p", "", "the provider whose schema we are comparing")
 	_ = command.MarkFlagRequired("provider")
 
-	command.Flags().StringVarP(&repository, "repository", "r", "github://api.github.com/pulumi", "the Git repository to download the schema file from")
+	command.Flags().StringVarP(&repository, "repository", "r",
+		"github://api.github.com/pulumi", "the Git repository to download the schema file from")
 	_ = command.MarkFlagRequired("provider")
 
 	command.Flags().StringVarP(&oldCommit, "old-commit", "o", "master",
@@ -43,22 +46,33 @@ func compareCmd() *cobra.Command {
 		"the new commit to compare against the old commit")
 	_ = command.MarkFlagRequired("new-commit")
 
+	command.Flags().IntVarP(&maxChanges, "max-changes", "m", 500,
+		"the maximum number of breaking changes to display. Pass -1 to display all changes")
+
 	return command
 }
 
-func compare(provider string, repository string, oldCommit string, newCommit string) error {
-	schOld, err := pkg.DownloadSchema(repository, provider, oldCommit)
-	if err != nil {
-		return err
-	}
+func compare(provider string, repository string, oldCommit string, newCommit string, maxChanges int) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var schOld schema.PackageSpec
+	schOldDone := make(chan error)
+	go func() {
+		var err error
+		schOld, err = pkg.DownloadSchema(ctx, repository, provider, oldCommit)
+		if err != nil {
+			cancel()
+		}
+		schOldDone <- err
+	}()
 
 	var schNew schema.PackageSpec
-
 	if newCommit == "--local" {
 		usr, _ := user.Current()
 		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi/%s", usr.HomeDir, provider)
 		schemaFile := pkg.StandardSchemaPath(provider)
 		schemaPath := filepath.Join(basePath, schemaFile)
+		var err error
 		schNew, err = pkg.LoadLocalPackageSpec(schemaPath)
 		if err != nil {
 			return err
@@ -74,12 +88,18 @@ func compare(provider string, repository string, oldCommit string, newCommit str
 			return err
 		}
 	} else {
-		schNew, err = pkg.DownloadSchema(repository, provider, newCommit)
+		var err error
+		schNew, err = pkg.DownloadSchema(ctx, repository, provider, newCommit)
 		if err != nil {
 			return err
 		}
 	}
-	compareSchemas(os.Stdout, provider, schOld, schNew)
+
+	if err := <-schOldDone; err != nil {
+		return err
+	}
+
+	compareSchemas(os.Stdout, provider, schOld, schNew, maxChanges)
 	return nil
 }
 
@@ -184,6 +204,24 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			}
 		}
 
+		// The upstream issue is tracked at
+		// https://github.com/pulumi/pulumi/issues/13563.
+		isNonZeroArgs := func(ts *schema.ObjectTypeSpec) bool {
+			if ts == nil {
+				return false
+			}
+			return len(ts.Properties) > 0
+		}
+		type nonZeroArgs struct{ old, new bool }
+		switch (nonZeroArgs{old: isNonZeroArgs(f.Inputs), new: isNonZeroArgs(newFunc.Inputs)}) {
+		case nonZeroArgs{false, true}:
+			msg.SetDescription(diagtree.Danger,
+				"signature change (pulumi.InvokeOptions)->T => (Args, pulumi.InvokeOptions)->T")
+		case nonZeroArgs{true, false}:
+			msg.SetDescription(diagtree.Danger,
+				"signature change (Args, pulumi.InvokeOptions)->T => (pulumi.InvokeOptions)->T")
+		}
+
 		if f.Outputs != nil {
 			msg := msg.Label("outputs")
 			for propName, prop := range f.Outputs.Properties {
@@ -260,11 +298,11 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 	return msg
 }
 
-func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec) {
+func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec, maxChanges int) {
 	fmt.Fprintf(out, "### Does the PR have any schema changes?\n\n")
 	violations := breakingChanges(oldSchema, newSchema)
 	displayedViolations := new(bytes.Buffer)
-	lenViolations := violations.Display(displayedViolations, 500)
+	lenViolations := violations.Display(displayedViolations, maxChanges)
 	switch lenViolations {
 	case 0:
 		fmt.Fprintln(out, "Looking good! No breaking changes found.")
