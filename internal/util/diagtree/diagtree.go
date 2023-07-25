@@ -71,18 +71,19 @@ func (m *Node) levelPrefix(level int) string {
 }
 
 type cappedWriter struct {
-	max int
-	out io.Writer
+	// The number of remaining writes before we hit the cap.
+	remaining int
+	out       io.Writer
 }
 
 func (c *cappedWriter) incr() {
-	if c.max > 0 {
-		c.max--
+	if c.remaining > 0 {
+		c.remaining--
 	}
 }
 
 func (c *cappedWriter) Write(p []byte) (n int, err error) {
-	if c.max > 0 {
+	if c.remaining > 0 {
 		return c.out.Write(p)
 	}
 	// We pretend we finished the write, but we do nothing.
