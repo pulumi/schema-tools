@@ -184,6 +184,24 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			}
 		}
 
+		// The upstream issue is tracked at
+		// https://github.com/pulumi/pulumi/issues/13563.
+		isNonZeroArgs := func(ts *schema.ObjectTypeSpec) bool {
+			if ts == nil {
+				return false
+			}
+			return len(ts.Properties) > 0
+		}
+		type nonZeroArgs struct{ old, new bool }
+		switch (nonZeroArgs{old: isNonZeroArgs(f.Inputs), new: isNonZeroArgs(newFunc.Inputs)}) {
+		case nonZeroArgs{true, false}:
+			msg.SetDescription(diagtree.Danger,
+				"signature change (pulumi.InvokeOptions)->T => (Args, pulumi.InvokeOptions)->T")
+		case nonZeroArgs{false, true}:
+			msg.SetDescription(diagtree.Danger,
+				"signature change (Args, pulumi.InvokeOptions)->T => (pulumi.InvokeOptions)->T")
+		}
+
 		if f.Outputs != nil {
 			msg := msg.Label("outputs")
 			for propName, prop := range f.Outputs.Properties {
