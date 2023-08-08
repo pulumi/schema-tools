@@ -28,9 +28,8 @@ func statsCmd() *cobra.Command {
 		"the provider whose schema we should analyze")
 	_ = command.MarkFlagRequired("provider")
 
-	command.Flags().StringVarP(&tag, "tag", "t", "",
+	command.Flags().StringVarP(&tag, "tag", "t", "master",
 	"the tag of the provider whose schema we should analyze")
-_ = command.MarkFlagRequired("tag")
 
 	command.Flags().BoolVarP(&details, "details", "d", false,
 		"show the details with a list of all resources and functions")
