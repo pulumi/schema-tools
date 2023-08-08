@@ -13,14 +13,15 @@ import (
 )
 
 func statsCmd() *cobra.Command {
-	var provider, repository string
+	var provider, repository, tag string
 	var details bool
+
 
 	command := &cobra.Command{
 		Use:   "stats",
 		Short: "Get the stats of a current schema",
 		RunE: func(command *cobra.Command, args []string) error {
-			return stats(provider, repository, details)
+			return stats(provider, repository, details, tag)
 		},
 	}
 
@@ -34,12 +35,15 @@ func statsCmd() *cobra.Command {
 	command.Flags().BoolVarP(&details, "details", "d", false,
 		"show the details with a list of all resources and functions")
 
+	command.Flags().StringVarP(&tag, "tag", "t", "master",
+		"show the details with a list of all resources and functions")
+
 	return command
 }
 
-func stats(provider string, repositoryUrl string, details bool) error {
+func stats(provider string, repositoryUrl string, details bool, tag string) error {
 	ctx := context.Background()
-	sch, err := pkg.DownloadSchema(ctx, repositoryUrl, provider, "master")
+	sch, err := pkg.DownloadSchema(ctx, repositoryUrl, provider, tag)
 	if err != nil {
 		return err
 	}
