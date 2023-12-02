@@ -9,7 +9,7 @@ on:
       - main
       - master
 env:
-  GO_VERSION: '1.20.x'
+  GO_VERSION: '1.21.x'
 
 jobs:
   build-and-test:
@@ -38,4 +38,4 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@v3
         with:
-          version: v1.51
+          version: v1.55.2
