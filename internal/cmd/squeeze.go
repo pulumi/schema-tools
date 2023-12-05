@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	mapset "github.com/deckarep/golang-set/v2"
+
 	"github.com/pulumi/pulumi/pkg/v3/codegen"
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/spf13/cobra"
@@ -80,7 +82,7 @@ func compareGroup(path, groupName string) error {
 		return err
 	}
 
-	resVersions := codegen.StringSet{}
+	resVersions := mapset.NewSet[string]()
 	for name := range sch.Resources {
 		if !pkg.IsVersionedName(name) {
 			continue
@@ -93,11 +95,11 @@ func compareGroup(path, groupName string) error {
 	uniqueVersions := calculateUniqueVersions(sch, resVersions)
 
 	fmt.Println("All versions:")
-	for _, name := range resVersions.SortedValues() {
+	for _, name := range mapset.Sorted(resVersions) {
 		fmt.Printf("%s\n", name)
 	}
 	fmt.Println("Not forward-compatible versions:")
-	for _, name := range uniqueVersions.SortedValues() {
+	for _, name := range mapset.Sorted(uniqueVersions) {
 		fmt.Printf("%s\n", name)
 	}
 
@@ -110,7 +112,7 @@ func compareAll(path, out string) error {
 		return err
 	}
 
-	resourceMap := map[string]codegen.StringSet{}
+	resourceMap := map[string]mapset.Set[string]{}
 	for name := range sch.Resources {
 		if !pkg.IsVersionedName(name) {
 			continue
@@ -120,7 +122,7 @@ func compareAll(path, out string) error {
 		if existing, ok := resourceMap[vls]; ok {
 			existing.Add(name)
 		} else {
-			resourceMap[vls] = codegen.NewStringSet(name)
+			resourceMap[vls] = mapset.NewSet(name)
 		}
 	}
 
@@ -129,12 +131,12 @@ func compareAll(path, out string) error {
 	for _, name := range sortedKeys {
 		group := resourceMap[name]
 		unique := calculateUniqueVersions(sch, group)
-		reduced := group.Subtract(unique)
-		for r := range reduced {
+		reduced := group.Difference(unique)
+		for r := range reduced.Iter() {
 			fmt.Println(r)
 		}
-		for k := range reduced {
-			for _, a := range codegen.SortedKeys(unique) {
+		for k := range reduced.Iter() {
+			for _, a := range mapset.Sorted(unique) {
 				if a > k {
 					replacements[k] = a
 					break
@@ -182,16 +184,16 @@ func compareResources(sch *schema.PackageSpec, oldName string, newName string) (
 		violations = append(violations, vs...)
 	}
 
-	oldRequiredSet := codegen.NewStringSet(oldRes.RequiredInputs...)
+	oldRequiredSet := mapset.NewSet(oldRes.RequiredInputs...)
 	for _, propName := range newRes.RequiredInputs {
-		if !oldRequiredSet.Has(propName) {
+		if !oldRequiredSet.Contains(propName) {
 			violations = append(violations, fmt.Sprintf("Resource %q has a new required input %q", newName, propName))
 		}
 	}
 
-	newRequiredSet := codegen.NewStringSet(newRes.Required...)
+	newRequiredSet := mapset.NewSet(newRes.Required...)
 	for _, propName := range oldRes.Required {
-		if !newRequiredSet.Has(propName) {
+		if !newRequiredSet.Contains(propName) {
 			violations = append(violations, fmt.Sprintf("Resource %q has output %q that is not required anymore", newName, propName))
 		}
 	}
@@ -199,10 +201,10 @@ func compareResources(sch *schema.PackageSpec, oldName string, newName string) (
 	return violations, nil
 }
 
-func calculateUniqueVersions(sch *schema.PackageSpec, resVersions codegen.StringSet) codegen.StringSet {
-	uniqueVersions := codegen.StringSet{}
+func calculateUniqueVersions(sch *schema.PackageSpec, resVersions mapset.Set[string]) mapset.Set[string] {
+	uniqueVersions := mapset.NewSet[string]()
 
-	sortedVersions := resVersions.SortedValues()
+	sortedVersions := mapset.Sorted(resVersions)
 	sortApiVersions(sortedVersions)
 
 outer:
@@ -318,16 +320,16 @@ func validateTypesDeep(sch *schema.PackageSpec, old *schema.TypeSpec, new *schem
 			}
 
 			if input {
-				oldRequiredSet := codegen.NewStringSet(oldTypeRef.Required...)
+				oldRequiredSet := mapset.NewSet(oldTypeRef.Required...)
 				for _, propName := range newTypeRef.Required {
-					if !oldRequiredSet.Has(propName) {
+					if !oldRequiredSet.Contains(propName) {
 						violations = append(violations, fmt.Sprintf("Type %q has a new required input %q", newType, propName))
 					}
 				}
 			} else {
-				newRequiredSet := codegen.NewStringSet(newTypeRef.Required...)
+				newRequiredSet := mapset.NewSet(newTypeRef.Required...)
 				for _, propName := range oldTypeRef.Required {
-					if !newRequiredSet.Has(propName) {
+					if !newRequiredSet.Contains(propName) {
 						violations = append(violations, fmt.Sprintf("Type %q has output %q that is not required anymore", newType, propName))
 					}
 				}

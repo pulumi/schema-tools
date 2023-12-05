@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pulumi/pulumi/pkg/v3/codegen"
+	mapset "github.com/deckarep/golang-set/v2"
+
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
@@ -68,8 +69,8 @@ func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
 		Functions: FunctionStats{},
 	}
 
-	uniques := codegen.NewStringSet()
-	visitedTypes := codegen.NewStringSet()
+	uniques := mapset.NewSet[string]()
+	visitedTypes := mapset.NewSet[string]()
 
 	type propCountResult struct {
 		totalInputs        int
@@ -80,7 +81,7 @@ func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
 
 	var propCount func(string) propCountResult
 	propCount = func(typeName string) propCountResult {
-		if visitedTypes.Has(typeName) {
+		if visitedTypes.Contains(typeName) {
 			return propCountResult{}
 		}
 
@@ -131,7 +132,7 @@ func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
 
 	for n, r := range sch.Resources {
 		baseName := VersionlessName(n)
-		if uniques.Has(baseName) {
+		if uniques.Contains(baseName) {
 			continue
 		}
 		uniques.Add(baseName)
@@ -172,7 +173,7 @@ func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
 		}
 	}
 
-	stats.Resources.TotalResources = len(uniques)
+	stats.Resources.TotalResources = uniques.Cardinality()
 
 	stats.Functions.TotalFunctions = len(sch.Functions)
 	for _, v := range sch.Functions {

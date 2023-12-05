@@ -1,8 +1,9 @@
 module github.com/pulumi/schema-tools
 
-go 1.20
+go 1.21
 
 require (
+	github.com/deckarep/golang-set/v2 v2.5.0
 	github.com/h2non/gock v1.2.0
 	github.com/pulumi/pulumi/pkg/v3 v3.56.0
 	github.com/pulumi/pulumi/sdk/v3 v3.56.0
