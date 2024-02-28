@@ -9,13 +9,13 @@ import (
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
-type PulumiSchemaStats struct {
-	Functions FunctionStats
-	Resources ResourceStats
+type PulumiSchemaStatsV1 struct {
+	Functions FunctionStatsV1 `json:"Functions"`
+	Resources ResourceStatsV1 `json:"Resources"`
 }
 
-// ResourceStats contains statistics relating to the resources section of a Pulumi schema.
-type ResourceStats struct {
+// ResourceStatsV1 contains statistics relating to the resources section of a Pulumi schema.
+type ResourceStatsV1 struct {
 	// TotalResources is the total number of Pulumi resources in the schema.
 	TotalResources int
 
@@ -39,8 +39,8 @@ type ResourceStats struct {
 	OutputPropertiesMissingDescriptions int
 }
 
-// FunctionStats contain statistics relating to the functions section of a Pulumi schema.
-type FunctionStats struct {
+// FunctionStatsV1 contain statistics relating to the functions section of a Pulumi schema.
+type FunctionStatsV1 struct {
 	// TotalFunctions is the total number of Pulumi Functions in the schema.
 	TotalFunctions int
 
@@ -63,10 +63,10 @@ type FunctionStats struct {
 	OutputPropertiesMissingDescriptions int
 }
 
-func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
-	stats := PulumiSchemaStats{
-		Resources: ResourceStats{},
-		Functions: FunctionStats{},
+func CountStats(sch schema.PackageSpec) PulumiSchemaStatsV1 {
+	stats := PulumiSchemaStatsV1{
+		Resources: ResourceStatsV1{},
+		Functions: FunctionStatsV1{},
 	}
 
 	uniques := mapset.NewSet[string]()
