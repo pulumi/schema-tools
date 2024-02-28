@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/spf13/cobra"
 
 	"github.com/pulumi/schema-tools/internal/pkg"
@@ -15,7 +16,6 @@ import (
 func statsCmd() *cobra.Command {
 	var provider, repository, tag string
 	var details bool
-
 
 	command := &cobra.Command{
 		Use:   "stats",
@@ -26,11 +26,11 @@ func statsCmd() *cobra.Command {
 	}
 
 	command.Flags().StringVarP(&provider, "provider", "p", "",
-		"the provider whose schema we should analyze")
-	_ = command.MarkFlagRequired("provider")
+		"the provider whose schema we should analyze; do not include the pulumi- prefix")
+	contract.AssertNoError(command.MarkFlagRequired("provider"))
 
 	command.Flags().StringVarP(&repository, "repository", "r", "github://api.github.com/pulumi", "the Git repository to download the schema file from")
-	_ = command.MarkFlagRequired("provider")
+	contract.AssertNoError(command.MarkFlagRequired("provider"))
 
 	command.Flags().BoolVarP(&details, "details", "d", false,
 		"show the details with a list of all resources and functions")
