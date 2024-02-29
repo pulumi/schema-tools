@@ -16,7 +16,6 @@ func statsCmd() *cobra.Command {
 	var provider, repository, tag string
 	var details bool
 
-
 	command := &cobra.Command{
 		Use:   "stats",
 		Short: "Get the stats of a current schema",
@@ -50,7 +49,6 @@ func stats(provider string, repositoryUrl string, details bool, tag string) erro
 
 	schemaStats := pkg.CountStats(sch)
 
-	fmt.Printf("Provider: %s\n", provider)
 	statsBytes, _ := json.MarshalIndent(schemaStats, "", "  ")
 	_, err = os.Stdout.Write(statsBytes)
 	if err != nil {
