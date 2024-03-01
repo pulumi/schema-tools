@@ -10,57 +10,57 @@ import (
 )
 
 type PulumiSchemaStats struct {
-	Functions FunctionStats
-	Resources ResourceStats
+	Functions FunctionStats `json:"functions"`
+	Resources ResourceStats `json:"resources"`
 }
 
 // ResourceStats contains statistics relating to the resources section of a Pulumi schema.
 type ResourceStats struct {
 	// TotalResources is the total number of Pulumi resources in the schema.
-	TotalResources int
+	TotalResources int `json:"total_resources"`
 
 	// TotalDescriptionBytes is the sum total of all bytes in the descriptions of the resources themselves, not
 	// including any inputs and outputs.
-	TotalDescriptionBytes int
+	TotalDescriptionBytes int `json:"total_description_bytes"`
 
 	// TotalInputProperties is the total number of inputs across all resources, including nested types.
 	// Given a complex input type Foo with one property, Foo.Bar, both Foo and Foo.Bar are counted as inputs.
-	TotalInputProperties int
+	TotalInputProperties int `json:"total_input_properties"`
 
 	// InputPropertiesMissingDescriptions is the total number of all resource input properties missing descriptions,
 	// including nested types.
-	InputPropertiesMissingDescriptions int
+	InputPropertiesMissingDescriptions int `json:"input_properties_missing_descriptions"`
 
 	// TotalOutputProperties is the total number of outputs across all resources, including nested types.
 	// Given a complex output type Foo with one property, Foo.Bar, both Foo and Foo.Bar are counted as outputs.
-	TotalOutputProperties int
+	TotalOutputProperties int `json:"total_output_properties"`
 
 	// OutputPropertiesMissingDescriptions is the total number of all resource output properties missing descriptions.
-	OutputPropertiesMissingDescriptions int
+	OutputPropertiesMissingDescriptions int `json:"output_properties_missing_descriptions"`
 }
 
 // FunctionStats contain statistics relating to the functions section of a Pulumi schema.
 type FunctionStats struct {
 	// TotalFunctions is the total number of Pulumi Functions in the schema.
-	TotalFunctions int
+	TotalFunctions int `json:"total_functions"`
 
 	// TotalDescriptionBytes is the sum total of all bytes in the descriptions of the functions themselves,
 	// not including inputs and outputs.
-	TotalDescriptionBytes int
+	TotalDescriptionBytes int `json:"total_description_bytes"`
 
 	// TotalInputPropertyDescriptionBytes is the sum total of all bytes in descriptions of function input properties,
 	// not including the input type description.
-	TotalInputPropertyDescriptionBytes int
+	TotalInputPropertyDescriptionBytes int `json:"total_input_property_description_bytes"`
 
 	// InputPropertiesMissingDescriptions is the total number of all function input properties missing descriptions.
-	InputPropertiesMissingDescriptions int
+	InputPropertiesMissingDescriptions int `json:"input_properties_missing_descriptions"`
 
 	// TotalOutputPropertyDescriptionBytes is the sum total of all bytes in description of function output properties,
 	// not include the output type description.
-	TotalOutputPropertyDescriptionBytes int
+	TotalOutputPropertyDescriptionBytes int `json:"total_output_property_description_bytes"`
 
 	// OutputPropertiesMissingDescriptions is the total number of all function output properties missing descriptions.
-	OutputPropertiesMissingDescriptions int
+	OutputPropertiesMissingDescriptions int `json:"output_properties_missing_descriptions"`
 }
 
 func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
