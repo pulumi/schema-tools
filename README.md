@@ -16,6 +16,7 @@ Available Commands:
   compare     Compare two versions of a Pulumi schema
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
+  squeeze     Utilities to compare Azure Native versions on backward compatibility
   stats       Get the stats of a current schema
   version     Print the version number of schema-tools
 ```
@@ -132,4 +133,21 @@ Type "docker:index/ServiceTaskSpecResourcesLimitsGenericResources:ServiceTaskSpe
 
 - `index/getLogs.getLogs`
 - `index/getRemoteImage.getRemoteImage`
+```
+
+## Squeeze
+
+To show the backwards-incompatible changes between two versioned resources:
+
+```shell
+$ schema-tools squeeze -s bin/schema-full.json --old azure-native:app:ContainerApp --new azure-native:app/v20230501:ContainerApp
+Found 2 breaking changes:
+Resource "azure-native:app/v20230501:ContainerApp" missing input "workloadProfileType"
+Resource "azure-native:app/v20230501:ContainerApp" missing output "workloadProfileType"
+```
+
+To remove all versioned resources where the removal doesn't break compatibility:
+
+```shell
+$ schema-tools squeeze -s bin/raw-schema.json --out versions/v2-removed-resources.json
 ```
