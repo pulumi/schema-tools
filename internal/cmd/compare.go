@@ -69,7 +69,7 @@ func compare(provider string, repository string, oldCommit string, newCommit str
 	var schNew schema.PackageSpec
 	if newCommit == "--local" {
 		usr, _ := user.Current()
-		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi/%s", usr.HomeDir, provider)
+		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi/pulumi-%s", usr.HomeDir, provider)
 		schemaFile := pkg.StandardSchemaPath(provider)
 		schemaPath := filepath.Join(basePath, schemaFile)
 		var err error
@@ -301,15 +301,17 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec, maxChanges int) {
 	fmt.Fprintf(out, "### Does the PR have any schema changes?\n\n")
 	violations := breakingChanges(oldSchema, newSchema)
+	concerningTypeStructure(provider, &oldSchema, &newSchema, violations)
+
 	displayedViolations := new(bytes.Buffer)
 	lenViolations := violations.Display(displayedViolations, maxChanges)
 	switch lenViolations {
 	case 0:
 		fmt.Fprintln(out, "Looking good! No breaking changes found.")
 	case 1:
-		fmt.Fprintln(out, "Found 1 breaking change: ")
+		fmt.Fprintln(out, "Found 1 issue: ")
 	default:
-		fmt.Fprintf(out, "Found %d breaking changes:\n", lenViolations)
+		fmt.Fprintf(out, "Found %d issues:\n", lenViolations)
 	}
 
 	_, err := out.Write(displayedViolations.Bytes())
