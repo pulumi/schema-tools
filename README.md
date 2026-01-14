@@ -135,6 +135,12 @@ Type "docker:index/ServiceTaskSpecResourcesLimitsGenericResources:ServiceTaskSpe
 - `index/getRemoteImage.getRemoteImage`
 ```
 
+To compare local schema files:
+
+```shell
+$ schema-tools compare -p aws --old-path ./schemas/aws-old.json --new-path ./schemas/aws-new.json
+```
+
 ## Squeeze
 
 To show the backwards-incompatible changes between two versioned resources:
