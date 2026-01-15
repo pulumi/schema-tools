@@ -57,19 +57,61 @@ var categoryOrder = []diffCategory{
 	diffSignatureChanged,
 }
 
+func allCategoryNames() []string {
+	names := make([]string, 0, len(categoryOrder))
+	for _, c := range categoryOrder {
+		names = append(names, string(c))
+	}
+	return names
+}
+
+func categoryByName() map[string]diffCategory {
+	categories := make(map[string]diffCategory, len(categoryOrder))
+	for _, c := range categoryOrder {
+		categories[string(c)] = c
+	}
+	return categories
+}
+
+func parseIgnoreCategories(raw string) (map[diffCategory]bool, error) {
+	ignore := map[diffCategory]bool{}
+	if strings.TrimSpace(raw) == "" {
+		return ignore, nil
+	}
+
+	categories := categoryByName()
+	for _, part := range strings.Split(raw, ",") {
+		name := strings.TrimSpace(part)
+		if name == "" {
+			continue
+		}
+		cat, ok := categories[name]
+		if !ok {
+			return nil, fmt.Errorf("unknown ignore category %q (valid: %s)", name, strings.Join(allCategoryNames(), ", "))
+		}
+		ignore[cat] = true
+	}
+	return ignore, nil
+}
+
 // diffFilter tracks breaking change counts by category and records
 // diagnostic messages to the tree. It enables summary reporting.
 type diffFilter struct {
+	ignore map[diffCategory]bool
 	counts map[diffCategory]int
 }
 
-func newDiffFilter() *diffFilter {
+func newDiffFilter(ignore map[diffCategory]bool) *diffFilter {
 	return &diffFilter{
+		ignore: ignore,
 		counts: map[diffCategory]int{},
 	}
 }
 
 func (f *diffFilter) record(cat diffCategory, node *diagtree.Node, level diagtree.Severity, msg string, a ...any) {
+	if f.ignore[cat] {
+		return
+	}
 	f.counts[cat]++
 	node.SetDescription(level, msg, a...)
 }
@@ -248,13 +290,18 @@ func mergeTypeUsage(dst, src map[string]typeUsage) map[string]typeUsage {
 
 func compareCmd() *cobra.Command {
 	var provider, repository, oldCommit, newCommit string
+	var ignoreCategories string
 	var maxChanges int
 
 	command := &cobra.Command{
 		Use:   "compare",
 		Short: "Compare two versions of a Pulumi schema",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return compare(provider, repository, oldCommit, newCommit, maxChanges)
+			ignoreSet, err := parseIgnoreCategories(ignoreCategories)
+			if err != nil {
+				return err
+			}
+			return compare(provider, repository, oldCommit, newCommit, maxChanges, ignoreSet)
 		},
 	}
 
@@ -272,13 +319,17 @@ func compareCmd() *cobra.Command {
 		"the new commit to compare against the old commit")
 	_ = command.MarkFlagRequired("new-commit")
 
+	command.Flags().StringVar(&ignoreCategories, "ignore-categories", "",
+		fmt.Sprintf("comma-separated list of difference categories to ignore (valid: %s)",
+			strings.Join(allCategoryNames(), ", ")))
+
 	command.Flags().IntVarP(&maxChanges, "max-changes", "m", 500,
 		"the maximum number of breaking changes to display. Pass -1 to display all changes")
 
 	return command
 }
 
-func compare(provider string, repository string, oldCommit string, newCommit string, maxChanges int) error {
+func compare(provider string, repository string, oldCommit string, newCommit string, maxChanges int, ignoreCategories map[diffCategory]bool) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var schOld schema.PackageSpec
@@ -325,7 +376,7 @@ func compare(provider string, repository string, oldCommit string, newCommit str
 		return err
 	}
 
-	compareSchemas(os.Stdout, provider, schOld, schNew, maxChanges)
+	compareSchemas(os.Stdout, provider, schOld, schNew, maxChanges, ignoreCategories)
 	return nil
 }
 
@@ -528,9 +579,9 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 	return msg
 }
 
-func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec, maxChanges int) {
+func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec, maxChanges int, ignoreCategories map[diffCategory]bool) {
 	fmt.Fprintf(out, "### Does the PR have any schema changes?\n\n")
-	filter := newDiffFilter()
+	filter := newDiffFilter(ignoreCategories)
 	violations := breakingChanges(oldSchema, newSchema, filter)
 	if filter.hasCounts() {
 		fmt.Fprintln(out, "Summary by category:")
