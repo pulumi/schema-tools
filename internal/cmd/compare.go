@@ -35,6 +35,7 @@ const (
 	diffTypeChangedOutput            diffCategory = "type-changed-output"
 	diffTypeChangedIntToNumberInput  diffCategory = "type-changed-int-to-number-input"
 	diffTypeChangedIntToNumberOutput diffCategory = "type-changed-int-to-number-output"
+	diffMaxItemsOneChanged           diffCategory = "max-items-one-changed"
 	diffOptionalToRequiredInput      diffCategory = "optional-to-required-input"
 	diffOptionalToRequiredOutput     diffCategory = "optional-to-required-output"
 	diffRequiredToOptionalInput      diffCategory = "required-to-optional-input"
@@ -54,6 +55,7 @@ var categoryOrder = []diffCategory{
 	diffTypeChangedOutput,
 	diffTypeChangedIntToNumberInput,
 	diffTypeChangedIntToNumberOutput,
+	diffMaxItemsOneChanged,
 	diffOptionalToRequiredInput,
 	diffOptionalToRequiredOutput,
 	diffRequiredToOptionalInput,
@@ -166,6 +168,10 @@ func baseTypeName(ts *schema.TypeSpec) string {
 	return ts.Type
 }
 
+func isArrayType(ts *schema.TypeSpec) bool {
+	return ts != nil && ts.Type == "array"
+}
+
 func pluralizationCandidates(name string) []string {
 	if name == "" {
 		return nil
@@ -203,6 +209,11 @@ func recordPluralizationRename(msg *diagtree.Node, oldName string, oldProp schem
 		}
 		oldType := baseTypeName(&oldProp.TypeSpec)
 		newType := baseTypeName(&newProp.TypeSpec)
+		if isArrayType(&oldProp.TypeSpec) != isArrayType(&newProp.TypeSpec) {
+			filter.record(diffMaxItemsOneChanged, msg, diagtree.Warn,
+				"type changed from %q to %q (renamed to %q)", oldType, newType, candidate)
+			return true
+		}
 		if oldType == "integer" && newType == "number" {
 			filter.record(intToNumberCategory(typeCat), msg, diagtree.Warn,
 				"type changed from %q to %q (renamed to %q)", oldType, newType, candidate)
@@ -705,6 +716,10 @@ func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, msg *diagtree.Nod
 	if oldType != newType {
 		if oldType == "integer" && newType == "number" {
 			filter.record(intToNumberCategory(typeChangeCategory), msg, diagtree.Warn, "type changed from %q to %q", oldType, newType)
+			return
+		}
+		if isArrayType(old) != isArrayType(new) {
+			filter.record(diffMaxItemsOneChanged, msg, diagtree.Warn, "type changed from %q to %q", oldType, newType)
 			return
 		}
 		filter.record(typeChangeCategory, msg, diagtree.Warn, "type changed from %q to %q", oldType, newType)
