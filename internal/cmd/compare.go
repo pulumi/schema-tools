@@ -156,6 +156,69 @@ func localTypeName(ref string) string {
 	return ref[idx+len(marker):]
 }
 
+func baseTypeName(ts *schema.TypeSpec) string {
+	if ts == nil {
+		return ""
+	}
+	if ts.Ref != "" {
+		return ts.Ref
+	}
+	return ts.Type
+}
+
+func pluralizationCandidates(name string) []string {
+	if name == "" {
+		return nil
+	}
+	candidates := []string{}
+	seen := map[string]bool{}
+	add := func(candidate string) {
+		if candidate == "" || candidate == name || seen[candidate] {
+			return
+		}
+		seen[candidate] = true
+		candidates = append(candidates, candidate)
+	}
+
+	if strings.HasSuffix(name, "ies") && len(name) > 3 {
+		add(name[:len(name)-3] + "y")
+	}
+	if strings.HasSuffix(name, "y") && len(name) > 1 {
+		add(name[:len(name)-1] + "ies")
+	}
+	if strings.HasSuffix(name, "s") && len(name) > 1 {
+		add(name[:len(name)-1])
+	} else {
+		add(name + "s")
+	}
+
+	return candidates
+}
+
+func recordPluralizationRename(msg *diagtree.Node, oldName string, oldProp schema.PropertySpec, newProps map[string]schema.PropertySpec, typeCat diffCategory, filter *diffFilter) bool {
+	for _, candidate := range pluralizationCandidates(oldName) {
+		newProp, ok := newProps[candidate]
+		if !ok {
+			continue
+		}
+		oldType := baseTypeName(&oldProp.TypeSpec)
+		newType := baseTypeName(&newProp.TypeSpec)
+		if oldType == "integer" && newType == "number" {
+			filter.record(intToNumberCategory(typeCat), msg, diagtree.Warn,
+				"type changed from %q to %q (renamed to %q)", oldType, newType, candidate)
+			return true
+		}
+		if oldType != newType {
+			filter.record(typeCat, msg, diagtree.Warn,
+				"type changed from %q to %q (renamed to %q)", oldType, newType, candidate)
+			return true
+		}
+		filter.record(typeCat, msg, diagtree.Warn, "renamed to %q", candidate)
+		return true
+	}
+	return false
+}
+
 // buildTypeUsage analyzes a schema to determine how each type is used.
 // It traverses resource inputs/outputs and function inputs/outputs,
 // following type references recursively to build a complete usage map.
@@ -367,6 +430,9 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 			msg := msg.Label("inputs").Value(propName)
 			newProp, ok := newRes.InputProperties[propName]
 			if !ok {
+				if recordPluralizationRename(msg, propName, prop, newRes.InputProperties, diffTypeChangedInput, filter) {
+					continue
+				}
 				filter.record(diffMissingInput, msg, diagtree.Warn, "missing")
 				continue
 			}
@@ -378,6 +444,9 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 			msg := msg.Label("properties").Value(propName)
 			newProp, ok := newRes.Properties[propName]
 			if !ok {
+				if recordPluralizationRename(msg, propName, prop, newRes.Properties, diffTypeChangedOutput, filter) {
+					continue
+				}
 				filter.record(diffMissingOutput, msg, diagtree.Warn, "missing output %q", propName)
 				continue
 			}
@@ -427,6 +496,9 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 
 				newProp, ok := newFunc.Inputs.Properties[propName]
 				if !ok {
+					if recordPluralizationRename(msg, propName, prop, newFunc.Inputs.Properties, diffTypeChangedInput, filter) {
+						continue
+					}
 					filter.record(diffMissingInput, msg, diagtree.Warn, "missing input %q", propName)
 					continue
 				}
@@ -475,6 +547,9 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 
 				newProp, ok := newFunc.Outputs.Properties[propName]
 				if !ok {
+					if recordPluralizationRename(msg, propName, prop, newFunc.Outputs.Properties, diffTypeChangedOutput, filter) {
+						continue
+					}
 					filter.record(diffMissingOutput, msg, diagtree.Warn, "missing output")
 					continue
 				}
@@ -509,6 +584,10 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 			msg := msg.Label("properties").Value(propName)
 			newProp, ok := newTyp.Properties[propName]
 			if !ok {
+				usage := typeUsage[typName]
+				if recordPluralizationRename(msg, propName, prop, newTyp.Properties, usage.typeChangeCategory(), filter) {
+					continue
+				}
 				filter.record(diffMissingProperty, msg, diagtree.Warn, "missing")
 				continue
 			}
