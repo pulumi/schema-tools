@@ -20,6 +20,8 @@ import (
 	"github.com/pulumi/schema-tools/internal/util/set"
 )
 
+// diffCategory represents a category of schema breaking change.
+// Categories are used to group and count changes for summary reporting.
 type diffCategory string
 
 const (
@@ -38,6 +40,7 @@ const (
 	diffSignatureChanged         diffCategory = "signature-changed"
 )
 
+// categoryOrder defines the display order for category summaries.
 var categoryOrder = []diffCategory{
 	diffMissingResource,
 	diffMissingFunction,
@@ -54,6 +57,8 @@ var categoryOrder = []diffCategory{
 	diffSignatureChanged,
 }
 
+// diffFilter tracks breaking change counts by category and records
+// diagnostic messages to the tree. It enables summary reporting.
 type diffFilter struct {
 	counts map[diffCategory]int
 }
@@ -85,6 +90,7 @@ func (f *diffFilter) summaryLines() []string {
 	return lines
 }
 
+// usageKind indicates whether a type is used in input or output position.
 type usageKind int
 
 const (
@@ -92,6 +98,11 @@ const (
 	usageOutput
 )
 
+// typeUsage tracks whether a type is used as an input, output, or both.
+// This allows breaking changes to be categorized correctly based on how
+// the type is actually used in the schema. When a type is used as both
+// input and output, input categorization takes precedence since input
+// breaking changes are typically more severe.
 type typeUsage struct {
 	input  bool
 	output bool
@@ -118,6 +129,9 @@ func (u typeUsage) requiredToOptionalCategory() diffCategory {
 	return diffRequiredToOptionalOutput
 }
 
+// localTypeName extracts the type name from a local schema reference.
+// For example, "#/types/pkg:module:TypeName" returns "pkg:module:TypeName".
+// Returns empty string for external refs or non-type refs.
 func localTypeName(ref string) string {
 	const marker = "#/types/"
 	idx := strings.Index(ref, marker)
@@ -127,6 +141,10 @@ func localTypeName(ref string) string {
 	return ref[idx+len(marker):]
 }
 
+// buildTypeUsage analyzes a schema to determine how each type is used.
+// It traverses resource inputs/outputs and function inputs/outputs,
+// following type references recursively to build a complete usage map.
+// Cycle detection prevents infinite loops on recursive types.
 func buildTypeUsage(spec schema.PackageSpec) map[string]typeUsage {
 	usage := map[string]typeUsage{}
 	visitedInput := map[string]bool{}
@@ -212,6 +230,9 @@ func buildTypeUsage(spec schema.PackageSpec) map[string]typeUsage {
 	return usage
 }
 
+// mergeTypeUsage combines two type usage maps. This is used to merge
+// usage information from both old and new schemas, ensuring types that
+// exist in either schema are properly categorized.
 func mergeTypeUsage(dst, src map[string]typeUsage) map[string]typeUsage {
 	if dst == nil {
 		dst = map[string]typeUsage{}

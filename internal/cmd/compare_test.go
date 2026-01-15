@@ -70,7 +70,7 @@ func TestRemovedProperty(t *testing.T) {
 	old.Properties["field1"] = schema.PropertySpec{TypeSpec: schema.TypeSpec{Type: "string"}}
 	oldSchema := simpleResourceSchema(old)
 	newSchema := simpleResourceSchema(simpleResource(nil, nil))
-	changes := *breakingChanges(oldSchema, newSchema)
+	changes := *breakingChanges(oldSchema, newSchema, newDiffFilter())
 	assert.Equal(t, expectedRes(func(n *diagtree.Node) {
 		n.Label("properties").Value("field1").
 			SetDescription(diagtree.Warn, `missing output "field1"`)
@@ -203,7 +203,7 @@ func testBreakingRequired(
 			oldSchema := newT(tt.OldRequired, tt.OldRequiredInputs)
 			newSchema := newT(tt.NewRequired, tt.NewRequiredInputs)
 
-			violations := breakingChanges(oldSchema, newSchema)
+			violations := breakingChanges(oldSchema, newSchema, newDiffFilter())
 
 			expected, actual := new(bytes.Buffer), new(bytes.Buffer)
 
@@ -243,4 +243,481 @@ func simpleTypeSchema(t schema.ComplexTypeSpec) schema.PackageSpec {
 		p.Name + ":index:MyType": t,
 	}
 	return p
+}
+
+func TestLocalTypeName(t *testing.T) {
+	tests := []struct {
+		name     string
+		ref      string
+		expected string
+	}{
+		{
+			name:     "standard local type ref",
+			ref:      "#/types/pkg:module:TypeName",
+			expected: "pkg:module:TypeName",
+		},
+		{
+			name:     "local type ref with index module",
+			ref:      "#/types/aws:index:Tag",
+			expected: "aws:index:Tag",
+		},
+		{
+			name:     "empty string",
+			ref:      "",
+			expected: "",
+		},
+		{
+			name:     "non-type ref",
+			ref:      "#/resources/pkg:module:Resource",
+			expected: "",
+		},
+		{
+			name:     "external ref",
+			ref:      "pulumi.json#/Archive",
+			expected: "",
+		},
+		{
+			name:     "partial marker",
+			ref:      "#/type/pkg:module:TypeName",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := localTypeName(tt.ref)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestTypeUsageMethods(t *testing.T) {
+	t.Run("typeChangeCategory", func(t *testing.T) {
+		// Input takes precedence
+		assert.Equal(t, diffTypeChangedInput, typeUsage{input: true, output: true}.typeChangeCategory())
+		assert.Equal(t, diffTypeChangedInput, typeUsage{input: true, output: false}.typeChangeCategory())
+		assert.Equal(t, diffTypeChangedOutput, typeUsage{input: false, output: true}.typeChangeCategory())
+		assert.Equal(t, diffTypeChangedOutput, typeUsage{input: false, output: false}.typeChangeCategory())
+	})
+
+	t.Run("optionalToRequiredCategory", func(t *testing.T) {
+		assert.Equal(t, diffOptionalToRequiredInput, typeUsage{input: true, output: true}.optionalToRequiredCategory())
+		assert.Equal(t, diffOptionalToRequiredInput, typeUsage{input: true, output: false}.optionalToRequiredCategory())
+		assert.Equal(t, diffOptionalToRequiredOutput, typeUsage{input: false, output: true}.optionalToRequiredCategory())
+		assert.Equal(t, diffOptionalToRequiredOutput, typeUsage{input: false, output: false}.optionalToRequiredCategory())
+	})
+
+	t.Run("requiredToOptionalCategory", func(t *testing.T) {
+		assert.Equal(t, diffRequiredToOptionalInput, typeUsage{input: true, output: true}.requiredToOptionalCategory())
+		assert.Equal(t, diffRequiredToOptionalInput, typeUsage{input: true, output: false}.requiredToOptionalCategory())
+		assert.Equal(t, diffRequiredToOptionalOutput, typeUsage{input: false, output: true}.requiredToOptionalCategory())
+		assert.Equal(t, diffRequiredToOptionalOutput, typeUsage{input: false, output: false}.requiredToOptionalCategory())
+	})
+}
+
+func TestDiffFilterSummaryLines(t *testing.T) {
+	t.Run("empty filter", func(t *testing.T) {
+		f := newDiffFilter()
+		lines := f.summaryLines()
+		assert.Empty(t, lines)
+		assert.False(t, f.hasCounts())
+	})
+
+	t.Run("single category", func(t *testing.T) {
+		f := newDiffFilter()
+		f.counts[diffMissingResource] = 3
+		lines := f.summaryLines()
+		assert.Equal(t, []string{"missing-resource: 3"}, lines)
+		assert.True(t, f.hasCounts())
+	})
+
+	t.Run("multiple categories in order", func(t *testing.T) {
+		f := newDiffFilter()
+		f.counts[diffTypeChangedOutput] = 2
+		f.counts[diffMissingResource] = 1
+		f.counts[diffSignatureChanged] = 5
+		lines := f.summaryLines()
+		// Should be in categoryOrder order, not insertion order
+		assert.Equal(t, []string{
+			"missing-resource: 1",
+			"type-changed-output: 2",
+			"signature-changed: 5",
+		}, lines)
+	})
+
+	t.Run("zero counts excluded", func(t *testing.T) {
+		f := newDiffFilter()
+		f.counts[diffMissingResource] = 0
+		f.counts[diffMissingFunction] = 2
+		lines := f.summaryLines()
+		assert.Equal(t, []string{"missing-function: 2"}, lines)
+	})
+}
+
+func TestBuildTypeUsage(t *testing.T) {
+	t.Run("empty schema", func(t *testing.T) {
+		spec := simpleEmptySchema()
+		usage := buildTypeUsage(spec)
+		assert.Empty(t, usage)
+	})
+
+	t.Run("type used in resource input", func(t *testing.T) {
+		spec := simpleEmptySchema()
+		spec.Types = map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:MyType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"field": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		}
+		spec.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"config": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index:MyType"}},
+				},
+			},
+		}
+		usage := buildTypeUsage(spec)
+		assert.True(t, usage["my-pkg:index:MyType"].input)
+		assert.False(t, usage["my-pkg:index:MyType"].output)
+	})
+
+	t.Run("type used in resource output", func(t *testing.T) {
+		spec := simpleEmptySchema()
+		spec.Types = map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:MyType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"field": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		}
+		spec.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"result": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index:MyType"}},
+					},
+				},
+			},
+		}
+		usage := buildTypeUsage(spec)
+		assert.False(t, usage["my-pkg:index:MyType"].input)
+		assert.True(t, usage["my-pkg:index:MyType"].output)
+	})
+
+	t.Run("type used in both input and output", func(t *testing.T) {
+		spec := simpleEmptySchema()
+		spec.Types = map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:MyType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"field": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		}
+		spec.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"result": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index:MyType"}},
+					},
+				},
+				InputProperties: map[string]schema.PropertySpec{
+					"config": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index:MyType"}},
+				},
+			},
+		}
+		usage := buildTypeUsage(spec)
+		assert.True(t, usage["my-pkg:index:MyType"].input)
+		assert.True(t, usage["my-pkg:index:MyType"].output)
+	})
+
+	t.Run("nested type in array", func(t *testing.T) {
+		spec := simpleEmptySchema()
+		spec.Types = map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:NestedType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		}
+		spec.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"items": {TypeSpec: schema.TypeSpec{
+						Type:  "array",
+						Items: &schema.TypeSpec{Ref: "#/types/my-pkg:index:NestedType"},
+					}},
+				},
+			},
+		}
+		usage := buildTypeUsage(spec)
+		assert.True(t, usage["my-pkg:index:NestedType"].input)
+	})
+
+	t.Run("nested type in map", func(t *testing.T) {
+		spec := simpleEmptySchema()
+		spec.Types = map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:NestedType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		}
+		spec.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"mapping": {TypeSpec: schema.TypeSpec{
+							Type:                 "object",
+							AdditionalProperties: &schema.TypeSpec{Ref: "#/types/my-pkg:index:NestedType"},
+						}},
+					},
+				},
+			},
+		}
+		usage := buildTypeUsage(spec)
+		assert.True(t, usage["my-pkg:index:NestedType"].output)
+	})
+
+	t.Run("function inputs and outputs", func(t *testing.T) {
+		spec := simpleEmptySchema()
+		spec.Types = map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:InputType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+			"my-pkg:index:OutputType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		}
+		spec.Functions = map[string]schema.FunctionSpec{
+			"my-pkg:index:myFunction": {
+				Inputs: &schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"arg": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index:InputType"}},
+					},
+				},
+				Outputs: &schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"result": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index:OutputType"}},
+					},
+				},
+			},
+		}
+		usage := buildTypeUsage(spec)
+		assert.True(t, usage["my-pkg:index:InputType"].input)
+		assert.False(t, usage["my-pkg:index:InputType"].output)
+		assert.False(t, usage["my-pkg:index:OutputType"].input)
+		assert.True(t, usage["my-pkg:index:OutputType"].output)
+	})
+
+	t.Run("recursive type does not infinite loop", func(t *testing.T) {
+		spec := simpleEmptySchema()
+		spec.Types = map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:RecursiveType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"child": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index:RecursiveType"}},
+					},
+				},
+			},
+		}
+		spec.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"tree": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index:RecursiveType"}},
+				},
+			},
+		}
+		// Should not hang
+		usage := buildTypeUsage(spec)
+		assert.True(t, usage["my-pkg:index:RecursiveType"].input)
+	})
+}
+
+func TestMergeTypeUsage(t *testing.T) {
+	t.Run("merge into nil", func(t *testing.T) {
+		src := map[string]typeUsage{
+			"type1": {input: true, output: false},
+		}
+		result := mergeTypeUsage(nil, src)
+		assert.Equal(t, src, result)
+	})
+
+	t.Run("merge empty into empty", func(t *testing.T) {
+		result := mergeTypeUsage(map[string]typeUsage{}, map[string]typeUsage{})
+		assert.Empty(t, result)
+	})
+
+	t.Run("merge combines flags", func(t *testing.T) {
+		dst := map[string]typeUsage{
+			"type1": {input: true, output: false},
+		}
+		src := map[string]typeUsage{
+			"type1": {input: false, output: true},
+		}
+		result := mergeTypeUsage(dst, src)
+		assert.True(t, result["type1"].input)
+		assert.True(t, result["type1"].output)
+	})
+
+	t.Run("merge adds new types", func(t *testing.T) {
+		dst := map[string]typeUsage{
+			"type1": {input: true, output: false},
+		}
+		src := map[string]typeUsage{
+			"type2": {input: false, output: true},
+		}
+		result := mergeTypeUsage(dst, src)
+		assert.True(t, result["type1"].input)
+		assert.True(t, result["type2"].output)
+	})
+}
+
+func TestCategoryCounting(t *testing.T) {
+	t.Run("counts missing resource", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {},
+		}
+		newSchema := simpleEmptySchema()
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffMissingResource])
+	})
+
+	t.Run("counts missing function", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Functions = map[string]schema.FunctionSpec{
+			"my-pkg:index:myFunc": {},
+		}
+		newSchema := simpleEmptySchema()
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffMissingFunction])
+	})
+
+	t.Run("counts missing type", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Types = map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:MyType": {},
+		}
+		newSchema := simpleEmptySchema()
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffMissingType])
+	})
+
+	t.Run("counts missing input", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"prop1": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffMissingInput])
+	})
+
+	t.Run("counts type changed input", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"prop1": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"prop1": {TypeSpec: schema.TypeSpec{Type: "integer"}},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffTypeChangedInput])
+	})
+
+	t.Run("counts optional to required input", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"prop1": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+				RequiredInputs: []string{},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"prop1": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+				RequiredInputs: []string{"prop1"},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffOptionalToRequiredInput])
+	})
+
+	t.Run("multiple categories counted correctly", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:Resource1": {},
+			"my-pkg:index:Resource2": {},
+		}
+		oldSchema.Functions = map[string]schema.FunctionSpec{
+			"my-pkg:index:func1": {},
+		}
+		newSchema := simpleEmptySchema()
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 2, filter.counts[diffMissingResource])
+		assert.Equal(t, 1, filter.counts[diffMissingFunction])
+	})
 }
