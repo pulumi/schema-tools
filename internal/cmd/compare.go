@@ -25,19 +25,21 @@ import (
 type diffCategory string
 
 const (
-	diffMissingResource          diffCategory = "missing-resource"
-	diffMissingFunction          diffCategory = "missing-function"
-	diffMissingType              diffCategory = "missing-type"
-	diffMissingInput             diffCategory = "missing-input"
-	diffMissingOutput            diffCategory = "missing-output"
-	diffMissingProperty          diffCategory = "missing-property"
-	diffTypeChangedInput         diffCategory = "type-changed-input"
-	diffTypeChangedOutput        diffCategory = "type-changed-output"
-	diffOptionalToRequiredInput  diffCategory = "optional-to-required-input"
-	diffOptionalToRequiredOutput diffCategory = "optional-to-required-output"
-	diffRequiredToOptionalInput  diffCategory = "required-to-optional-input"
-	diffRequiredToOptionalOutput diffCategory = "required-to-optional-output"
-	diffSignatureChanged         diffCategory = "signature-changed"
+	diffMissingResource              diffCategory = "missing-resource"
+	diffMissingFunction              diffCategory = "missing-function"
+	diffMissingType                  diffCategory = "missing-type"
+	diffMissingInput                 diffCategory = "missing-input"
+	diffMissingOutput                diffCategory = "missing-output"
+	diffMissingProperty              diffCategory = "missing-property"
+	diffTypeChangedInput             diffCategory = "type-changed-input"
+	diffTypeChangedOutput            diffCategory = "type-changed-output"
+	diffTypeChangedIntToNumberInput  diffCategory = "type-changed-int-to-number-input"
+	diffTypeChangedIntToNumberOutput diffCategory = "type-changed-int-to-number-output"
+	diffOptionalToRequiredInput      diffCategory = "optional-to-required-input"
+	diffOptionalToRequiredOutput     diffCategory = "optional-to-required-output"
+	diffRequiredToOptionalInput      diffCategory = "required-to-optional-input"
+	diffRequiredToOptionalOutput     diffCategory = "required-to-optional-output"
+	diffSignatureChanged             diffCategory = "signature-changed"
 )
 
 // categoryOrder defines the display order for category summaries.
@@ -50,6 +52,8 @@ var categoryOrder = []diffCategory{
 	diffMissingProperty,
 	diffTypeChangedInput,
 	diffTypeChangedOutput,
+	diffTypeChangedIntToNumberInput,
+	diffTypeChangedIntToNumberOutput,
 	diffOptionalToRequiredInput,
 	diffOptionalToRequiredOutput,
 	diffRequiredToOptionalInput,
@@ -113,6 +117,17 @@ func (u typeUsage) typeChangeCategory() diffCategory {
 		return diffTypeChangedInput
 	}
 	return diffTypeChangedOutput
+}
+
+func intToNumberCategory(typeCat diffCategory) diffCategory {
+	switch typeCat {
+	case diffTypeChangedInput:
+		return diffTypeChangedIntToNumberInput
+	case diffTypeChangedOutput:
+		return diffTypeChangedIntToNumberOutput
+	default:
+		return typeCat
+	}
 }
 
 func (u typeUsage) optionalToRequiredCategory() diffCategory {
@@ -609,6 +624,10 @@ func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, msg *diagtree.Nod
 		newType = new.Ref
 	}
 	if oldType != newType {
+		if oldType == "integer" && newType == "number" {
+			filter.record(intToNumberCategory(typeChangeCategory), msg, diagtree.Warn, "type changed from %q to %q", oldType, newType)
+			return
+		}
 		filter.record(typeChangeCategory, msg, diagtree.Warn, "type changed from %q to %q", oldType, newType)
 	}
 
