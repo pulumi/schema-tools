@@ -135,6 +135,12 @@ Type "docker:index/ServiceTaskSpecResourcesLimitsGenericResources:ServiceTaskSpe
 - `index/getRemoteImage.getRemoteImage`
 ```
 
+To ignore specific categories and get per-category totals:
+
+```shell
+$ schema-tools compare -p snowflake -o v1.0.0 -n v1.1.0 --ignore-categories type-changed-output,optional-to-required-output
+```
+
 ## Squeeze
 
 To show the backwards-incompatible changes between two versioned resources:
