@@ -36,10 +36,8 @@ const (
 	diffTypeChangedOutput            diffCategory = "type-changed-output"
 	diffTypeChangedIntToNumberInput  diffCategory = "type-changed-int-to-number-input"
 	diffTypeChangedIntToNumberOutput diffCategory = "type-changed-int-to-number-output"
-	diffMaxItemsOneChanged           diffCategory = "max-items-one-changed"
-	diffPluralizationRenameInput     diffCategory = "pluralization-rename-input"
-	diffPluralizationRenameOutput    diffCategory = "pluralization-rename-output"
-	diffOptionalToRequiredInput      diffCategory = "optional-to-required-input"
+	diffMaxItemsOneChanged      diffCategory = "max-items-one-changed"
+	diffOptionalToRequiredInput diffCategory = "optional-to-required-input"
 	diffOptionalToRequiredOutput     diffCategory = "optional-to-required-output"
 	diffRequiredToOptionalInput      diffCategory = "required-to-optional-input"
 	diffRequiredToOptionalOutput     diffCategory = "required-to-optional-output"
@@ -59,8 +57,6 @@ var categoryOrder = []diffCategory{
 	diffTypeChangedIntToNumberInput,
 	diffTypeChangedIntToNumberOutput,
 	diffMaxItemsOneChanged,
-	diffPluralizationRenameInput,
-	diffPluralizationRenameOutput,
 	diffOptionalToRequiredInput,
 	diffOptionalToRequiredOutput,
 	diffRequiredToOptionalInput,
@@ -132,20 +128,6 @@ func intToNumberCategory(typeCat diffCategory) diffCategory {
 		return diffTypeChangedIntToNumberInput
 	case diffTypeChangedOutput:
 		return diffTypeChangedIntToNumberOutput
-	default:
-		return typeCat
-	}
-}
-
-// pluralizationRenameCategory maps a type change category to the corresponding
-// pluralization rename category. This is used when a property is renamed via
-// pluralization/singularization without any type change.
-func pluralizationRenameCategory(typeCat diffCategory) diffCategory {
-	switch typeCat {
-	case diffTypeChangedInput:
-		return diffPluralizationRenameInput
-	case diffTypeChangedOutput:
-		return diffPluralizationRenameOutput
 	default:
 		return typeCat
 	}
@@ -241,39 +223,24 @@ func pluralizationCandidates(name string) []string {
 	return candidates
 }
 
-// recordPluralizationRename checks if a missing property was renamed via pluralization/singularization.
-// If a matching candidate is found in newProps, it records the appropriate diagnostic:
-//   - diffMaxItemsOneChanged: if array-ness changed (e.g., single → array or vice versa)
-//   - int-to-number category: if type changed from integer to number
-//   - type change category: if type changed in other ways
-//   - pluralization rename category: if only the name changed (type unchanged)
+// recordMaxItemsOneRename checks if a missing property was renamed via pluralization/singularization
+// AND represents a maxItems=1 change (object ↔ array<object>). This is a common pattern where
+// a single object property becomes a list of objects (or vice versa) with a pluralized name.
 //
-// Returns true if a pluralization rename was detected and recorded, false otherwise.
-func recordPluralizationRename(msg *diagtree.Node, oldName string, oldProp schema.PropertySpec, newProps map[string]schema.PropertySpec, typeCat diffCategory, filter *diffFilter) bool {
+// Returns true if a max-items-one rename was detected and recorded, false otherwise.
+func recordMaxItemsOneRename(msg *diagtree.Node, oldName string, oldProp schema.PropertySpec, newProps map[string]schema.PropertySpec, filter *diffFilter) bool {
 	for _, candidate := range pluralizationCandidates(oldName) {
 		newProp, ok := newProps[candidate]
 		if !ok {
 			continue
 		}
-		oldType := typeIdentifier(&oldProp.TypeSpec)
-		newType := typeIdentifier(&newProp.TypeSpec)
 		if isMaxItemsOneChange(&oldProp.TypeSpec, &newProp.TypeSpec) {
+			oldType := typeIdentifier(&oldProp.TypeSpec)
+			newType := typeIdentifier(&newProp.TypeSpec)
 			filter.record(diffMaxItemsOneChanged, msg, diagtree.Warn,
 				"type changed from %q to %q (renamed to %q)", oldType, newType, candidate)
 			return true
 		}
-		if oldType == "integer" && newType == "number" {
-			filter.record(intToNumberCategory(typeCat), msg, diagtree.Warn,
-				"type changed from %q to %q (renamed to %q)", oldType, newType, candidate)
-			return true
-		}
-		if oldType != newType {
-			filter.record(typeCat, msg, diagtree.Warn,
-				"type changed from %q to %q (renamed to %q)", oldType, newType, candidate)
-			return true
-		}
-		filter.record(pluralizationRenameCategory(typeCat), msg, diagtree.Warn, "renamed to %q", candidate)
-		return true
 	}
 	return false
 }
@@ -489,7 +456,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 			msg := msg.Label("inputs").Value(propName)
 			newProp, ok := newRes.InputProperties[propName]
 			if !ok {
-				if recordPluralizationRename(msg, propName, prop, newRes.InputProperties, diffTypeChangedInput, filter) {
+				if recordMaxItemsOneRename(msg, propName, prop, newRes.InputProperties, filter) {
 					continue
 				}
 				filter.record(diffMissingInput, msg, diagtree.Warn, "missing")
@@ -503,7 +470,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 			msg := msg.Label("properties").Value(propName)
 			newProp, ok := newRes.Properties[propName]
 			if !ok {
-				if recordPluralizationRename(msg, propName, prop, newRes.Properties, diffTypeChangedOutput, filter) {
+				if recordMaxItemsOneRename(msg, propName, prop, newRes.Properties, filter) {
 					continue
 				}
 				filter.record(diffMissingOutput, msg, diagtree.Warn, "missing output %q", propName)
@@ -555,7 +522,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 
 				newProp, ok := newFunc.Inputs.Properties[propName]
 				if !ok {
-					if recordPluralizationRename(msg, propName, prop, newFunc.Inputs.Properties, diffTypeChangedInput, filter) {
+					if recordMaxItemsOneRename(msg, propName, prop, newFunc.Inputs.Properties, filter) {
 						continue
 					}
 					filter.record(diffMissingInput, msg, diagtree.Warn, "missing input %q", propName)
@@ -606,7 +573,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 
 				newProp, ok := newFunc.Outputs.Properties[propName]
 				if !ok {
-					if recordPluralizationRename(msg, propName, prop, newFunc.Outputs.Properties, diffTypeChangedOutput, filter) {
+					if recordMaxItemsOneRename(msg, propName, prop, newFunc.Outputs.Properties, filter) {
 						continue
 					}
 					filter.record(diffMissingOutput, msg, diagtree.Warn, "missing output")
@@ -643,8 +610,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 			msg := msg.Label("properties").Value(propName)
 			newProp, ok := newTyp.Properties[propName]
 			if !ok {
-				usage := typeUsage[typName]
-				if recordPluralizationRename(msg, propName, prop, newTyp.Properties, usage.typeChangeCategory(), filter) {
+				if recordMaxItemsOneRename(msg, propName, prop, newTyp.Properties, filter) {
 					continue
 				}
 				filter.record(diffMissingProperty, msg, diagtree.Warn, "missing")

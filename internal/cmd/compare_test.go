@@ -997,47 +997,7 @@ func TestPluralizationCandidates(t *testing.T) {
 	})
 }
 
-func TestPluralizationRenameCategory(t *testing.T) {
-	t.Run("maps input category", func(t *testing.T) {
-		assert.Equal(t, diffPluralizationRenameInput, pluralizationRenameCategory(diffTypeChangedInput))
-	})
-
-	t.Run("maps output category", func(t *testing.T) {
-		assert.Equal(t, diffPluralizationRenameOutput, pluralizationRenameCategory(diffTypeChangedOutput))
-	})
-
-	t.Run("returns other categories unchanged", func(t *testing.T) {
-		assert.Equal(t, diffMissingResource, pluralizationRenameCategory(diffMissingResource))
-		assert.Equal(t, diffOptionalToRequiredInput, pluralizationRenameCategory(diffOptionalToRequiredInput))
-	})
-}
-
-func TestPluralizationRenameDetection(t *testing.T) {
-	t.Run("detects simple rename from singular to plural", func(t *testing.T) {
-		oldSchema := simpleEmptySchema()
-		oldSchema.Resources = map[string]schema.ResourceSpec{
-			"my-pkg:index:MyResource": {
-				InputProperties: map[string]schema.PropertySpec{
-					"tag": {TypeSpec: schema.TypeSpec{Type: "string"}},
-				},
-			},
-		}
-		newSchema := simpleEmptySchema()
-		newSchema.Resources = map[string]schema.ResourceSpec{
-			"my-pkg:index:MyResource": {
-				InputProperties: map[string]schema.PropertySpec{
-					"tags": {TypeSpec: schema.TypeSpec{Type: "string"}},
-				},
-			},
-		}
-
-		filter := newDiffFilter()
-		breakingChanges(oldSchema, newSchema, filter)
-
-		assert.Equal(t, 1, filter.counts[diffPluralizationRenameInput])
-		assert.Equal(t, 0, filter.counts[diffMissingInput])
-	})
-
+func TestMaxItemsOneRenameDetection(t *testing.T) {
 	t.Run("detects rename with max-items-one change (object to array of objects)", func(t *testing.T) {
 		oldSchema := simpleEmptySchema()
 		oldSchema.Resources = map[string]schema.ResourceSpec{
@@ -1064,10 +1024,35 @@ func TestPluralizationRenameDetection(t *testing.T) {
 
 		assert.Equal(t, 1, filter.counts[diffMaxItemsOneChanged])
 		assert.Equal(t, 0, filter.counts[diffMissingInput])
-		assert.Equal(t, 0, filter.counts[diffPluralizationRenameInput])
 	})
 
-	t.Run("detects rename with primitive array change as type-changed (not max-items-one)", func(t *testing.T) {
+	t.Run("primitive rename falls back to missing-input (not max-items-one)", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"tag": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"tags": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		// Not a max-items-one change, so falls back to missing
+		assert.Equal(t, 0, filter.counts[diffMaxItemsOneChanged])
+		assert.Equal(t, 1, filter.counts[diffMissingInput])
+	})
+
+	t.Run("primitive to array rename falls back to missing-input", func(t *testing.T) {
 		oldSchema := simpleEmptySchema()
 		oldSchema.Resources = map[string]schema.ResourceSpec{
 			"my-pkg:index:MyResource": {
@@ -1091,68 +1076,18 @@ func TestPluralizationRenameDetection(t *testing.T) {
 		filter := newDiffFilter()
 		breakingChanges(oldSchema, newSchema, filter)
 
-		assert.Equal(t, 1, filter.counts[diffTypeChangedInput])
+		// string → array<string> is not a max-items-one change, so falls back to missing
 		assert.Equal(t, 0, filter.counts[diffMaxItemsOneChanged])
-		assert.Equal(t, 0, filter.counts[diffMissingInput])
+		assert.Equal(t, 1, filter.counts[diffMissingInput])
 	})
 
-	t.Run("detects rename with int to number change", func(t *testing.T) {
-		oldSchema := simpleEmptySchema()
-		oldSchema.Resources = map[string]schema.ResourceSpec{
-			"my-pkg:index:MyResource": {
-				InputProperties: map[string]schema.PropertySpec{
-					"count": {TypeSpec: schema.TypeSpec{Type: "integer"}},
-				},
-			},
-		}
-		newSchema := simpleEmptySchema()
-		newSchema.Resources = map[string]schema.ResourceSpec{
-			"my-pkg:index:MyResource": {
-				InputProperties: map[string]schema.PropertySpec{
-					"counts": {TypeSpec: schema.TypeSpec{Type: "number"}},
-				},
-			},
-		}
-
-		filter := newDiffFilter()
-		breakingChanges(oldSchema, newSchema, filter)
-
-		assert.Equal(t, 1, filter.counts[diffTypeChangedIntToNumberInput])
-		assert.Equal(t, 0, filter.counts[diffMissingInput])
-	})
-
-	t.Run("detects rename with other type change", func(t *testing.T) {
-		oldSchema := simpleEmptySchema()
-		oldSchema.Resources = map[string]schema.ResourceSpec{
-			"my-pkg:index:MyResource": {
-				InputProperties: map[string]schema.PropertySpec{
-					"item": {TypeSpec: schema.TypeSpec{Type: "string"}},
-				},
-			},
-		}
-		newSchema := simpleEmptySchema()
-		newSchema.Resources = map[string]schema.ResourceSpec{
-			"my-pkg:index:MyResource": {
-				InputProperties: map[string]schema.PropertySpec{
-					"items": {TypeSpec: schema.TypeSpec{Type: "integer"}},
-				},
-			},
-		}
-
-		filter := newDiffFilter()
-		breakingChanges(oldSchema, newSchema, filter)
-
-		assert.Equal(t, 1, filter.counts[diffTypeChangedInput])
-		assert.Equal(t, 0, filter.counts[diffMissingInput])
-	})
-
-	t.Run("detects output pluralization rename", func(t *testing.T) {
+	t.Run("detects max-items-one rename on output properties", func(t *testing.T) {
 		oldSchema := simpleEmptySchema()
 		oldSchema.Resources = map[string]schema.ResourceSpec{
 			"my-pkg:index:MyResource": {
 				ObjectTypeSpec: schema.ObjectTypeSpec{
 					Properties: map[string]schema.PropertySpec{
-						"result": {TypeSpec: schema.TypeSpec{Type: "string"}},
+						"result": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index:ResultType"}},
 					},
 				},
 			},
@@ -1162,7 +1097,10 @@ func TestPluralizationRenameDetection(t *testing.T) {
 			"my-pkg:index:MyResource": {
 				ObjectTypeSpec: schema.ObjectTypeSpec{
 					Properties: map[string]schema.PropertySpec{
-						"results": {TypeSpec: schema.TypeSpec{Type: "string"}},
+						"results": {TypeSpec: schema.TypeSpec{
+							Type:  "array",
+							Items: &schema.TypeSpec{Ref: "#/types/my-pkg:index:ResultType"},
+						}},
 					},
 				},
 			},
@@ -1171,17 +1109,17 @@ func TestPluralizationRenameDetection(t *testing.T) {
 		filter := newDiffFilter()
 		breakingChanges(oldSchema, newSchema, filter)
 
-		assert.Equal(t, 1, filter.counts[diffPluralizationRenameOutput])
+		assert.Equal(t, 1, filter.counts[diffMaxItemsOneChanged])
 		assert.Equal(t, 0, filter.counts[diffMissingOutput])
 	})
 
-	t.Run("detects function input pluralization rename", func(t *testing.T) {
+	t.Run("detects max-items-one rename on function inputs", func(t *testing.T) {
 		oldSchema := simpleEmptySchema()
 		oldSchema.Functions = map[string]schema.FunctionSpec{
 			"my-pkg:index:myFunc": {
 				Inputs: &schema.ObjectTypeSpec{
 					Properties: map[string]schema.PropertySpec{
-						"filter": {TypeSpec: schema.TypeSpec{Type: "string"}},
+						"filter": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index:FilterType"}},
 					},
 				},
 			},
@@ -1191,7 +1129,10 @@ func TestPluralizationRenameDetection(t *testing.T) {
 			"my-pkg:index:myFunc": {
 				Inputs: &schema.ObjectTypeSpec{
 					Properties: map[string]schema.PropertySpec{
-						"filters": {TypeSpec: schema.TypeSpec{Type: "string"}},
+						"filters": {TypeSpec: schema.TypeSpec{
+							Type:  "array",
+							Items: &schema.TypeSpec{Ref: "#/types/my-pkg:index:FilterType"},
+						}},
 					},
 				},
 			},
@@ -1200,22 +1141,21 @@ func TestPluralizationRenameDetection(t *testing.T) {
 		filter := newDiffFilter()
 		breakingChanges(oldSchema, newSchema, filter)
 
-		assert.Equal(t, 1, filter.counts[diffPluralizationRenameInput])
+		assert.Equal(t, 1, filter.counts[diffMaxItemsOneChanged])
 		assert.Equal(t, 0, filter.counts[diffMissingInput])
 	})
 
-	t.Run("detects type property pluralization rename", func(t *testing.T) {
+	t.Run("detects max-items-one rename on type properties", func(t *testing.T) {
 		oldSchema := simpleEmptySchema()
 		oldSchema.Types = map[string]schema.ComplexTypeSpec{
 			"my-pkg:index:MyType": {
 				ObjectTypeSpec: schema.ObjectTypeSpec{
 					Properties: map[string]schema.PropertySpec{
-						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+						"setting": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index:SettingType"}},
 					},
 				},
 			},
 		}
-		// Mark as input type by using it in a resource input
 		oldSchema.Resources = map[string]schema.ResourceSpec{
 			"my-pkg:index:MyResource": {
 				InputProperties: map[string]schema.PropertySpec{
@@ -1228,7 +1168,10 @@ func TestPluralizationRenameDetection(t *testing.T) {
 			"my-pkg:index:MyType": {
 				ObjectTypeSpec: schema.ObjectTypeSpec{
 					Properties: map[string]schema.PropertySpec{
-						"values": {TypeSpec: schema.TypeSpec{Type: "string"}},
+						"settings": {TypeSpec: schema.TypeSpec{
+							Type:  "array",
+							Items: &schema.TypeSpec{Ref: "#/types/my-pkg:index:SettingType"},
+						}},
 					},
 				},
 			},
@@ -1244,7 +1187,7 @@ func TestPluralizationRenameDetection(t *testing.T) {
 		filter := newDiffFilter()
 		breakingChanges(oldSchema, newSchema, filter)
 
-		assert.Equal(t, 1, filter.counts[diffPluralizationRenameInput])
+		assert.Equal(t, 1, filter.counts[diffMaxItemsOneChanged])
 		assert.Equal(t, 0, filter.counts[diffMissingProperty])
 	})
 
@@ -1253,7 +1196,7 @@ func TestPluralizationRenameDetection(t *testing.T) {
 		oldSchema.Resources = map[string]schema.ResourceSpec{
 			"my-pkg:index:MyResource": {
 				InputProperties: map[string]schema.PropertySpec{
-					"foo": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					"foo": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index:FooType"}},
 				},
 			},
 		}
@@ -1261,7 +1204,10 @@ func TestPluralizationRenameDetection(t *testing.T) {
 		newSchema.Resources = map[string]schema.ResourceSpec{
 			"my-pkg:index:MyResource": {
 				InputProperties: map[string]schema.PropertySpec{
-					"bar": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					"bar": {TypeSpec: schema.TypeSpec{
+						Type:  "array",
+						Items: &schema.TypeSpec{Ref: "#/types/my-pkg:index:FooType"},
+					}},
 				},
 			},
 		}
@@ -1269,8 +1215,9 @@ func TestPluralizationRenameDetection(t *testing.T) {
 		filter := newDiffFilter()
 		breakingChanges(oldSchema, newSchema, filter)
 
+		// "foo" → "bar" is not a pluralization, so it's just missing
+		assert.Equal(t, 0, filter.counts[diffMaxItemsOneChanged])
 		assert.Equal(t, 1, filter.counts[diffMissingInput])
-		assert.Equal(t, 0, filter.counts[diffPluralizationRenameInput])
 	})
 }
 
