@@ -37,6 +37,8 @@ const (
 	diffTypeChangedIntToNumberInput  diffCategory = "type-changed-int-to-number-input"
 	diffTypeChangedIntToNumberOutput diffCategory = "type-changed-int-to-number-output"
 	diffMaxItemsOneChanged           diffCategory = "max-items-one-changed"
+	diffPluralizationRenameInput     diffCategory = "pluralization-rename-input"
+	diffPluralizationRenameOutput    diffCategory = "pluralization-rename-output"
 	diffOptionalToRequiredInput      diffCategory = "optional-to-required-input"
 	diffOptionalToRequiredOutput     diffCategory = "optional-to-required-output"
 	diffRequiredToOptionalInput      diffCategory = "required-to-optional-input"
@@ -57,6 +59,8 @@ var categoryOrder = []diffCategory{
 	diffTypeChangedIntToNumberInput,
 	diffTypeChangedIntToNumberOutput,
 	diffMaxItemsOneChanged,
+	diffPluralizationRenameInput,
+	diffPluralizationRenameOutput,
 	diffOptionalToRequiredInput,
 	diffOptionalToRequiredOutput,
 	diffRequiredToOptionalInput,
@@ -133,6 +137,20 @@ func intToNumberCategory(typeCat diffCategory) diffCategory {
 	}
 }
 
+// pluralizationRenameCategory maps a type change category to the corresponding
+// pluralization rename category. This is used when a property is renamed via
+// pluralization/singularization without any type change.
+func pluralizationRenameCategory(typeCat diffCategory) diffCategory {
+	switch typeCat {
+	case diffTypeChangedInput:
+		return diffPluralizationRenameInput
+	case diffTypeChangedOutput:
+		return diffPluralizationRenameOutput
+	default:
+		return typeCat
+	}
+}
+
 func (u typeUsage) optionalToRequiredCategory() diffCategory {
 	if u.input {
 		return diffOptionalToRequiredInput
@@ -159,7 +177,10 @@ func localTypeName(ref string) string {
 	return ref[idx+len(marker):]
 }
 
-func baseTypeName(ts *schema.TypeSpec) string {
+// typeIdentifier returns a string that identifies the type for comparison purposes.
+// For reference types, it returns the Ref; otherwise, it returns the primitive Type.
+// Returns empty string for nil TypeSpec.
+func typeIdentifier(ts *schema.TypeSpec) string {
 	if ts == nil {
 		return ""
 	}
@@ -169,10 +190,14 @@ func baseTypeName(ts *schema.TypeSpec) string {
 	return ts.Type
 }
 
+// isArrayType returns true if the TypeSpec represents an array type.
 func isArrayType(ts *schema.TypeSpec) bool {
 	return ts != nil && ts.Type == "array"
 }
 
+// pluralizationCandidates returns potential pluralized/singularized variants of a property name.
+// For example, "tag" returns ["tags"] and "tags" returns ["tag"].
+// Returns nil for empty input. Excludes the original name and duplicates.
 func pluralizationCandidates(name string) []string {
 	if name == "" {
 		return nil
@@ -193,14 +218,22 @@ func pluralizationCandidates(name string) []string {
 	return candidates
 }
 
+// recordPluralizationRename checks if a missing property was renamed via pluralization/singularization.
+// If a matching candidate is found in newProps, it records the appropriate diagnostic:
+//   - diffMaxItemsOneChanged: if array-ness changed (e.g., single → array or vice versa)
+//   - int-to-number category: if type changed from integer to number
+//   - type change category: if type changed in other ways
+//   - pluralization rename category: if only the name changed (type unchanged)
+//
+// Returns true if a pluralization rename was detected and recorded, false otherwise.
 func recordPluralizationRename(msg *diagtree.Node, oldName string, oldProp schema.PropertySpec, newProps map[string]schema.PropertySpec, typeCat diffCategory, filter *diffFilter) bool {
 	for _, candidate := range pluralizationCandidates(oldName) {
 		newProp, ok := newProps[candidate]
 		if !ok {
 			continue
 		}
-		oldType := baseTypeName(&oldProp.TypeSpec)
-		newType := baseTypeName(&newProp.TypeSpec)
+		oldType := typeIdentifier(&oldProp.TypeSpec)
+		newType := typeIdentifier(&newProp.TypeSpec)
 		if isArrayType(&oldProp.TypeSpec) != isArrayType(&newProp.TypeSpec) {
 			filter.record(diffMaxItemsOneChanged, msg, diagtree.Warn,
 				"type changed from %q to %q (renamed to %q)", oldType, newType, candidate)
@@ -216,7 +249,7 @@ func recordPluralizationRename(msg *diagtree.Node, oldName string, oldProp schem
 				"type changed from %q to %q (renamed to %q)", oldType, newType, candidate)
 			return true
 		}
-		filter.record(typeCat, msg, diagtree.Warn, "renamed to %q", candidate)
+		filter.record(pluralizationRenameCategory(typeCat), msg, diagtree.Warn, "renamed to %q", candidate)
 		return true
 	}
 	return false

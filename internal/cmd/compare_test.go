@@ -840,3 +840,382 @@ func TestCategoryCounting(t *testing.T) {
 		assert.Equal(t, 0, filter.counts[diffTypeChangedIntToNumberInput])
 	})
 }
+
+func TestTypeIdentifier(t *testing.T) {
+	t.Run("nil TypeSpec returns empty string", func(t *testing.T) {
+		assert.Equal(t, "", typeIdentifier(nil))
+	})
+
+	t.Run("returns Ref when present", func(t *testing.T) {
+		ts := &schema.TypeSpec{Ref: "#/types/my-pkg:index:MyType", Type: "object"}
+		assert.Equal(t, "#/types/my-pkg:index:MyType", typeIdentifier(ts))
+	})
+
+	t.Run("returns Type when Ref is empty", func(t *testing.T) {
+		ts := &schema.TypeSpec{Type: "string"}
+		assert.Equal(t, "string", typeIdentifier(ts))
+	})
+
+	t.Run("returns Type for primitive types", func(t *testing.T) {
+		for _, typ := range []string{"string", "integer", "number", "boolean", "array", "object"} {
+			ts := &schema.TypeSpec{Type: typ}
+			assert.Equal(t, typ, typeIdentifier(ts))
+		}
+	})
+}
+
+func TestIsArrayType(t *testing.T) {
+	t.Run("nil TypeSpec returns false", func(t *testing.T) {
+		assert.False(t, isArrayType(nil))
+	})
+
+	t.Run("array type returns true", func(t *testing.T) {
+		ts := &schema.TypeSpec{Type: "array", Items: &schema.TypeSpec{Type: "string"}}
+		assert.True(t, isArrayType(ts))
+	})
+
+	t.Run("non-array types return false", func(t *testing.T) {
+		for _, typ := range []string{"string", "integer", "number", "boolean", "object"} {
+			ts := &schema.TypeSpec{Type: typ}
+			assert.False(t, isArrayType(ts))
+		}
+	})
+}
+
+func TestPluralizationCandidates(t *testing.T) {
+	t.Run("empty string returns nil", func(t *testing.T) {
+		assert.Nil(t, pluralizationCandidates(""))
+	})
+
+	t.Run("singular returns plural", func(t *testing.T) {
+		candidates := pluralizationCandidates("tag")
+		assert.Contains(t, candidates, "tags")
+	})
+
+	t.Run("plural returns singular", func(t *testing.T) {
+		candidates := pluralizationCandidates("tags")
+		assert.Contains(t, candidates, "tag")
+	})
+
+	t.Run("excludes original name", func(t *testing.T) {
+		candidates := pluralizationCandidates("tag")
+		assert.NotContains(t, candidates, "tag")
+	})
+
+	t.Run("handles irregular plurals", func(t *testing.T) {
+		candidates := pluralizationCandidates("person")
+		assert.Contains(t, candidates, "people")
+	})
+
+	t.Run("handles words that are same singular and plural", func(t *testing.T) {
+		// "sheep" pluralizes to "sheep", so candidates should be empty
+		candidates := pluralizationCandidates("sheep")
+		assert.NotContains(t, candidates, "sheep")
+	})
+}
+
+func TestPluralizationRenameCategory(t *testing.T) {
+	t.Run("maps input category", func(t *testing.T) {
+		assert.Equal(t, diffPluralizationRenameInput, pluralizationRenameCategory(diffTypeChangedInput))
+	})
+
+	t.Run("maps output category", func(t *testing.T) {
+		assert.Equal(t, diffPluralizationRenameOutput, pluralizationRenameCategory(diffTypeChangedOutput))
+	})
+
+	t.Run("returns other categories unchanged", func(t *testing.T) {
+		assert.Equal(t, diffMissingResource, pluralizationRenameCategory(diffMissingResource))
+		assert.Equal(t, diffOptionalToRequiredInput, pluralizationRenameCategory(diffOptionalToRequiredInput))
+	})
+}
+
+func TestPluralizationRenameDetection(t *testing.T) {
+	t.Run("detects simple rename from singular to plural", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"tag": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"tags": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffPluralizationRenameInput])
+		assert.Equal(t, 0, filter.counts[diffMissingInput])
+	})
+
+	t.Run("detects rename with array type change as max-items-one-changed", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"tag": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"tags": {TypeSpec: schema.TypeSpec{
+						Type:  "array",
+						Items: &schema.TypeSpec{Type: "string"},
+					}},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffMaxItemsOneChanged])
+		assert.Equal(t, 0, filter.counts[diffMissingInput])
+		assert.Equal(t, 0, filter.counts[diffPluralizationRenameInput])
+	})
+
+	t.Run("detects rename with int to number change", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"count": {TypeSpec: schema.TypeSpec{Type: "integer"}},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"counts": {TypeSpec: schema.TypeSpec{Type: "number"}},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffTypeChangedIntToNumberInput])
+		assert.Equal(t, 0, filter.counts[diffMissingInput])
+	})
+
+	t.Run("detects rename with other type change", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"item": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"items": {TypeSpec: schema.TypeSpec{Type: "integer"}},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffTypeChangedInput])
+		assert.Equal(t, 0, filter.counts[diffMissingInput])
+	})
+
+	t.Run("detects output pluralization rename", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"result": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"results": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffPluralizationRenameOutput])
+		assert.Equal(t, 0, filter.counts[diffMissingOutput])
+	})
+
+	t.Run("detects function input pluralization rename", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Functions = map[string]schema.FunctionSpec{
+			"my-pkg:index:myFunc": {
+				Inputs: &schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"filter": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Functions = map[string]schema.FunctionSpec{
+			"my-pkg:index:myFunc": {
+				Inputs: &schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"filters": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffPluralizationRenameInput])
+		assert.Equal(t, 0, filter.counts[diffMissingInput])
+	})
+
+	t.Run("detects type property pluralization rename", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Types = map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:MyType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		}
+		// Mark as input type by using it in a resource input
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"config": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index:MyType"}},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Types = map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:MyType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"values": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		}
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"config": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index:MyType"}},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffPluralizationRenameInput])
+		assert.Equal(t, 0, filter.counts[diffMissingProperty])
+	})
+
+	t.Run("falls back to missing-input when no pluralization match", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"foo": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"bar": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffMissingInput])
+		assert.Equal(t, 0, filter.counts[diffPluralizationRenameInput])
+	})
+}
+
+func TestMaxItemsOneChanged(t *testing.T) {
+	t.Run("detects array to non-array type change", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"items": {TypeSpec: schema.TypeSpec{
+						Type:  "array",
+						Items: &schema.TypeSpec{Type: "string"},
+					}},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"items": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffMaxItemsOneChanged])
+		assert.Equal(t, 0, filter.counts[diffTypeChangedInput])
+	})
+
+	t.Run("detects non-array to array type change", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"item": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"item": {TypeSpec: schema.TypeSpec{
+						Type:  "array",
+						Items: &schema.TypeSpec{Type: "string"},
+					}},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffMaxItemsOneChanged])
+		assert.Equal(t, 0, filter.counts[diffTypeChangedInput])
+	})
+}
