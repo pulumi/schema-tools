@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pulumi/inflector"
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/spf13/cobra"
@@ -186,17 +187,8 @@ func pluralizationCandidates(name string) []string {
 		candidates = append(candidates, candidate)
 	}
 
-	if strings.HasSuffix(name, "ies") && len(name) > 3 {
-		add(name[:len(name)-3] + "y")
-	}
-	if strings.HasSuffix(name, "y") && len(name) > 1 {
-		add(name[:len(name)-1] + "ies")
-	}
-	if strings.HasSuffix(name, "s") && len(name) > 1 {
-		add(name[:len(name)-1])
-	} else {
-		add(name + "s")
-	}
+	add(inflector.Pluralize(name))
+	add(inflector.Singularize(name))
 
 	return candidates
 }

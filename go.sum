@@ -164,6 +164,8 @@ github.com/pulumi/appdash v0.0.0-20231130102222-75f619a67231 h1:vkHw5I/plNdTr435
 github.com/pulumi/appdash v0.0.0-20231130102222-75f619a67231/go.mod h1:murToZ2N9hNJzewjHBgfFdXhZKjY3z5cYC1VXk+lbFE=
 github.com/pulumi/esc v0.6.2 h1:+z+l8cuwIauLSwXQS0uoI3rqB+YG4SzsZYtHfNoXBvw=
 github.com/pulumi/esc v0.6.2/go.mod h1:jNnYNjzsOgVTjCp0LL24NsCk8ZJxq4IoLQdCT0X7l8k=
+github.com/pulumi/inflector v0.2.1 h1:bqyiish3tq//vLeLiEstSFE5K7RNjy/ce47ed4QATu8=
+github.com/pulumi/inflector v0.2.1/go.mod h1:HUFCjcPTz96YtTuUlwG3i3EZG4WlniBvR9bd+iJxCUY=
 github.com/pulumi/pulumi/pkg/v3 v3.115.2 h1:lMpGc/pSAsSz4ZE4IRi1/XYWzyZQpjy0OJ4TNcMIr+k=
 github.com/pulumi/pulumi/pkg/v3 v3.115.2/go.mod h1:Sbl1hEyTXpc1Yu2GbKU6h3rWyuUkrTAzTZ+MioYOZl8=
 github.com/pulumi/pulumi/sdk/v3 v3.115.2 h1:CFx/KfS3fsp2EiXnX70JNUBvHADNqiQ617AVslu5I6E=
