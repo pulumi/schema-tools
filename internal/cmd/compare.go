@@ -195,6 +195,29 @@ func isArrayType(ts *schema.TypeSpec) bool {
 	return ts != nil && ts.Type == "array"
 }
 
+// isObjectOrRef returns true if the TypeSpec represents an object type or a reference to a complex type.
+func isObjectOrRef(ts *schema.TypeSpec) bool {
+	return ts != nil && (ts.Type == "object" || ts.Ref != "")
+}
+
+// isMaxItemsOneChange returns true if the type change represents a maxItems=1 transition,
+// i.e., changing between a single object and an array of objects. This only applies to
+// object/reference types, not primitives like string or integer.
+func isMaxItemsOneChange(old, new *schema.TypeSpec) bool {
+	if old == nil || new == nil {
+		return false
+	}
+	// object/ref → array<object/ref>
+	if isObjectOrRef(old) && isArrayType(new) && isObjectOrRef(new.Items) {
+		return true
+	}
+	// array<object/ref> → object/ref
+	if isArrayType(old) && isObjectOrRef(old.Items) && isObjectOrRef(new) {
+		return true
+	}
+	return false
+}
+
 // pluralizationCandidates returns potential pluralized/singularized variants of a property name.
 // For example, "tag" returns ["tags"] and "tags" returns ["tag"].
 // Returns nil for empty input. Excludes the original name and duplicates.
@@ -234,7 +257,7 @@ func recordPluralizationRename(msg *diagtree.Node, oldName string, oldProp schem
 		}
 		oldType := typeIdentifier(&oldProp.TypeSpec)
 		newType := typeIdentifier(&newProp.TypeSpec)
-		if isArrayType(&oldProp.TypeSpec) != isArrayType(&newProp.TypeSpec) {
+		if isMaxItemsOneChange(&oldProp.TypeSpec, &newProp.TypeSpec) {
 			filter.record(diffMaxItemsOneChanged, msg, diagtree.Warn,
 				"type changed from %q to %q (renamed to %q)", oldType, newType, candidate)
 			return true
@@ -743,7 +766,7 @@ func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, msg *diagtree.Nod
 			filter.record(intToNumberCategory(typeChangeCategory), msg, diagtree.Warn, "type changed from %q to %q", oldType, newType)
 			return
 		}
-		if isArrayType(old) != isArrayType(new) {
+		if isMaxItemsOneChange(old, new) {
 			filter.record(diffMaxItemsOneChanged, msg, diagtree.Warn, "type changed from %q to %q", oldType, newType)
 			return
 		}
