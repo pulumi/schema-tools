@@ -102,6 +102,7 @@ func compare(provider string, repository string, oldCommit string, newCommit str
 			return err
 		}
 	} else if strings.HasPrefix(newCommit, "--local-path=") {
+		fmt.Fprintln(os.Stderr, "Warning: --local-path= in --new-commit is deprecated, use --new-path instead")
 		parts := strings.Split(newCommit, "=")
 		if len(parts) < 2 || parts[1] == "" {
 			return fmt.Errorf("invalid --local-path value: %q", newCommit)
@@ -112,6 +113,7 @@ func compare(provider string, repository string, oldCommit string, newCommit str
 			return err
 		}
 	} else if newCommit == "--local" {
+		fmt.Fprintln(os.Stderr, "Warning: --local in --new-commit is deprecated, use --new-path instead")
 		usr, _ := user.Current()
 		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi/%s", usr.HomeDir, provider)
 		schemaFile := pkg.StandardSchemaPath(provider)
