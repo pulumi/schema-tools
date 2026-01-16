@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pulumi/inflector"
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/spf13/cobra"
@@ -35,7 +36,8 @@ const (
 	diffTypeChangedOutput            diffCategory = "type-changed-output"
 	diffTypeChangedIntToNumberInput  diffCategory = "type-changed-int-to-number-input"
 	diffTypeChangedIntToNumberOutput diffCategory = "type-changed-int-to-number-output"
-	diffOptionalToRequiredInput      diffCategory = "optional-to-required-input"
+	diffMaxItemsOneChanged      diffCategory = "max-items-one-changed"
+	diffOptionalToRequiredInput diffCategory = "optional-to-required-input"
 	diffOptionalToRequiredOutput     diffCategory = "optional-to-required-output"
 	diffRequiredToOptionalInput      diffCategory = "required-to-optional-input"
 	diffRequiredToOptionalOutput     diffCategory = "required-to-optional-output"
@@ -54,6 +56,7 @@ var categoryOrder = []diffCategory{
 	diffTypeChangedOutput,
 	diffTypeChangedIntToNumberInput,
 	diffTypeChangedIntToNumberOutput,
+	diffMaxItemsOneChanged,
 	diffOptionalToRequiredInput,
 	diffOptionalToRequiredOutput,
 	diffRequiredToOptionalInput,
@@ -154,6 +157,92 @@ func localTypeName(ref string) string {
 		return ""
 	}
 	return ref[idx+len(marker):]
+}
+
+// typeIdentifier returns a string that identifies the type for comparison purposes.
+// For reference types, it returns the Ref; otherwise, it returns the primitive Type.
+// Returns empty string for nil TypeSpec.
+func typeIdentifier(ts *schema.TypeSpec) string {
+	if ts == nil {
+		return ""
+	}
+	if ts.Ref != "" {
+		return ts.Ref
+	}
+	return ts.Type
+}
+
+// isArrayType returns true if the TypeSpec represents an array type.
+func isArrayType(ts *schema.TypeSpec) bool {
+	return ts != nil && ts.Type == "array"
+}
+
+// isObjectOrRef returns true if the TypeSpec represents an object type or a reference to a complex type.
+func isObjectOrRef(ts *schema.TypeSpec) bool {
+	return ts != nil && (ts.Type == "object" || ts.Ref != "")
+}
+
+// isMaxItemsOneChange returns true if the type change represents a maxItems=1 transition,
+// i.e., changing between a single object and an array of objects. This only applies to
+// object/reference types, not primitives like string or integer.
+func isMaxItemsOneChange(old, new *schema.TypeSpec) bool {
+	if old == nil || new == nil {
+		return false
+	}
+	// object/ref → array<object/ref>
+	if isObjectOrRef(old) && isArrayType(new) && isObjectOrRef(new.Items) {
+		return true
+	}
+	// array<object/ref> → object/ref
+	if isArrayType(old) && isObjectOrRef(old.Items) && isObjectOrRef(new) {
+		return true
+	}
+	return false
+}
+
+// pluralizationCandidates returns potential pluralized/singularized variants of a property name.
+// For example, "tag" returns ["tags"] and "tags" returns ["tag"].
+// Returns nil for empty input. Excludes the original name and duplicates.
+func pluralizationCandidates(name string) []string {
+	if name == "" {
+		return nil
+	}
+	candidates := []string{}
+	seen := map[string]bool{}
+	add := func(candidate string) {
+		if candidate == "" || candidate == name || seen[candidate] {
+			return
+		}
+		seen[candidate] = true
+		candidates = append(candidates, candidate)
+	}
+
+	add(inflector.Pluralize(name))
+	add(inflector.Singularize(name))
+
+	return candidates
+}
+
+// recordMaxItemsOneRename checks if a missing property was renamed via pluralization/singularization
+// AND represents a maxItems=1 change (object ↔ array<object>). This is a common pattern where
+// a single object property becomes a list of objects (or vice versa) with a pluralized name.
+//
+// Returns true if a max-items-one rename was detected and recorded, false otherwise.
+func recordMaxItemsOneRename(msg *diagtree.Node, oldName string, oldProp schema.PropertySpec, newProps map[string]schema.PropertySpec, filter *diffFilter) bool {
+	for _, candidate := range pluralizationCandidates(oldName) {
+		newProp, ok := newProps[candidate]
+		if !ok {
+			continue
+		}
+		if isMaxItemsOneChange(&oldProp.TypeSpec, &newProp.TypeSpec) {
+			oldType := typeIdentifier(&oldProp.TypeSpec)
+			newType := typeIdentifier(&newProp.TypeSpec)
+			filter.record(diffMaxItemsOneChanged, msg, diagtree.Warn,
+				"type changed from %q to %q (renamed to %q)", oldType, newType, candidate)
+			return true
+		}
+	}
+	return false
 }
 
 // buildTypeUsage analyzes a schema to determine how each type is used.
@@ -367,6 +456,9 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 			msg := msg.Label("inputs").Value(propName)
 			newProp, ok := newRes.InputProperties[propName]
 			if !ok {
+				if recordMaxItemsOneRename(msg, propName, prop, newRes.InputProperties, filter) {
+					continue
+				}
 				filter.record(diffMissingInput, msg, diagtree.Warn, "missing")
 				continue
 			}
@@ -378,6 +470,9 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 			msg := msg.Label("properties").Value(propName)
 			newProp, ok := newRes.Properties[propName]
 			if !ok {
+				if recordMaxItemsOneRename(msg, propName, prop, newRes.Properties, filter) {
+					continue
+				}
 				filter.record(diffMissingOutput, msg, diagtree.Warn, "missing output %q", propName)
 				continue
 			}
@@ -427,6 +522,9 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 
 				newProp, ok := newFunc.Inputs.Properties[propName]
 				if !ok {
+					if recordMaxItemsOneRename(msg, propName, prop, newFunc.Inputs.Properties, filter) {
+						continue
+					}
 					filter.record(diffMissingInput, msg, diagtree.Warn, "missing input %q", propName)
 					continue
 				}
@@ -475,6 +573,9 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 
 				newProp, ok := newFunc.Outputs.Properties[propName]
 				if !ok {
+					if recordMaxItemsOneRename(msg, propName, prop, newFunc.Outputs.Properties, filter) {
+						continue
+					}
 					filter.record(diffMissingOutput, msg, diagtree.Warn, "missing output")
 					continue
 				}
@@ -509,6 +610,9 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter
 			msg := msg.Label("properties").Value(propName)
 			newProp, ok := newTyp.Properties[propName]
 			if !ok {
+				if recordMaxItemsOneRename(msg, propName, prop, newTyp.Properties, filter) {
+					continue
+				}
 				filter.record(diffMissingProperty, msg, diagtree.Warn, "missing")
 				continue
 			}
@@ -626,6 +730,10 @@ func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, msg *diagtree.Nod
 	if oldType != newType {
 		if oldType == "integer" && newType == "number" {
 			filter.record(intToNumberCategory(typeChangeCategory), msg, diagtree.Warn, "type changed from %q to %q", oldType, newType)
+			return
+		}
+		if isMaxItemsOneChange(old, new) {
+			filter.record(diffMaxItemsOneChanged, msg, diagtree.Warn, "type changed from %q to %q", oldType, newType)
 			return
 		}
 		filter.record(typeChangeCategory, msg, diagtree.Warn, "type changed from %q to %q", oldType, newType)
