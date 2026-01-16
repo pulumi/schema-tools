@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pulumi/inflector"
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/spf13/cobra"
@@ -19,6 +20,335 @@ import (
 	"github.com/pulumi/schema-tools/internal/util/diagtree"
 	"github.com/pulumi/schema-tools/internal/util/set"
 )
+
+// diffCategory represents a category of schema breaking change.
+// Categories are used to group and count changes for summary reporting.
+type diffCategory string
+
+const (
+	diffMissingResource              diffCategory = "missing-resource"
+	diffMissingFunction              diffCategory = "missing-function"
+	diffMissingType                  diffCategory = "missing-type"
+	diffMissingInput                 diffCategory = "missing-input"
+	diffMissingOutput                diffCategory = "missing-output"
+	diffMissingProperty              diffCategory = "missing-property"
+	diffTypeChangedInput             diffCategory = "type-changed-input"
+	diffTypeChangedOutput            diffCategory = "type-changed-output"
+	diffTypeChangedIntToNumberInput  diffCategory = "type-changed-int-to-number-input"
+	diffTypeChangedIntToNumberOutput diffCategory = "type-changed-int-to-number-output"
+	diffMaxItemsOneChanged      diffCategory = "max-items-one-changed"
+	diffOptionalToRequiredInput diffCategory = "optional-to-required-input"
+	diffOptionalToRequiredOutput     diffCategory = "optional-to-required-output"
+	diffRequiredToOptionalInput      diffCategory = "required-to-optional-input"
+	diffRequiredToOptionalOutput     diffCategory = "required-to-optional-output"
+	diffSignatureChanged             diffCategory = "signature-changed"
+)
+
+// categoryOrder defines the display order for category summaries.
+var categoryOrder = []diffCategory{
+	diffMissingResource,
+	diffMissingFunction,
+	diffMissingType,
+	diffMissingInput,
+	diffMissingOutput,
+	diffMissingProperty,
+	diffTypeChangedInput,
+	diffTypeChangedOutput,
+	diffTypeChangedIntToNumberInput,
+	diffTypeChangedIntToNumberOutput,
+	diffMaxItemsOneChanged,
+	diffOptionalToRequiredInput,
+	diffOptionalToRequiredOutput,
+	diffRequiredToOptionalInput,
+	diffRequiredToOptionalOutput,
+	diffSignatureChanged,
+}
+
+// diffFilter tracks breaking change counts by category and records
+// diagnostic messages to the tree. It enables summary reporting.
+type diffFilter struct {
+	counts map[diffCategory]int
+}
+
+func newDiffFilter() *diffFilter {
+	return &diffFilter{
+		counts: map[diffCategory]int{},
+	}
+}
+
+func (f *diffFilter) record(cat diffCategory, node *diagtree.Node, level diagtree.Severity, msg string, a ...any) {
+	f.counts[cat]++
+	node.SetDescription(level, msg, a...)
+}
+
+func (f *diffFilter) hasCounts() bool {
+	return len(f.counts) > 0
+}
+
+func (f *diffFilter) summaryLines() []string {
+	lines := []string{}
+	for _, cat := range categoryOrder {
+		count := f.counts[cat]
+		if count == 0 {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s: %d", cat, count))
+	}
+	return lines
+}
+
+// usageKind indicates whether a type is used in input or output position.
+type usageKind int
+
+const (
+	usageInput usageKind = iota
+	usageOutput
+)
+
+// typeUsage tracks whether a type is used as an input, output, or both.
+// This allows breaking changes to be categorized correctly based on how
+// the type is actually used in the schema. When a type is used as both
+// input and output, input categorization takes precedence since input
+// breaking changes are typically more severe.
+type typeUsage struct {
+	input  bool
+	output bool
+}
+
+func (u typeUsage) typeChangeCategory() diffCategory {
+	if u.input {
+		return diffTypeChangedInput
+	}
+	return diffTypeChangedOutput
+}
+
+func intToNumberCategory(typeCat diffCategory) diffCategory {
+	switch typeCat {
+	case diffTypeChangedInput:
+		return diffTypeChangedIntToNumberInput
+	case diffTypeChangedOutput:
+		return diffTypeChangedIntToNumberOutput
+	default:
+		return typeCat
+	}
+}
+
+func (u typeUsage) optionalToRequiredCategory() diffCategory {
+	if u.input {
+		return diffOptionalToRequiredInput
+	}
+	return diffOptionalToRequiredOutput
+}
+
+func (u typeUsage) requiredToOptionalCategory() diffCategory {
+	if u.input {
+		return diffRequiredToOptionalInput
+	}
+	return diffRequiredToOptionalOutput
+}
+
+// localTypeName extracts the type name from a local schema reference.
+// For example, "#/types/pkg:module:TypeName" returns "pkg:module:TypeName".
+// Returns empty string for external refs or non-type refs.
+func localTypeName(ref string) string {
+	const marker = "#/types/"
+	idx := strings.Index(ref, marker)
+	if idx == -1 {
+		return ""
+	}
+	return ref[idx+len(marker):]
+}
+
+// typeIdentifier returns a string that identifies the type for comparison purposes.
+// For reference types, it returns the Ref; otherwise, it returns the primitive Type.
+// Returns empty string for nil TypeSpec.
+func typeIdentifier(ts *schema.TypeSpec) string {
+	if ts == nil {
+		return ""
+	}
+	if ts.Ref != "" {
+		return ts.Ref
+	}
+	return ts.Type
+}
+
+// isArrayType returns true if the TypeSpec represents an array type.
+func isArrayType(ts *schema.TypeSpec) bool {
+	return ts != nil && ts.Type == "array"
+}
+
+// isObjectOrRef returns true if the TypeSpec represents an object type or a reference to a complex type.
+func isObjectOrRef(ts *schema.TypeSpec) bool {
+	return ts != nil && (ts.Type == "object" || ts.Ref != "")
+}
+
+// isMaxItemsOneChange returns true if the type change represents a maxItems=1 transition,
+// i.e., changing between a single object and an array of objects. This only applies to
+// object/reference types, not primitives like string or integer.
+func isMaxItemsOneChange(old, new *schema.TypeSpec) bool {
+	if old == nil || new == nil {
+		return false
+	}
+	// object/ref → array<object/ref>
+	if isObjectOrRef(old) && isArrayType(new) && isObjectOrRef(new.Items) {
+		return true
+	}
+	// array<object/ref> → object/ref
+	if isArrayType(old) && isObjectOrRef(old.Items) && isObjectOrRef(new) {
+		return true
+	}
+	return false
+}
+
+// pluralizationCandidates returns potential pluralized/singularized variants of a property name.
+// For example, "tag" returns ["tags"] and "tags" returns ["tag"].
+// Returns nil for empty input. Excludes the original name and duplicates.
+func pluralizationCandidates(name string) []string {
+	if name == "" {
+		return nil
+	}
+	candidates := []string{}
+	seen := map[string]bool{}
+	add := func(candidate string) {
+		if candidate == "" || candidate == name || seen[candidate] {
+			return
+		}
+		seen[candidate] = true
+		candidates = append(candidates, candidate)
+	}
+
+	add(inflector.Pluralize(name))
+	add(inflector.Singularize(name))
+
+	return candidates
+}
+
+// recordMaxItemsOneRename checks if a missing property was renamed via pluralization/singularization
+// AND represents a maxItems=1 change (object ↔ array<object>). This is a common pattern where
+// a single object property becomes a list of objects (or vice versa) with a pluralized name.
+//
+// Returns true if a max-items-one rename was detected and recorded, false otherwise.
+func recordMaxItemsOneRename(msg *diagtree.Node, oldName string, oldProp schema.PropertySpec, newProps map[string]schema.PropertySpec, filter *diffFilter) bool {
+	for _, candidate := range pluralizationCandidates(oldName) {
+		newProp, ok := newProps[candidate]
+		if !ok {
+			continue
+		}
+		if isMaxItemsOneChange(&oldProp.TypeSpec, &newProp.TypeSpec) {
+			oldType := typeIdentifier(&oldProp.TypeSpec)
+			newType := typeIdentifier(&newProp.TypeSpec)
+			filter.record(diffMaxItemsOneChanged, msg, diagtree.Warn,
+				"type changed from %q to %q (renamed to %q)", oldType, newType, candidate)
+			return true
+		}
+	}
+	return false
+}
+
+// buildTypeUsage analyzes a schema to determine how each type is used.
+// It traverses resource inputs/outputs and function inputs/outputs,
+// following type references recursively to build a complete usage map.
+// Cycle detection prevents infinite loops on recursive types.
+func buildTypeUsage(spec schema.PackageSpec) map[string]typeUsage {
+	usage := map[string]typeUsage{}
+	visitedInput := map[string]bool{}
+	visitedOutput := map[string]bool{}
+
+	var visitTypeRef func(name string, ctx usageKind)
+	var collectRefs func(ts *schema.TypeSpec, ctx usageKind)
+
+	visitTypeRef = func(name string, ctx usageKind) {
+		if name == "" {
+			return
+		}
+		switch ctx {
+		case usageInput:
+			if visitedInput[name] {
+				return
+			}
+			visitedInput[name] = true
+		case usageOutput:
+			if visitedOutput[name] {
+				return
+			}
+			visitedOutput[name] = true
+		}
+
+		current := usage[name]
+		if ctx == usageInput {
+			current.input = true
+		} else {
+			current.output = true
+		}
+		usage[name] = current
+
+		typ, ok := spec.Types[name]
+		if !ok {
+			return
+		}
+		for _, prop := range typ.Properties {
+			collectRefs(&prop.TypeSpec, ctx)
+		}
+	}
+
+	collectRefs = func(ts *schema.TypeSpec, ctx usageKind) {
+		if ts == nil {
+			return
+		}
+		if name := localTypeName(ts.Ref); name != "" {
+			visitTypeRef(name, ctx)
+		}
+		if ts.Items != nil {
+			collectRefs(ts.Items, ctx)
+		}
+		if ts.AdditionalProperties != nil {
+			collectRefs(ts.AdditionalProperties, ctx)
+		}
+		for i := range ts.OneOf {
+			collectRefs(&ts.OneOf[i], ctx)
+		}
+	}
+
+	for _, res := range spec.Resources {
+		for _, prop := range res.InputProperties {
+			collectRefs(&prop.TypeSpec, usageInput)
+		}
+		for _, prop := range res.Properties {
+			collectRefs(&prop.TypeSpec, usageOutput)
+		}
+	}
+
+	for _, fn := range spec.Functions {
+		if fn.Inputs != nil {
+			for _, prop := range fn.Inputs.Properties {
+				collectRefs(&prop.TypeSpec, usageInput)
+			}
+		}
+		if fn.Outputs != nil {
+			for _, prop := range fn.Outputs.Properties {
+				collectRefs(&prop.TypeSpec, usageOutput)
+			}
+		}
+	}
+
+	return usage
+}
+
+// mergeTypeUsage combines two type usage maps. This is used to merge
+// usage information from both old and new schemas, ensuring types that
+// exist in either schema are properly categorized.
+func mergeTypeUsage(dst, src map[string]typeUsage) map[string]typeUsage {
+	if dst == nil {
+		dst = map[string]typeUsage{}
+	}
+	for name, u := range src {
+		current := dst[name]
+		current.input = current.input || u.input
+		current.output = current.output || u.output
+		dst[name] = current
+	}
+	return dst
+}
 
 func compareCmd() *cobra.Command {
 	var provider, repository, oldCommit, newCommit string
@@ -103,8 +433,9 @@ func compare(provider string, repository string, oldCommit string, newCommit str
 	return nil
 }
 
-func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
+func breakingChanges(oldSchema, newSchema schema.PackageSpec, filter *diffFilter) *diagtree.Node {
 	msg := &diagtree.Node{Title: ""}
+	typeUsage := mergeTypeUsage(buildTypeUsage(oldSchema), buildTypeUsage(newSchema))
 
 	changedToRequired := func(kind string) string {
 		return fmt.Sprintf("%s has changed to Required", kind)
@@ -117,7 +448,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 		msg := msg.Label("Resources").Value(resName)
 		newRes, ok := newSchema.Resources[resName]
 		if !ok {
-			msg.SetDescription(diagtree.Danger, "missing")
+			filter.record(diffMissingResource, msg, diagtree.Danger, "missing")
 			continue
 		}
 
@@ -125,29 +456,35 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			msg := msg.Label("inputs").Value(propName)
 			newProp, ok := newRes.InputProperties[propName]
 			if !ok {
-				msg.SetDescription(diagtree.Warn, "missing")
+				if recordMaxItemsOneRename(msg, propName, prop, newRes.InputProperties, filter) {
+					continue
+				}
+				filter.record(diffMissingInput, msg, diagtree.Warn, "missing")
 				continue
 			}
 
-			validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg)
+			validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg, diffTypeChangedInput, filter)
 		}
 
 		for propName, prop := range res.Properties {
 			msg := msg.Label("properties").Value(propName)
 			newProp, ok := newRes.Properties[propName]
 			if !ok {
-				msg.SetDescription(diagtree.Warn, "missing output %q", propName)
+				if recordMaxItemsOneRename(msg, propName, prop, newRes.Properties, filter) {
+					continue
+				}
+				filter.record(diffMissingOutput, msg, diagtree.Warn, "missing output %q", propName)
 				continue
 			}
 
-			validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg)
+			validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg, diffTypeChangedOutput, filter)
 		}
 
 		oldRequiredInputs := set.FromSlice(res.RequiredInputs)
 		for _, input := range newRes.RequiredInputs {
 			msg := msg.Label("required inputs").Value(input)
 			if !oldRequiredInputs.Has(input) {
-				msg.SetDescription(diagtree.Info, changedToRequired("input"))
+				filter.record(diffOptionalToRequiredInput, msg, diagtree.Info, changedToRequired("input"))
 			}
 		}
 
@@ -161,7 +498,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			// already warned on, so we don't need to warn here.
 			_, stillExists := newRes.Properties[prop]
 			if !newRequiredProperties.Has(prop) && stillExists {
-				msg.SetDescription(diagtree.Info, changedToOptional("property"))
+				filter.record(diffRequiredToOptionalOutput, msg, diagtree.Info, changedToOptional("property"))
 			}
 		}
 	}
@@ -170,7 +507,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 		msg := msg.Label("Functions").Value(funcName)
 		newFunc, ok := newSchema.Functions[funcName]
 		if !ok {
-			msg.SetDescription(diagtree.Danger, "missing")
+			filter.record(diffMissingFunction, msg, diagtree.Danger, "missing")
 			continue
 		}
 
@@ -179,17 +516,20 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			for propName, prop := range f.Inputs.Properties {
 				msg := msg.Value(propName)
 				if newFunc.Inputs == nil {
-					msg.SetDescription(diagtree.Warn, "missing input %q", propName)
+					filter.record(diffMissingInput, msg, diagtree.Warn, "missing input %q", propName)
 					continue
 				}
 
 				newProp, ok := newFunc.Inputs.Properties[propName]
 				if !ok {
-					msg.SetDescription(diagtree.Warn, "missing input %q", propName)
+					if recordMaxItemsOneRename(msg, propName, prop, newFunc.Inputs.Properties, filter) {
+						continue
+					}
+					filter.record(diffMissingInput, msg, diagtree.Warn, "missing input %q", propName)
 					continue
 				}
 
-				validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg)
+				validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg, diffTypeChangedInput, filter)
 			}
 
 			if newFunc.Inputs != nil {
@@ -197,7 +537,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 				oldRequired := set.FromSlice(f.Inputs.Required)
 				for _, req := range newFunc.Inputs.Required {
 					if !oldRequired.Has(req) {
-						msg.Value(req).SetDescription(diagtree.Info,
+						filter.record(diffOptionalToRequiredInput, msg.Value(req), diagtree.Info,
 							changedToRequired("input"))
 					}
 				}
@@ -215,10 +555,10 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 		type nonZeroArgs struct{ old, new bool }
 		switch (nonZeroArgs{old: isNonZeroArgs(f.Inputs), new: isNonZeroArgs(newFunc.Inputs)}) {
 		case nonZeroArgs{false, true}:
-			msg.SetDescription(diagtree.Danger,
+			filter.record(diffSignatureChanged, msg, diagtree.Danger,
 				"signature change (pulumi.InvokeOptions)->T => (Args, pulumi.InvokeOptions)->T")
 		case nonZeroArgs{true, false}:
-			msg.SetDescription(diagtree.Danger,
+			filter.record(diffSignatureChanged, msg, diagtree.Danger,
 				"signature change (Args, pulumi.InvokeOptions)->T => (pulumi.InvokeOptions)->T")
 		}
 
@@ -227,17 +567,20 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			for propName, prop := range f.Outputs.Properties {
 				msg := msg.Value(propName)
 				if newFunc.Outputs == nil {
-					msg.SetDescription(diagtree.Warn, "missing output")
+					filter.record(diffMissingOutput, msg, diagtree.Warn, "missing output")
 					continue
 				}
 
 				newProp, ok := newFunc.Outputs.Properties[propName]
 				if !ok {
-					msg.SetDescription(diagtree.Warn, "missing output")
+					if recordMaxItemsOneRename(msg, propName, prop, newFunc.Outputs.Properties, filter) {
+						continue
+					}
+					filter.record(diffMissingOutput, msg, diagtree.Warn, "missing output")
 					continue
 				}
 
-				validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg)
+				validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg, diffTypeChangedOutput, filter)
 			}
 
 			var newRequired set.Set[string]
@@ -248,7 +591,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			for _, req := range f.Outputs.Required {
 				_, stillExists := f.Outputs.Properties[req]
 				if !newRequired.Has(req) && stillExists {
-					msg.Value(req).SetDescription(
+					filter.record(diffRequiredToOptionalOutput, msg.Value(req),
 						diagtree.Info, changedToOptional("property"))
 				}
 			}
@@ -259,7 +602,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 		msg := msg.Label("Types").Value(typName)
 		newTyp, ok := newSchema.Types[typName]
 		if !ok {
-			msg.SetDescription(diagtree.Danger, "missing")
+			filter.record(diffMissingType, msg, diagtree.Danger, "missing")
 			continue
 		}
 
@@ -267,11 +610,15 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			msg := msg.Label("properties").Value(propName)
 			newProp, ok := newTyp.Properties[propName]
 			if !ok {
-				msg.SetDescription(diagtree.Warn, "missing")
+				if recordMaxItemsOneRename(msg, propName, prop, newTyp.Properties, filter) {
+					continue
+				}
+				filter.record(diffMissingProperty, msg, diagtree.Warn, "missing")
 				continue
 			}
 
-			validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg)
+			usage := typeUsage[typName]
+			validateTypes(&prop.TypeSpec, &newProp.TypeSpec, msg, usage.typeChangeCategory(), filter)
 		}
 
 		// Since we don't know if this type will be consumed by pulumi (as an
@@ -281,14 +628,16 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 		for _, r := range typ.Required {
 			_, stillExists := typ.Properties[r]
 			if !newRequired.Has(r) && stillExists {
-				msg.Label("required").Value(r).SetDescription(
+				usage := typeUsage[typName]
+				filter.record(usage.requiredToOptionalCategory(), msg.Label("required").Value(r),
 					diagtree.Info, changedToOptional("property"))
 			}
 		}
 		required := set.FromSlice(typ.Required)
 		for _, r := range newTyp.Required {
 			if !required.Has(r) {
-				msg.Label("required").Value(r).SetDescription(
+				usage := typeUsage[typName]
+				filter.record(usage.optionalToRequiredCategory(), msg.Label("required").Value(r),
 					diagtree.Info, changedToRequired("property"))
 			}
 		}
@@ -300,7 +649,15 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 
 func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec, maxChanges int) {
 	fmt.Fprintf(out, "### Does the PR have any schema changes?\n\n")
-	violations := breakingChanges(oldSchema, newSchema)
+	filter := newDiffFilter()
+	violations := breakingChanges(oldSchema, newSchema, filter)
+	if filter.hasCounts() {
+		fmt.Fprintln(out, "Summary by category:")
+		for _, line := range filter.summaryLines() {
+			fmt.Fprintf(out, "- %s\n", line)
+		}
+		fmt.Fprintln(out, "")
+	}
 	displayedViolations := new(bytes.Buffer)
 	lenViolations := violations.Display(displayedViolations, maxChanges)
 	switch lenViolations {
@@ -350,15 +707,15 @@ func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.
 	}
 }
 
-func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, msg *diagtree.Node) {
+func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, msg *diagtree.Node, typeChangeCategory diffCategory, filter *diffFilter) {
 	switch {
 	case old == nil && new == nil:
 		return
 	case old != nil && new == nil:
-		msg.SetDescription(diagtree.Warn, "had %+v but now has no type", old)
+		filter.record(typeChangeCategory, msg, diagtree.Warn, "had %+v but now has no type", old)
 		return
 	case old == nil && new != nil:
-		msg.SetDescription(diagtree.Warn, "had no type but now has %+v", new)
+		filter.record(typeChangeCategory, msg, diagtree.Warn, "had no type but now has %+v", new)
 		return
 	}
 
@@ -371,11 +728,19 @@ func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, msg *diagtree.Nod
 		newType = new.Ref
 	}
 	if oldType != newType {
-		msg.SetDescription(diagtree.Warn, "type changed from %q to %q", oldType, newType)
+		if oldType == "integer" && newType == "number" {
+			filter.record(intToNumberCategory(typeChangeCategory), msg, diagtree.Warn, "type changed from %q to %q", oldType, newType)
+			return
+		}
+		if isMaxItemsOneChange(old, new) {
+			filter.record(diffMaxItemsOneChanged, msg, diagtree.Warn, "type changed from %q to %q", oldType, newType)
+			return
+		}
+		filter.record(typeChangeCategory, msg, diagtree.Warn, "type changed from %q to %q", oldType, newType)
 	}
 
-	validateTypes(old.Items, new.Items, msg.Label("items"))
-	validateTypes(old.AdditionalProperties, new.AdditionalProperties, msg.Label("additional properties"))
+	validateTypes(old.Items, new.Items, msg.Label("items"), typeChangeCategory, filter)
+	validateTypes(old.AdditionalProperties, new.AdditionalProperties, msg.Label("additional properties"), typeChangeCategory, filter)
 }
 
 func formatName(provider, s string) string {

@@ -5,6 +5,7 @@ go 1.21
 require (
 	github.com/deckarep/golang-set/v2 v2.5.0
 	github.com/h2non/gock v1.2.0
+	github.com/pulumi/inflector v0.2.1
 	github.com/pulumi/pulumi/pkg/v3 v3.115.2
 	github.com/pulumi/pulumi/sdk/v3 v3.115.2
 	github.com/spf13/cobra v1.8.0
