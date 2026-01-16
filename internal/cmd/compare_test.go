@@ -291,6 +291,21 @@ func TestLocalTypeName(t *testing.T) {
 	}
 }
 
+func TestIntToNumberCategory(t *testing.T) {
+	t.Run("maps input category", func(t *testing.T) {
+		assert.Equal(t, diffTypeChangedIntToNumberInput, intToNumberCategory(diffTypeChangedInput))
+	})
+
+	t.Run("maps output category", func(t *testing.T) {
+		assert.Equal(t, diffTypeChangedIntToNumberOutput, intToNumberCategory(diffTypeChangedOutput))
+	})
+
+	t.Run("returns other categories unchanged", func(t *testing.T) {
+		assert.Equal(t, diffMissingResource, intToNumberCategory(diffMissingResource))
+		assert.Equal(t, diffOptionalToRequiredInput, intToNumberCategory(diffOptionalToRequiredInput))
+	})
+}
+
 func TestTypeUsageMethods(t *testing.T) {
 	t.Run("typeChangeCategory", func(t *testing.T) {
 		// Input takes precedence
@@ -719,5 +734,109 @@ func TestCategoryCounting(t *testing.T) {
 
 		assert.Equal(t, 2, filter.counts[diffMissingResource])
 		assert.Equal(t, 1, filter.counts[diffMissingFunction])
+	})
+
+	t.Run("counts integer to number input change separately", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"count": {TypeSpec: schema.TypeSpec{Type: "integer"}},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"count": {TypeSpec: schema.TypeSpec{Type: "number"}},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffTypeChangedIntToNumberInput])
+		assert.Equal(t, 0, filter.counts[diffTypeChangedInput])
+	})
+
+	t.Run("counts integer to number output change separately", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"total": {TypeSpec: schema.TypeSpec{Type: "integer"}},
+					},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"total": {TypeSpec: schema.TypeSpec{Type: "number"}},
+					},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffTypeChangedIntToNumberOutput])
+		assert.Equal(t, 0, filter.counts[diffTypeChangedOutput])
+	})
+
+	t.Run("other type changes still use generic category", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"name": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"name": {TypeSpec: schema.TypeSpec{Type: "integer"}},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffTypeChangedInput])
+		assert.Equal(t, 0, filter.counts[diffTypeChangedIntToNumberInput])
+	})
+
+	t.Run("number to integer uses generic category", func(t *testing.T) {
+		oldSchema := simpleEmptySchema()
+		oldSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"value": {TypeSpec: schema.TypeSpec{Type: "number"}},
+				},
+			},
+		}
+		newSchema := simpleEmptySchema()
+		newSchema.Resources = map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"value": {TypeSpec: schema.TypeSpec{Type: "integer"}},
+				},
+			},
+		}
+
+		filter := newDiffFilter()
+		breakingChanges(oldSchema, newSchema, filter)
+
+		assert.Equal(t, 1, filter.counts[diffTypeChangedInput])
+		assert.Equal(t, 0, filter.counts[diffTypeChangedIntToNumberInput])
 	})
 }
