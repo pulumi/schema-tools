@@ -9,6 +9,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestCompareSchemasNoBreakingChanges(t *testing.T) {
+	oldSchema := simpleResourceSchema(simpleResource([]string{"value"}, nil))
+	newSchema := simpleResourceSchema(simpleResource([]string{"value"}, nil))
+
+	var out bytes.Buffer
+	compareSchemas(&out, "my-pkg", oldSchema, newSchema, 10_000)
+
+	assert.Contains(t, out.String(), "### Does the PR have any schema changes?")
+	assert.Contains(t, out.String(), "Looking good! No breaking changes found.")
+}
+
 func TestBreakingResourceRequired(t *testing.T) {
 	tests := []breakingTestCase{
 		{}, // No required => no breaking
