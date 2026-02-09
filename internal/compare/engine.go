@@ -7,6 +7,7 @@ import (
 	"github.com/pulumi/schema-tools/internal/util/set"
 )
 
+// Analyze computes violations and newly introduced resources/functions.
 func Analyze(provider string, oldSchema, newSchema schema.PackageSpec) Report {
 	var newResources, newFunctions []string
 	for resName := range newSchema.Resources {
@@ -27,6 +28,7 @@ func Analyze(provider string, oldSchema, newSchema schema.PackageSpec) Report {
 	}
 }
 
+// BreakingChanges builds the diagnostics tree for schema incompatibilities.
 func BreakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 	msg := &diagtree.Node{Title: ""}
 
@@ -215,6 +217,7 @@ func BreakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 	return msg
 }
 
+// validateTypes recursively compares schema type shapes and records differences.
 func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, msg *diagtree.Node) {
 	switch {
 	case old == nil && new == nil:

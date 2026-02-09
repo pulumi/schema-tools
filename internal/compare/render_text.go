@@ -9,6 +9,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
+// RenderText writes the human-readable compare report.
 func RenderText(out io.Writer, report Report, maxChanges int) {
 	fmt.Fprintf(out, "### Does the PR have any schema changes?\n\n")
 	displayedViolations := new(bytes.Buffer)
