@@ -25,7 +25,7 @@ func TestRenderJSONDeterministicOrdering(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := RenderJSON(&out, result); err != nil {
+	if err := RenderJSON(&out, result, false); err != nil {
 		t.Fatalf("RenderJSON failed: %v", err)
 	}
 
@@ -33,19 +33,11 @@ func TestRenderJSONDeterministicOrdering(t *testing.T) {
   "summary": [
     {
       "category": "alpha-category",
-      "count": 2,
-      "entries": [
-        "a",
-        "b"
-      ]
+      "count": 2
     },
     {
       "category": "zeta-category",
-      "count": 1,
-      "entries": [
-        "a",
-        "c"
-      ]
+      "count": 1
     }
   ],
   "breaking_changes": [
@@ -63,5 +55,29 @@ func TestRenderJSONDeterministicOrdering(t *testing.T) {
 }`
 	if out.String() != expected {
 		t.Fatalf("unexpected JSON output:\n%s", out.String())
+	}
+}
+
+func TestRenderJSONSummaryOnly(t *testing.T) {
+	result := CompareResult{
+		Summary:         []SummaryItem{{Category: "missing-input", Count: 1, Entries: []string{"e1"}}},
+		BreakingChanges: []string{"line-1"},
+		NewResources:    []string{"r1"},
+		NewFunctions:    []string{"f1"},
+	}
+
+	var out bytes.Buffer
+	if err := RenderJSON(&out, result, true); err != nil {
+		t.Fatalf("RenderJSON failed: %v", err)
+	}
+
+	if bytes.Contains(out.Bytes(), []byte("line-1")) {
+		t.Fatalf("expected summary-only JSON to omit breaking_changes, got %s", out.String())
+	}
+	if bytes.Contains(out.Bytes(), []byte("r1")) || bytes.Contains(out.Bytes(), []byte("f1")) {
+		t.Fatalf("expected summary-only JSON to omit new resources/functions, got %s", out.String())
+	}
+	if !bytes.Contains(out.Bytes(), []byte("missing-input")) || !bytes.Contains(out.Bytes(), []byte("e1")) {
+		t.Fatalf("expected summary entries in summary-only output, got %s", out.String())
 	}
 }

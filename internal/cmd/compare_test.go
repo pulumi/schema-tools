@@ -6,6 +6,7 @@ import (
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/pulumi/schema-tools/internal/util/diagtree"
+	comparepkg "github.com/pulumi/schema-tools/pkg/compare"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,6 +19,41 @@ func TestCompareSchemasNoBreakingChanges(t *testing.T) {
 
 	assert.Contains(t, out.String(), "### Does the PR have any schema changes?")
 	assert.Contains(t, out.String(), "Looking good! No breaking changes found.")
+}
+
+func TestRenderCompareOutputModes(t *testing.T) {
+	result := comparepkg.CompareResult{
+		Summary:         []comparepkg.SummaryItem{{Category: "missing-input", Count: 1, Entries: []string{"e1"}}},
+		BreakingChanges: []string{"line-1"},
+		NewResources:    []string{"r1"},
+		NewFunctions:    []string{"f1"},
+	}
+
+	t.Run("json", func(t *testing.T) {
+		var out bytes.Buffer
+		err := renderCompareOutput(&out, result, true, false)
+		assert.NoError(t, err)
+		assert.Contains(t, out.String(), `"breaking_changes": [`)
+		assert.Contains(t, out.String(), `"line-1"`)
+	})
+
+	t.Run("summary text", func(t *testing.T) {
+		var out bytes.Buffer
+		err := renderCompareOutput(&out, result, false, true)
+		assert.NoError(t, err)
+		assert.Contains(t, out.String(), "Summary by category:")
+		assert.Contains(t, out.String(), "- missing-input: 1")
+		assert.NotContains(t, out.String(), "e1")
+	})
+
+	t.Run("json summary", func(t *testing.T) {
+		var out bytes.Buffer
+		err := renderCompareOutput(&out, result, true, true)
+		assert.NoError(t, err)
+		assert.Contains(t, out.String(), `"summary": [`)
+		assert.NotContains(t, out.String(), `"line-1"`)
+		assert.NotContains(t, out.String(), `"r1"`)
+	})
 }
 
 func TestBreakingResourceRequired(t *testing.T) {

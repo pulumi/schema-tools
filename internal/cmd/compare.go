@@ -21,12 +21,13 @@ import (
 func compareCmd() *cobra.Command {
 	var provider, repository, oldCommit, newCommit string
 	var maxChanges int
+	var jsonMode, summaryMode bool
 
 	command := &cobra.Command{
 		Use:   "compare",
 		Short: "Compare two versions of a Pulumi schema",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return compare(provider, repository, oldCommit, newCommit, maxChanges)
+			return compare(provider, repository, oldCommit, newCommit, maxChanges, jsonMode, summaryMode)
 		},
 	}
 
@@ -46,11 +47,21 @@ func compareCmd() *cobra.Command {
 
 	command.Flags().IntVarP(&maxChanges, "max-changes", "m", 500,
 		"the maximum number of breaking changes to display. Pass -1 to display all changes")
+	command.Flags().BoolVar(&jsonMode, "json", false, "render compare output as JSON")
+	command.Flags().BoolVar(&summaryMode, "summary", false, "render summary-only output")
 
 	return command
 }
 
-func compare(provider string, repository string, oldCommit string, newCommit string, maxChanges int) error {
+func compare(
+	provider string,
+	repository string,
+	oldCommit string,
+	newCommit string,
+	maxChanges int,
+	jsonMode bool,
+	summaryMode bool,
+) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var schOld schema.PackageSpec
@@ -97,7 +108,22 @@ func compare(provider string, repository string, oldCommit string, newCommit str
 		return err
 	}
 
-	compareSchemas(os.Stdout, provider, schOld, schNew, maxChanges)
+	result := comparepkg.Compare(schOld, schNew, comparepkg.CompareOptions{
+		Provider:   provider,
+		MaxChanges: maxChanges,
+	})
+	return renderCompareOutput(os.Stdout, result, jsonMode, summaryMode)
+}
+
+func renderCompareOutput(out io.Writer, result comparepkg.CompareResult, jsonMode bool, summaryMode bool) error {
+	if jsonMode {
+		return comparepkg.RenderJSON(out, result, summaryMode)
+	}
+	if summaryMode {
+		comparepkg.RenderSummary(out, result)
+		return nil
+	}
+	comparepkg.RenderText(out, result)
 	return nil
 }
 

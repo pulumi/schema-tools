@@ -7,10 +7,34 @@ import (
 	"sort"
 )
 
+type summaryOnlyJSON struct {
+	Summary []SummaryItem `json:"summary"`
+}
+
+type fullJSON struct {
+	Summary         []SummaryItem `json:"summary"`
+	BreakingChanges []string      `json:"breaking_changes"`
+	NewResources    []string      `json:"new_resources"`
+	NewFunctions    []string      `json:"new_functions"`
+}
+
 // RenderJSON writes a deterministic JSON payload for compare results.
-func RenderJSON(out io.Writer, result CompareResult) error {
+func RenderJSON(out io.Writer, result CompareResult, summaryOnly bool) error {
 	normalized := normalizeForJSON(result)
-	data, err := json.MarshalIndent(normalized, "", "  ")
+
+	var payload any
+	if summaryOnly {
+		payload = summaryOnlyJSON{Summary: normalized.Summary}
+	} else {
+		payload = fullJSON{
+			Summary:         summaryWithoutEntries(normalized.Summary),
+			BreakingChanges: normalized.BreakingChanges,
+			NewResources:    normalized.NewResources,
+			NewFunctions:    normalized.NewFunctions,
+		}
+	}
+
+	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal compare JSON: %w", err)
 	}
@@ -53,4 +77,15 @@ func normalizeSummary(items []SummaryItem) []SummaryItem {
 		return normalized[i].Count < normalized[j].Count
 	})
 	return normalized
+}
+
+func summaryWithoutEntries(items []SummaryItem) []SummaryItem {
+	if len(items) == 0 {
+		return []SummaryItem{}
+	}
+	stripped := make([]SummaryItem, len(items))
+	for i, item := range items {
+		stripped[i] = SummaryItem{Category: item.Category, Count: item.Count}
+	}
+	return stripped
 }

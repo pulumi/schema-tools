@@ -42,6 +42,43 @@ func (m *Node) Value(value string) *Node {
 	return m.subfield(fmt.Sprintf("%q", value))
 }
 
+func (m *Node) PathTitles() []string {
+	if m == nil {
+		return nil
+	}
+
+	parts := []string{}
+	for n := m; n != nil; n = n.parent {
+		if n.Title == "" {
+			continue
+		}
+		parts = append(parts, n.Title)
+	}
+
+	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
+		parts[i], parts[j] = parts[j], parts[i]
+	}
+
+	return parts
+}
+
+func (m *Node) WalkDisplayed(visit func(*Node)) {
+	if m == nil || visit == nil {
+		return
+	}
+	m.walkDisplayed(visit)
+}
+
+func (m *Node) walkDisplayed(visit func(*Node)) {
+	if m == nil || !m.doDisplay {
+		return
+	}
+	visit(m)
+	for _, child := range m.subfields {
+		child.walkDisplayed(visit)
+	}
+}
+
 func (m *Node) Prune() {
 	sfs := []*Node{}
 	for _, v := range m.subfields {
