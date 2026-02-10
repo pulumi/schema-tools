@@ -16,10 +16,25 @@ import (
 	"github.com/pulumi/schema-tools/internal/pkg"
 )
 
+type compareDeps struct {
+	currentUser          func() (*user.User, error)
+	downloadSchema       func(context.Context, string, string, string) (schema.PackageSpec, error)
+	loadLocalPackageSpec func(string) (schema.PackageSpec, error)
+}
+
+func defaultCompareDeps() compareDeps {
+	return compareDeps{
+		currentUser:          user.Current,
+		downloadSchema:       pkg.DownloadSchema,
+		loadLocalPackageSpec: pkg.LoadLocalPackageSpec,
+	}
+}
+
 func compareCmd() *cobra.Command {
 	var provider, repository, oldCommit, newCommit string
 	var oldPath, newPath string
 	var maxChanges int
+	var jsonMode, summaryMode bool
 
 	command := &cobra.Command{
 		Use:   "compare",
@@ -34,7 +49,9 @@ func compareCmd() *cobra.Command {
 			if oldCommit != "" && oldPath != "" {
 				return fmt.Errorf("--old-commit and --old-path are mutually exclusive")
 			}
-			return runCompare(provider, repository, oldCommit, newCommit, oldPath, newPath, maxChanges)
+			return runCompareCmd(
+				provider, repository, oldCommit, newCommit, oldPath, newPath, maxChanges, jsonMode, summaryMode,
+			)
 		},
 	}
 
@@ -57,11 +74,40 @@ func compareCmd() *cobra.Command {
 
 	command.Flags().IntVarP(&maxChanges, "max-changes", "m", 500,
 		"the maximum number of breaking changes to display. Pass -1 to display all changes")
+	command.Flags().BoolVar(&jsonMode, "json", false, "render compare output as JSON")
+	command.Flags().BoolVar(&summaryMode, "summary", false, "render summary-only output")
 
 	return command
 }
 
-func runCompare(provider string, repository string, oldCommit string, newCommit string, oldPath string, newPath string, maxChanges int) error {
+func runCompareCmd(
+	provider string,
+	repository string,
+	oldCommit string,
+	newCommit string,
+	oldPath string,
+	newPath string,
+	maxChanges int,
+	jsonMode bool,
+	summaryMode bool,
+) error {
+	return runCompareCmdWithDeps(
+		provider, repository, oldCommit, newCommit, oldPath, newPath, maxChanges, jsonMode, summaryMode, defaultCompareDeps(),
+	)
+}
+
+func runCompareCmdWithDeps(
+	provider string,
+	repository string,
+	oldCommit string,
+	newCommit string,
+	oldPath string,
+	newPath string,
+	maxChanges int,
+	jsonMode bool,
+	summaryMode bool,
+	deps compareDeps,
+) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	loadLocal := func(path string) (schema.PackageSpec, error) {
@@ -69,20 +115,20 @@ func runCompare(provider string, repository string, oldCommit string, newCommit 
 		if err != nil {
 			return schema.PackageSpec{}, fmt.Errorf("unable to construct absolute path to schema.json: %w", err)
 		}
-		return pkg.LoadLocalPackageSpec(schemaPath)
+		return deps.loadLocalPackageSpec(schemaPath)
 	}
 
 	var schOld schema.PackageSpec
-	schOldDone := make(chan error)
+	schOldDone := make(chan error, 1)
 	go func() {
 		var err error
 		switch {
 		case oldPath != "":
 			schOld, err = loadLocal(oldPath)
 		case oldCommit != "":
-			schOld, err = pkg.DownloadSchema(ctx, repository, provider, oldCommit)
+			schOld, err = deps.downloadSchema(ctx, repository, provider, oldCommit)
 		default:
-			schOld, err = pkg.DownloadSchema(ctx, repository, provider, "master")
+			schOld, err = deps.downloadSchema(ctx, repository, provider, "master")
 		}
 		if err != nil {
 			cancel()
@@ -110,18 +156,20 @@ func runCompare(provider string, repository string, oldCommit string, newCommit 
 		}
 	} else if newCommit == "--local" {
 		fmt.Fprintln(os.Stderr, "Warning: --local in --new-commit is deprecated, use --new-path instead")
-		usr, _ := user.Current()
+		usr, err := deps.currentUser()
+		if err != nil {
+			return fmt.Errorf("get current user: %w", err)
+		}
 		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi/%s", usr.HomeDir, provider)
 		schemaFile := pkg.StandardSchemaPath(provider)
 		schemaPath := filepath.Join(basePath, schemaFile)
-		var err error
-		schNew, err = pkg.LoadLocalPackageSpec(schemaPath)
+		schNew, err = deps.loadLocalPackageSpec(schemaPath)
 		if err != nil {
 			return err
 		}
 	} else {
 		var err error
-		schNew, err = pkg.DownloadSchema(ctx, repository, provider, newCommit)
+		schNew, err = deps.downloadSchema(ctx, repository, provider, newCommit)
 		if err != nil {
 			return err
 		}
@@ -131,7 +179,21 @@ func runCompare(provider string, repository string, oldCommit string, newCommit 
 		return err
 	}
 
-	compareSchemas(os.Stdout, provider, schOld, schNew, maxChanges)
+	result := compare.Schemas(schOld, schNew, compare.Options{
+		Provider:   provider,
+		MaxChanges: maxChanges,
+	})
+	return renderCompareOutput(os.Stdout, result, jsonMode, summaryMode)
+}
+
+func renderCompareOutput(out io.Writer, result compare.Result, jsonMode bool, summaryMode bool) error {
+	if jsonMode {
+		return compare.RenderJSON(out, result, summaryMode)
+	}
+	if summaryMode {
+		return compare.RenderSummary(out, result)
+	}
+	compare.RenderText(out, result)
 	return nil
 }
 
