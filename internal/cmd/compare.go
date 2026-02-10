@@ -12,9 +12,10 @@ import (
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/spf13/cobra"
 
-	comparepkg "github.com/pulumi/schema-tools/internal/compare"
+	internalcompare "github.com/pulumi/schema-tools/internal/compare"
 	"github.com/pulumi/schema-tools/internal/pkg"
 	"github.com/pulumi/schema-tools/internal/util/diagtree"
+	comparepkg "github.com/pulumi/schema-tools/pkg/compare"
 )
 
 func compareCmd() *cobra.Command {
@@ -101,10 +102,13 @@ func compare(provider string, repository string, oldCommit string, newCommit str
 }
 
 func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
-	return comparepkg.BreakingChanges(oldSchema, newSchema)
+	return internalcompare.BreakingChanges(oldSchema, newSchema)
 }
 
 func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec, maxChanges int) {
-	report := comparepkg.Analyze(provider, oldSchema, newSchema)
-	comparepkg.RenderText(out, report, maxChanges)
+	result := comparepkg.Compare(oldSchema, newSchema, comparepkg.CompareOptions{
+		Provider:   provider,
+		MaxChanges: maxChanges,
+	})
+	comparepkg.RenderText(out, result)
 }
