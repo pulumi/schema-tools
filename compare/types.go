@@ -8,9 +8,10 @@ type Options struct {
 
 // SummaryItem is one summary category/count entry for compare output.
 type SummaryItem struct {
-	Category string   `json:"category"`
-	Count    int      `json:"count"`
-	Entries  []string `json:"entries"`
+	Category string `json:"category"`
+	Count    int    `json:"count"`
+	// Entries are concrete diagnostics in "path + message" form.
+	Entries []string `json:"entries,omitempty"`
 }
 
 // Result is the structured output of schema comparison.

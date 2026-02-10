@@ -1,0 +1,92 @@
+{
+  "name": "my-pkg",
+  "version": "1.0.0",
+  "resources": {
+    "my-pkg:index:RemovedResource": {
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "my-pkg:index:MyResource": {
+      "inputProperties": {
+        "name": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer"
+        }
+      },
+      "requiredInputs": [
+        "name"
+      ],
+      "properties": {
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
+      ]
+    }
+  },
+  "functions": {
+    "my-pkg:index:removedFunction": {
+      "inputs": {
+        "properties": {
+          "arg": {
+            "type": "string"
+          }
+        },
+        "required": []
+      },
+      "outputs": {
+        "properties": {
+          "result": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      }
+    },
+    "my-pkg:index:MyFunction": {
+      "inputs": {
+        "properties": {
+          "arg": {
+            "type": "string"
+          }
+        },
+        "required": []
+      },
+      "outputs": {
+        "properties": {
+          "result": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      }
+    }
+  },
+  "types": {
+    "my-pkg:index:MyType": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "field"
+      ]
+    }
+  }
+}
