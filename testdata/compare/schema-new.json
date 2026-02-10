@@ -1,0 +1,64 @@
+{
+  "name": "my-pkg",
+  "version": "1.1.0",
+  "resources": {
+    "my-pkg:index:MyResource": {
+      "inputProperties": {
+        "name": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer"
+        }
+      },
+      "requiredInputs": [
+        "name",
+        "count"
+      ],
+      "properties": {
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": []
+    }
+  },
+  "functions": {
+    "my-pkg:index:MyFunction": {
+      "inputs": {
+        "properties": {
+          "arg": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "arg"
+        ]
+      },
+      "outputs": {
+        "properties": {
+          "result": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  "types": {
+    "my-pkg:index:MyType": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "integer"
+        },
+        "count": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "count"
+      ]
+    }
+  }
+}

@@ -2,9 +2,13 @@ package compare
 
 import (
 	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/pulumi/schema-tools/internal/util/diagtree"
 )
 
@@ -71,10 +75,59 @@ func TestRenderTextSortsNewResourcesAndFunctions(t *testing.T) {
 	}
 }
 
+func TestRenderTextFixtureReport(t *testing.T) {
+	oldSchema, newSchema := mustLoadFixtureSchemas(t)
+	report := Analyze("my-pkg", oldSchema, newSchema)
+
+	var out bytes.Buffer
+	RenderText(&out, report, -1)
+	text := out.String()
+
+	if !strings.Contains(text, "Found 8 breaking changes:") {
+		t.Fatalf("expected breaking change count in output, got:\n%s", text)
+	}
+
+	expectedFragments := []string{
+		"`🔴` \"my-pkg:index:RemovedResource\" missing",
+		"`🔴` \"my-pkg:index:removedFunction\" missing",
+		`type changed from "string" to "integer"`,
+		`input has changed to Required`,
+		`property is no longer Required`,
+		`No new resources/functions.`,
+	}
+	for _, fragment := range expectedFragments {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("expected output to contain %q, got:\n%s", fragment, text)
+		}
+	}
+}
+
 func violations(names ...string) *diagtree.Node {
 	root := &diagtree.Node{}
 	for _, name := range names {
 		root.Label("Resources").Value(name).SetDescription(diagtree.Danger, "missing")
 	}
 	return root
+}
+
+func mustLoadFixtureSchemas(t testing.TB) (schema.PackageSpec, schema.PackageSpec) {
+	t.Helper()
+	oldSchema := mustReadFixtureSchema(t, "schema-old.json")
+	newSchema := mustReadFixtureSchema(t, "schema-new.json")
+	return oldSchema, newSchema
+}
+
+func mustReadFixtureSchema(t testing.TB, name string) schema.PackageSpec {
+	t.Helper()
+	path := filepath.Join("..", "..", "testdata", "compare", name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", path, err)
+	}
+
+	var spec schema.PackageSpec
+	if err := json.Unmarshal(data, &spec); err != nil {
+		t.Fatalf("failed to unmarshal fixture %q: %v", name, err)
+	}
+	return spec
 }
