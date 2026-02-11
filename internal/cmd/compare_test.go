@@ -5,10 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"os/user"
+	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +20,8 @@ import (
 	"github.com/pulumi/schema-tools/compare"
 	"github.com/stretchr/testify/assert"
 )
+
+var stdioCaptureMu sync.Mutex
 
 func TestRenderCompareOutputModes(t *testing.T) {
 	result := compare.Result{
@@ -101,6 +107,110 @@ func TestCompareLocalCurrentUserErrorCancelsOldSchemaDownload(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("old schema download goroutine was not canceled")
 	}
+}
+
+func TestCompareCLIIntegrationOldAndNewPathModes(t *testing.T) {
+	oldPath, newPath := mustLoadDigitalOceanFixturePaths(t)
+	expectedSummary := expectedDigitalOceanSummaryCounts()
+
+	t.Run("text", func(t *testing.T) {
+		stdout, stderr, err := runCompareCLIIntegration(t,
+			"--provider", "digitalocean",
+			"--old-path", oldPath,
+			"--new-path", newPath,
+		)
+		assert.NoError(t, err)
+		assert.Empty(t, stderr)
+		assert.Contains(t, stdout, "Found 14 breaking changes:")
+	})
+
+	t.Run("json", func(t *testing.T) {
+		stdout, stderr, err := runCompareCLIIntegration(t,
+			"--provider", "digitalocean",
+			"--old-path", oldPath,
+			"--new-path", newPath,
+			"--json",
+		)
+		assert.NoError(t, err)
+		assert.Empty(t, stderr)
+
+		var payload struct {
+			Summary []struct {
+				Category string `json:"category"`
+				Count    int    `json:"count"`
+			} `json:"summary"`
+			BreakingChanges []string `json:"breaking_changes"`
+			NewResources    []string `json:"new_resources"`
+			NewFunctions    []string `json:"new_functions"`
+		}
+		assert.NoError(t, json.Unmarshal([]byte(stdout), &payload))
+		assert.Len(t, payload.Summary, 3)
+		gotSummary := map[string]int{}
+		for _, item := range payload.Summary {
+			gotSummary[item.Category] = item.Count
+		}
+		assert.Equal(t, expectedSummary, gotSummary)
+		assert.Len(t, payload.BreakingChanges, 14)
+		assert.Len(t, payload.NewResources, 8)
+		assert.Len(t, payload.NewFunctions, 14)
+	})
+
+	t.Run("summary", func(t *testing.T) {
+		stdout, stderr, err := runCompareCLIIntegration(t,
+			"--provider", "digitalocean",
+			"--old-path", oldPath,
+			"--new-path", newPath,
+			"--summary",
+		)
+		assert.NoError(t, err)
+		assert.Empty(t, stderr)
+		assert.Equal(t, expectedSummary, parseSummaryTextCounts(t, stdout))
+	})
+
+	t.Run("json summary", func(t *testing.T) {
+		stdout, stderr, err := runCompareCLIIntegration(t,
+			"--provider", "digitalocean",
+			"--old-path", oldPath,
+			"--new-path", newPath,
+			"--json",
+			"--summary",
+		)
+		assert.NoError(t, err)
+		assert.Empty(t, stderr)
+
+		var payload struct {
+			Summary []struct {
+				Category string   `json:"category"`
+				Count    int      `json:"count"`
+				Entries  []string `json:"entries"`
+			} `json:"summary"`
+		}
+		assert.NoError(t, json.Unmarshal([]byte(stdout), &payload))
+		assert.Len(t, payload.Summary, 3)
+		gotSummary := map[string]int{}
+		for _, item := range payload.Summary {
+			gotSummary[item.Category] = item.Count
+		}
+		assert.Equal(t, expectedSummary, gotSummary)
+		for _, item := range payload.Summary {
+			assert.Len(t, item.Entries, item.Count)
+		}
+	})
+}
+
+func TestCompareCLIIntegrationNewPathOnlyDefaultsOldSchema(t *testing.T) {
+	oldPath, newPath := mustLoadDigitalOceanFixturePaths(t)
+	expectedSummary := expectedDigitalOceanSummaryCounts()
+
+	stdout, stderr, err := runCompareCLIIntegration(t,
+		"--provider", "digitalocean",
+		"--repository", "file:"+oldPath,
+		"--new-path", newPath,
+		"--summary",
+	)
+	assert.NoError(t, err)
+	assert.Empty(t, stderr)
+	assert.Equal(t, expectedSummary, parseSummaryTextCounts(t, stdout))
 }
 
 type errorWriter struct{}
@@ -212,4 +322,105 @@ func mustLoadCompareFixtureSchema(t testing.TB, name string) schema.PackageSpec 
 		t.Fatalf("failed to unmarshal fixture %q: %v", name, err)
 	}
 	return spec
+}
+
+func mustLoadDigitalOceanFixturePaths(t testing.TB) (string, string) {
+	t.Helper()
+	oldPath := mustReadFixturePath(t, "digitalocean-4560.json")
+	newPath := mustReadFixturePath(t, "digitalocean-4570.json")
+	return oldPath, newPath
+}
+
+func mustReadFixturePath(t testing.TB, name string) string {
+	t.Helper()
+	path := filepath.Join("..", "..", "testdata", "compare", name)
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		t.Fatalf("failed to resolve absolute path for %q: %v", path, err)
+	}
+	return abs
+}
+
+func runCompareCLIIntegration(t testing.TB, args ...string) (string, string, error) {
+	t.Helper()
+	return captureStdoutAndStderr(t, func() error {
+		command := compareCmd()
+		command.SetArgs(args)
+		return command.Execute()
+	})
+}
+
+func captureStdoutAndStderr(t testing.TB, run func() error) (string, string, error) {
+	t.Helper()
+	stdioCaptureMu.Lock()
+	defer stdioCaptureMu.Unlock()
+
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stdout pipe: %v", err)
+	}
+	stderrR, stderrW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stderr pipe: %v", err)
+	}
+
+	oldStdout, oldStderr := os.Stdout, os.Stderr
+	os.Stdout = stdoutW
+	os.Stderr = stderrW
+	defer func() {
+		os.Stdout = oldStdout
+		os.Stderr = oldStderr
+	}()
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	stdoutDone := make(chan struct{})
+	stderrDone := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&stdoutBuf, stdoutR)
+		close(stdoutDone)
+	}()
+	go func() {
+		_, _ = io.Copy(&stderrBuf, stderrR)
+		close(stderrDone)
+	}()
+
+	runErr := run()
+	_ = stdoutW.Close()
+	_ = stderrW.Close()
+	<-stdoutDone
+	<-stderrDone
+	_ = stdoutR.Close()
+	_ = stderrR.Close()
+
+	return stdoutBuf.String(), stderrBuf.String(), runErr
+}
+
+func expectedDigitalOceanSummaryCounts() map[string]int {
+	return map[string]int{
+		"max-items-one-changed": 6,
+		"missing-type":          3,
+		"type-changed":          2,
+	}
+}
+
+func parseSummaryTextCounts(t testing.TB, output string) map[string]int {
+	t.Helper()
+	got := map[string]int{}
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "- ") {
+			continue
+		}
+		raw := strings.TrimPrefix(line, "- ")
+		parts := strings.SplitN(raw, ": ", 2)
+		if len(parts) != 2 {
+			t.Fatalf("invalid summary line %q", line)
+		}
+		count, err := strconv.Atoi(parts[1])
+		if err != nil {
+			t.Fatalf("invalid summary count %q: %v", parts[1], err)
+		}
+		got[parts[0]] = count
+	}
+	return got
 }

@@ -92,6 +92,185 @@ func TestSchemasBuildsSummaryWithEntriesAndPaths(t *testing.T) {
 	}
 }
 
+func TestCompareClassifiesDirectMaxItemsOneTypeChange(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Types: map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:MyType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Type: "object",
+					Properties: map[string]schema.PropertySpec{
+						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Types: map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:MyType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Type: "object",
+					Properties: map[string]schema.PropertySpec{
+						"value": {
+							TypeSpec: schema.TypeSpec{
+								Type:  "array",
+								Items: &schema.TypeSpec{Type: "string"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1})
+	gotCounts := map[string]int{}
+	for _, item := range result.Summary {
+		gotCounts[item.Category] = item.Count
+	}
+
+	wantCounts := map[string]int{
+		categoryMaxItemsOneChanged: 1,
+	}
+	if !reflect.DeepEqual(gotCounts, wantCounts) {
+		t.Fatalf("summary counts mismatch: got %v want %v", gotCounts, wantCounts)
+	}
+}
+
+func TestComparePluralizedMaxItemsOneRenameIsConservative(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"filter": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+				RequiredInputs: []string{"filter"},
+			},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"filters": {
+						TypeSpec: schema.TypeSpec{
+							Type:  "array",
+							Items: &schema.TypeSpec{Type: "string"},
+						},
+					},
+				},
+				RequiredInputs: []string{"filters"},
+			},
+		},
+	}
+
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1})
+	gotCounts := map[string]int{}
+	for _, item := range result.Summary {
+		gotCounts[item.Category] = item.Count
+	}
+	wantCounts := map[string]int{
+		categoryMaxItemsOneChanged: 1,
+	}
+	if !reflect.DeepEqual(gotCounts, wantCounts) {
+		t.Fatalf("summary counts mismatch: got %v want %v", gotCounts, wantCounts)
+	}
+
+	newSchema.Resources["my-pkg:index:MyResource"] = schema.ResourceSpec{
+		InputProperties: map[string]schema.PropertySpec{
+			"filters": {
+				TypeSpec: schema.TypeSpec{
+					Type:  "array",
+					Items: &schema.TypeSpec{Type: "integer"},
+				},
+			},
+		},
+	}
+
+	result = Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1})
+	gotCounts = map[string]int{}
+	for _, item := range result.Summary {
+		gotCounts[item.Category] = item.Count
+	}
+	wantCounts = map[string]int{
+		categoryMissingInput: 1,
+	}
+	if !reflect.DeepEqual(gotCounts, wantCounts) {
+		t.Fatalf("expected non-matching pluralization to stay missing-input, got %v", gotCounts)
+	}
+}
+
+func TestComparePluralizedMaxItemsOneRenameDoesNotSuppressWhenKeysCoexist(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"filter": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+				RequiredInputs: []string{"filter"},
+			},
+		},
+		Types: map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:MyType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Type: "object",
+					Properties: map[string]schema.PropertySpec{
+						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+					Required: []string{"value"},
+				},
+			},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				InputProperties: map[string]schema.PropertySpec{
+					"filter": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					"filters": {
+						TypeSpec: schema.TypeSpec{
+							Type:  "array",
+							Items: &schema.TypeSpec{Type: "string"},
+						},
+					},
+				},
+				RequiredInputs: []string{"filters"},
+			},
+		},
+		Types: map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:MyType": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Type: "object",
+					Properties: map[string]schema.PropertySpec{
+						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+						"values": {
+							TypeSpec: schema.TypeSpec{
+								Type:  "array",
+								Items: &schema.TypeSpec{Type: "string"},
+							},
+						},
+					},
+					Required: []string{"values"},
+				},
+			},
+		},
+	}
+
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1})
+	gotCounts := map[string]int{}
+	for _, item := range result.Summary {
+		gotCounts[item.Category] = item.Count
+	}
+
+	wantCounts := map[string]int{
+		categoryOptionalToRequired: 2,
+		categoryRequiredToOptional: 1,
+	}
+	if !reflect.DeepEqual(gotCounts, wantCounts) {
+		t.Fatalf("coexisting singular/plural keys should keep requiredness deltas: got %v want %v", gotCounts, wantCounts)
+	}
+}
+
 func mustLoadFixtureSchemas(t testing.TB) (schema.PackageSpec, schema.PackageSpec) {
 	t.Helper()
 	oldSchema := mustReadFixtureSchema(t, "schema-old.json")
