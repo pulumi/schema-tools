@@ -3,8 +3,12 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
 	"os/user"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -109,6 +113,88 @@ type errorWriter struct{}
 
 func (errorWriter) Write(p []byte) (int, error) {
 	return 0, errors.New("write failed")
+}
+
+func TestCompareSchemasFixtureTextOutput(t *testing.T) {
+	oldSchema, newSchema := mustLoadFixtureSchemas(t)
+
+	var out bytes.Buffer
+	compareSchemas(&out, "my-pkg", oldSchema, newSchema, -1)
+
+	text := out.String()
+	assert.Contains(t, text, "Found 8 breaking changes:")
+	assert.Contains(t, text, `"my-pkg:index:RemovedResource" missing`)
+	assert.Contains(t, text, `"my-pkg:index:removedFunction" missing`)
+	assert.Contains(t, text, `type changed from "string" to "integer"`)
+	assert.Contains(t, text, `input has changed to Required`)
+	assert.Contains(t, text, `property is no longer Required`)
+}
+
+func TestRenderCompareOutputFixtureJSON(t *testing.T) {
+	oldSchema, newSchema := mustLoadFixtureSchemas(t)
+	result := comparepkg.Compare(oldSchema, newSchema, comparepkg.CompareOptions{
+		Provider:   "my-pkg",
+		MaxChanges: -1,
+	})
+
+	t.Run("full", func(t *testing.T) {
+		var out bytes.Buffer
+		err := renderCompareOutput(&out, result, true, false)
+		assert.NoError(t, err)
+
+		var payload struct {
+			Summary []struct {
+				Category string `json:"category"`
+				Count    int    `json:"count"`
+				Entries  []string
+			} `json:"summary"`
+			BreakingChanges []string `json:"breaking_changes"`
+			NewResources    []string `json:"new_resources"`
+			NewFunctions    []string `json:"new_functions"`
+		}
+		assert.NoError(t, json.Unmarshal(out.Bytes(), &payload))
+
+		gotCounts := map[string]int{}
+		for _, item := range payload.Summary {
+			gotCounts[item.Category] = item.Count
+			assert.Empty(t, item.Entries)
+		}
+		assert.True(t, reflect.DeepEqual(gotCounts, map[string]int{
+			"missing-function":     1,
+			"missing-resource":     1,
+			"optional-to-required": 3,
+			"required-to-optional": 2,
+			"type-changed":         1,
+		}))
+		assert.Equal(t, result.BreakingChanges, payload.BreakingChanges)
+		assert.Empty(t, payload.NewResources)
+		assert.Empty(t, payload.NewFunctions)
+	})
+
+	t.Run("summary", func(t *testing.T) {
+		var out bytes.Buffer
+		err := renderCompareOutput(&out, result, true, true)
+		assert.NoError(t, err)
+
+		var payload struct {
+			Summary []struct {
+				Category string   `json:"category"`
+				Count    int      `json:"count"`
+				Entries  []string `json:"entries"`
+			} `json:"summary"`
+		}
+		assert.NoError(t, json.Unmarshal(out.Bytes(), &payload))
+
+		entriesByCategory := map[string][]string{}
+		for _, item := range payload.Summary {
+			entriesByCategory[item.Category] = item.Entries
+		}
+		assert.Equal(t, []string{
+			`Functions: "my-pkg:index:MyFunction": inputs: required: "arg" input has changed to Required`,
+			`Resources: "my-pkg:index:MyResource": required inputs: "count" input has changed to Required`,
+			`Types: "my-pkg:index:MyType": required: "count" property has changed to Required`,
+		}, entriesByCategory["optional-to-required"])
+	})
 }
 
 func TestBreakingResourceRequired(t *testing.T) {
@@ -345,4 +431,26 @@ func simpleTypeSchema(t schema.ComplexTypeSpec) schema.PackageSpec {
 		p.Name + ":index:MyType": t,
 	}
 	return p
+}
+
+func mustLoadFixtureSchemas(t testing.TB) (schema.PackageSpec, schema.PackageSpec) {
+	t.Helper()
+	oldSchema := mustReadFixtureSchema(t, "schema-old.json")
+	newSchema := mustReadFixtureSchema(t, "schema-new.json")
+	return oldSchema, newSchema
+}
+
+func mustReadFixtureSchema(t testing.TB, name string) schema.PackageSpec {
+	t.Helper()
+	path := filepath.Join("..", "..", "testdata", "compare", name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", path, err)
+	}
+
+	var spec schema.PackageSpec
+	if err := json.Unmarshal(data, &spec); err != nil {
+		t.Fatalf("failed to unmarshal fixture %q: %v", name, err)
+	}
+	return spec
 }
