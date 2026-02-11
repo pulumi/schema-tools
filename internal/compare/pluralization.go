@@ -9,28 +9,47 @@ import (
 
 // pluralizationCandidates returns singular/plural variants for a property name.
 func pluralizationCandidates(name string) []string {
-	if name == "" {
+	first, second := pluralizationCandidatePair(name)
+	switch {
+	case first == "":
 		return nil
+	case second == "":
+		return []string{first}
+	default:
+		return []string{first, second}
 	}
+}
 
-	candidates := []string{}
-	seen := map[string]bool{}
+func pluralizationCandidatePair(name string) (first string, second string) {
+	if name == "" {
+		return "", ""
+	}
+	plural := inflector.Pluralize(name)
+	singular := inflector.Singularize(name)
+
 	add := func(candidate string) {
-		if candidate == "" || candidate == name || seen[candidate] {
+		if candidate == "" || candidate == name || candidate == first {
 			return
 		}
-		seen[candidate] = true
-		candidates = append(candidates, candidate)
+		if first == "" {
+			first = candidate
+			return
+		}
+		if second == "" {
+			second = candidate
+		}
 	}
-
-	add(inflector.Pluralize(name))
-	add(inflector.Singularize(name))
-
-	return candidates
+	add(plural)
+	add(singular)
+	return first, second
 }
 
 func maxItemsOneRename(oldName string, oldProp schema.PropertySpec, newProps map[string]schema.PropertySpec) (string, bool) {
-	for _, candidate := range pluralizationCandidates(oldName) {
+	first, second := pluralizationCandidatePair(oldName)
+	for _, candidate := range [2]string{first, second} {
+		if candidate == "" {
+			continue
+		}
 		newProp, ok := newProps[candidate]
 		if !ok {
 			continue
@@ -71,7 +90,11 @@ func isMaxItemsOneRenameRequired(newName string, oldRequired set.Set[string], ol
 	if !ok {
 		return false
 	}
-	for _, candidate := range pluralizationCandidates(newName) {
+	first, second := pluralizationCandidatePair(newName)
+	for _, candidate := range [2]string{first, second} {
+		if candidate == "" {
+			continue
+		}
 		if !oldRequired.Has(candidate) {
 			continue
 		}
@@ -97,7 +120,11 @@ func isMaxItemsOneRenameRequiredToOptional(oldName string, newRequired set.Set[s
 	if !ok {
 		return false
 	}
-	for _, candidate := range pluralizationCandidates(oldName) {
+	first, second := pluralizationCandidatePair(oldName)
+	for _, candidate := range [2]string{first, second} {
+		if candidate == "" {
+			continue
+		}
 		if !newRequired.Has(candidate) {
 			continue
 		}

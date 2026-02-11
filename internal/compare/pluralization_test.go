@@ -63,7 +63,7 @@ func TestMaxItemsOneRename(t *testing.T) {
 			wantOK: false,
 		},
 		{
-			name: "rejects when candidate key missing",
+			name:    "rejects when candidate key missing",
 			oldName: "filter",
 			newProps: map[string]schema.PropertySpec{
 				"other": arrayProperty("string"),
@@ -246,6 +246,27 @@ func TestIsMaxItemsOneRenameRequiredToOptional(t *testing.T) {
 				t.Fatalf("isMaxItemsOneRenameRequiredToOptional(%q): got %v want %v", tc.oldName, got, tc.want)
 			}
 		})
+	}
+}
+
+func BenchmarkPluralizationCandidates(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = pluralizationCandidates("filter")
+	}
+}
+
+func BenchmarkMaxItemsOneRenameRequiredToOptional(b *testing.B) {
+	b.ReportAllocs()
+	oldProps := map[string]schema.PropertySpec{
+		"filter": scalarProperty("string"),
+	}
+	newRequired := set.FromSlice([]string{"filters"})
+	newProps := map[string]schema.PropertySpec{
+		"filters": arrayProperty("string"),
+	}
+	for i := 0; i < b.N; i++ {
+		_ = isMaxItemsOneRenameRequiredToOptional("filter", newRequired, oldProps, newProps)
 	}
 }
 
