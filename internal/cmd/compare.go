@@ -116,10 +116,16 @@ func compare(
 		return err
 	}
 
-	result := comparepkg.Compare(schOld, schNew, comparepkg.CompareOptions{
+	opts := comparepkg.CompareOptions{
 		Provider:   provider,
 		MaxChanges: maxChanges,
-	})
+	}
+	var result comparepkg.CompareResult
+	if !jsonMode && !summaryMode {
+		result = comparepkg.CompareForText(schOld, schNew, opts)
+	} else {
+		result = comparepkg.Compare(schOld, schNew, opts)
+	}
 	return renderCompareOutput(os.Stdout, result, jsonMode, summaryMode)
 }
 
@@ -139,7 +145,7 @@ func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 }
 
 func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec, maxChanges int) {
-	result := comparepkg.Compare(oldSchema, newSchema, comparepkg.CompareOptions{
+	result := comparepkg.CompareForText(oldSchema, newSchema, comparepkg.CompareOptions{
 		Provider:   provider,
 		MaxChanges: maxChanges,
 	})

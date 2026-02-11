@@ -116,3 +116,29 @@ func TestWalkDisplayed(t *testing.T) {
 		t.Fatalf("expected 2 displayed titled nodes, got %d", count)
 	}
 }
+
+func TestLabelReusesSameChildNode(t *testing.T) {
+	root := &Node{}
+	a := root.Label("Resources")
+	b := root.Label("Resources")
+	if a != b {
+		t.Fatalf("expected repeated label lookup to return same node")
+	}
+}
+
+func TestPruneRebuildsLookupIndex(t *testing.T) {
+	root := &Node{}
+	keep := root.Label("keep")
+	keep.SetDescription(Info, "visible")
+	root.Label("drop")
+
+	root.Prune()
+
+	got := root.Label("drop")
+	if got.Title != "drop" {
+		t.Fatalf("expected recreated node title drop, got %q", got.Title)
+	}
+	if len(root.subfields) != 2 {
+		t.Fatalf("expected keep + recreated drop after prune, got %d children", len(root.subfields))
+	}
+}

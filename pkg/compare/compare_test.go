@@ -1,6 +1,7 @@
 package compare
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
@@ -106,6 +107,46 @@ func TestCompareBuildsSummaryWithEntriesAndPaths(t *testing.T) {
 	}
 	if !seenTypeChanged {
 		t.Fatalf("expected type-changed category in summary")
+	}
+}
+
+func TestCompareForTextAvoidsBreakingChangeMaterialization(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+					Required: []string{"value"},
+				},
+			},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		},
+	}
+
+	result := CompareForText(oldSchema, newSchema, CompareOptions{
+		Provider:   "my-pkg",
+		MaxChanges: -1,
+	})
+	if len(result.BreakingChanges) != 0 {
+		t.Fatalf("expected no precomputed breaking changes in text-only compare, got %v", result.BreakingChanges)
+	}
+
+	var out bytes.Buffer
+	RenderText(&out, result)
+	if !bytes.Contains(out.Bytes(), []byte("Found 1 breaking change")) {
+		t.Fatalf("expected rendered text output to include breaking-change count, got %q", out.String())
 	}
 }
 

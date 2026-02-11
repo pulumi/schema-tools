@@ -13,10 +13,7 @@ import (
 
 // Compare computes a structured comparison result for two package specs.
 func Compare(oldSchema, newSchema schema.PackageSpec, opts CompareOptions) CompareResult {
-	report := internalcompare.Analyze(opts.Provider, oldSchema, newSchema)
-	sort.Strings(report.NewResources)
-	sort.Strings(report.NewFunctions)
-
+	report := analyzeAndSort(opts.Provider, oldSchema, newSchema)
 	result := CompareResult{
 		Summary:         summarize(report),
 		BreakingChanges: splitViolations(report, opts.MaxChanges),
@@ -28,9 +25,27 @@ func Compare(oldSchema, newSchema schema.PackageSpec, opts CompareOptions) Compa
 	return result
 }
 
+// CompareForText computes just the data needed for RenderText output.
+func CompareForText(oldSchema, newSchema schema.PackageSpec, opts CompareOptions) CompareResult {
+	report := analyzeAndSort(opts.Provider, oldSchema, newSchema)
+	return CompareResult{
+		NewResources: cloneOrEmpty(report.NewResources),
+		NewFunctions: cloneOrEmpty(report.NewFunctions),
+		report:       report,
+		maxChanges:   opts.MaxChanges,
+	}
+}
+
 // RenderText writes the current human-readable compare output.
 func RenderText(out io.Writer, result CompareResult) {
 	internalcompare.RenderText(out, result.report, result.maxChanges)
+}
+
+func analyzeAndSort(provider string, oldSchema, newSchema schema.PackageSpec) internalcompare.Report {
+	report := internalcompare.Analyze(provider, oldSchema, newSchema)
+	sort.Strings(report.NewResources)
+	sort.Strings(report.NewFunctions)
+	return report
 }
 
 func splitViolations(report internalcompare.Report, maxChanges int) []string {
