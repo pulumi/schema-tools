@@ -42,6 +42,27 @@ func maxItemsOneRename(oldName string, oldProp schema.PropertySpec, newProps map
 	return "", false
 }
 
+func isTrueRename(oldName, newName string, oldProps, newProps map[string]schema.PropertySpec) bool {
+	if oldName == "" || newName == "" || oldName == newName {
+		return false
+	}
+	if _, ok := oldProps[oldName]; !ok {
+		return false
+	}
+	if _, ok := newProps[newName]; !ok {
+		return false
+	}
+	// Rename suppression should apply only when the old key was removed
+	// and the new key did not already exist in the old schema.
+	if _, stillInNew := newProps[oldName]; stillInNew {
+		return false
+	}
+	if _, existedInOld := oldProps[newName]; existedInOld {
+		return false
+	}
+	return true
+}
+
 func isMaxItemsOneRenameRequired(newName string, oldRequired set.Set[string], oldProps, newProps map[string]schema.PropertySpec) bool {
 	if newName == "" {
 		return false
@@ -52,6 +73,9 @@ func isMaxItemsOneRenameRequired(newName string, oldRequired set.Set[string], ol
 	}
 	for _, candidate := range pluralizationCandidates(newName) {
 		if !oldRequired.Has(candidate) {
+			continue
+		}
+		if !isTrueRename(candidate, newName, oldProps, newProps) {
 			continue
 		}
 		oldProp, ok := oldProps[candidate]
@@ -75,6 +99,9 @@ func isMaxItemsOneRenameRequiredToOptional(oldName string, newRequired set.Set[s
 	}
 	for _, candidate := range pluralizationCandidates(oldName) {
 		if !newRequired.Has(candidate) {
+			continue
+		}
+		if !isTrueRename(oldName, candidate, oldProps, newProps) {
 			continue
 		}
 		newProp, ok := newProps[candidate]
