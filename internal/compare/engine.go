@@ -197,14 +197,16 @@ func BreakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			}
 
 			var newRequired set.Set[string]
+			var newOutputProperties map[string]schema.PropertySpec
 			if newFunc.Outputs != nil {
 				newRequired = set.FromSlice(newFunc.Outputs.Required)
+				newOutputProperties = newFunc.Outputs.Properties
 			}
 			msg = msg.Label("required")
 			for _, req := range f.Outputs.Required {
 				_, stillExists := f.Outputs.Properties[req]
 				if !newRequired.Has(req) && stillExists {
-					if isMaxItemsOneRenameRequiredToOptional(req, newRequired, f.Outputs.Properties, newFunc.Outputs.Properties) {
+					if isMaxItemsOneRenameRequiredToOptional(req, newRequired, f.Outputs.Properties, newOutputProperties) {
 						continue
 					}
 					msg.Value(req).SetDescription(
