@@ -113,29 +113,31 @@ func summarize(report internalcompare.Report) []SummaryItem {
 func classify(path string, description string) string {
 	switch {
 	case strings.HasPrefix(path, "Resources:") && strings.Contains(path, ": inputs:") && description == "missing":
-		return "missing-input"
+		return categoryMissingInput
 	case strings.HasPrefix(path, "Types:") && strings.Contains(path, ": properties:") && description == "missing":
-		return "missing-property"
+		return categoryMissingProperty
 	case strings.HasPrefix(description, "missing input"):
-		return "missing-input"
+		return categoryMissingInput
 	case strings.HasPrefix(description, "missing output"):
-		return "missing-output"
+		return categoryMissingOutput
 	case description == "missing" && strings.HasPrefix(path, "Resources:"):
-		return "missing-resource"
+		return categoryMissingResource
 	case description == "missing" && strings.HasPrefix(path, "Functions:"):
-		return "missing-function"
+		return categoryMissingFunction
 	case description == "missing" && strings.HasPrefix(path, "Types:"):
-		return "missing-type"
+		return categoryMissingType
+	case strings.Contains(description, "max-items-one"):
+		return categoryMaxItemsOneChanged
 	case strings.Contains(description, "type changed") || strings.Contains(description, "had no type") || strings.Contains(description, "now has no type"):
-		return "type-changed"
+		return categoryTypeChanged
 	case strings.Contains(description, "has changed to Required"):
-		return "optional-to-required"
+		return categoryOptionalToRequired
 	case strings.Contains(description, "is no longer Required"):
-		return "required-to-optional"
+		return categoryRequiredToOptional
 	case strings.Contains(description, "signature change"):
-		return "signature-changed"
+		return categorySignatureChanged
 	default:
-		return "other"
+		return categoryOther
 	}
 }
 

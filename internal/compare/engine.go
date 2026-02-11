@@ -44,6 +44,13 @@ func BreakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			msg := msg.Label("inputs").Value(propName)
 			newProp, ok := newRes.InputProperties[propName]
 			if !ok {
+				if candidate, ok := maxItemsOneRename(propName, prop, newRes.InputProperties); ok {
+					renamed := newRes.InputProperties[candidate]
+					oldType := typeIdentifier(&prop.TypeSpec)
+					newType := typeIdentifier(&renamed.TypeSpec)
+					msg.SetDescription(diagtree.Warn, changedToMaxItemsOneRename(oldType, newType, candidate))
+					continue
+				}
 				msg.SetDescription(diagtree.Warn, "missing")
 				continue
 			}
@@ -55,6 +62,13 @@ func BreakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			msg := msg.Label("properties").Value(propName)
 			newProp, ok := newRes.Properties[propName]
 			if !ok {
+				if candidate, ok := maxItemsOneRename(propName, prop, newRes.Properties); ok {
+					renamed := newRes.Properties[candidate]
+					oldType := typeIdentifier(&prop.TypeSpec)
+					newType := typeIdentifier(&renamed.TypeSpec)
+					msg.SetDescription(diagtree.Warn, changedToMaxItemsOneRename(oldType, newType, candidate))
+					continue
+				}
 				msg.SetDescription(diagtree.Warn, "missing output %q", propName)
 				continue
 			}
@@ -66,6 +80,9 @@ func BreakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 		for _, input := range newRes.RequiredInputs {
 			msg := msg.Label("required inputs").Value(input)
 			if !oldRequiredInputs.Has(input) {
+				if isMaxItemsOneRenameRequired(input, oldRequiredInputs, res.InputProperties, newRes.InputProperties) {
+					continue
+				}
 				msg.SetDescription(diagtree.Info, changedToRequired("input"))
 			}
 		}
@@ -80,6 +97,9 @@ func BreakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			// already warned on, so we don't need to warn here.
 			_, stillExists := newRes.Properties[prop]
 			if !newRequiredProperties.Has(prop) && stillExists {
+				if isMaxItemsOneRenameRequiredToOptional(prop, newRequiredProperties, res.Properties, newRes.Properties) {
+					continue
+				}
 				msg.SetDescription(diagtree.Info, changedToOptional("property"))
 			}
 		}
@@ -104,6 +124,13 @@ func BreakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 
 				newProp, ok := newFunc.Inputs.Properties[propName]
 				if !ok {
+					if candidate, ok := maxItemsOneRename(propName, prop, newFunc.Inputs.Properties); ok {
+						renamed := newFunc.Inputs.Properties[candidate]
+						oldType := typeIdentifier(&prop.TypeSpec)
+						newType := typeIdentifier(&renamed.TypeSpec)
+						msg.SetDescription(diagtree.Warn, changedToMaxItemsOneRename(oldType, newType, candidate))
+						continue
+					}
 					msg.SetDescription(diagtree.Warn, "missing input %q", propName)
 					continue
 				}
@@ -116,6 +143,9 @@ func BreakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 				oldRequired := set.FromSlice(f.Inputs.Required)
 				for _, req := range newFunc.Inputs.Required {
 					if !oldRequired.Has(req) {
+						if isMaxItemsOneRenameRequired(req, oldRequired, f.Inputs.Properties, newFunc.Inputs.Properties) {
+							continue
+						}
 						msg.Value(req).SetDescription(diagtree.Info,
 							changedToRequired("input"))
 					}
@@ -152,6 +182,13 @@ func BreakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 
 				newProp, ok := newFunc.Outputs.Properties[propName]
 				if !ok {
+					if candidate, ok := maxItemsOneRename(propName, prop, newFunc.Outputs.Properties); ok {
+						renamed := newFunc.Outputs.Properties[candidate]
+						oldType := typeIdentifier(&prop.TypeSpec)
+						newType := typeIdentifier(&renamed.TypeSpec)
+						msg.SetDescription(diagtree.Warn, changedToMaxItemsOneRename(oldType, newType, candidate))
+						continue
+					}
 					msg.SetDescription(diagtree.Warn, "missing output")
 					continue
 				}
@@ -167,6 +204,9 @@ func BreakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			for _, req := range f.Outputs.Required {
 				_, stillExists := f.Outputs.Properties[req]
 				if !newRequired.Has(req) && stillExists {
+					if isMaxItemsOneRenameRequiredToOptional(req, newRequired, f.Outputs.Properties, newFunc.Outputs.Properties) {
+						continue
+					}
 					msg.Value(req).SetDescription(
 						diagtree.Info, changedToOptional("property"))
 				}
@@ -186,6 +226,13 @@ func BreakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 			msg := msg.Label("properties").Value(propName)
 			newProp, ok := newTyp.Properties[propName]
 			if !ok {
+				if candidate, ok := maxItemsOneRename(propName, prop, newTyp.Properties); ok {
+					renamed := newTyp.Properties[candidate]
+					oldType := typeIdentifier(&prop.TypeSpec)
+					newType := typeIdentifier(&renamed.TypeSpec)
+					msg.SetDescription(diagtree.Warn, changedToMaxItemsOneRename(oldType, newType, candidate))
+					continue
+				}
 				msg.SetDescription(diagtree.Warn, "missing")
 				continue
 			}
@@ -200,6 +247,9 @@ func BreakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 		for _, r := range typ.Required {
 			_, stillExists := typ.Properties[r]
 			if !newRequired.Has(r) && stillExists {
+				if isMaxItemsOneRenameRequiredToOptional(r, newRequired, typ.Properties, newTyp.Properties) {
+					continue
+				}
 				msg.Label("required").Value(r).SetDescription(
 					diagtree.Info, changedToOptional("property"))
 			}
@@ -207,6 +257,9 @@ func BreakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
 		required := set.FromSlice(typ.Required)
 		for _, r := range newTyp.Required {
 			if !required.Has(r) {
+				if isMaxItemsOneRenameRequired(r, required, typ.Properties, newTyp.Properties) {
+					continue
+				}
 				msg.Label("required").Value(r).SetDescription(
 					diagtree.Info, changedToRequired("property"))
 			}
@@ -239,6 +292,10 @@ func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, msg *diagtree.Nod
 		newType = new.Ref
 	}
 	if oldType != newType {
+		if isMaxItemsOneChange(old, new) {
+			msg.SetDescription(diagtree.Warn, changedToMaxItemsOne(oldType, newType))
+			return
+		}
 		msg.SetDescription(diagtree.Warn, "type changed from %q to %q", oldType, newType)
 	}
 
