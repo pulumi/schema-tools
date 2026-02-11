@@ -2,7 +2,12 @@ package cmd
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"os/user"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/pulumi/schema-tools/internal/util/diagtree"
@@ -54,6 +59,56 @@ func TestRenderCompareOutputModes(t *testing.T) {
 		assert.NotContains(t, out.String(), `"line-1"`)
 		assert.NotContains(t, out.String(), `"r1"`)
 	})
+
+	t.Run("summary write error", func(t *testing.T) {
+		err := renderCompareOutput(errorWriter{}, result, false, true)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "write summary output")
+	})
+}
+
+func TestCompareLocalCurrentUserErrorCancelsOldSchemaDownload(t *testing.T) {
+	origCurrentUser := currentUser
+	origDownloadSchema := downloadSchema
+	origLoadLocalPackageSpec := loadLocalPackageSpec
+	t.Cleanup(func() {
+		currentUser = origCurrentUser
+		downloadSchema = origDownloadSchema
+		loadLocalPackageSpec = origLoadLocalPackageSpec
+	})
+
+	currentUser = func() (*user.User, error) {
+		return nil, errors.New("whoami failed")
+	}
+	oldDownloadCanceled := make(chan struct{})
+	downloadSchema = func(
+		ctx context.Context, repository string, provider string, ref string,
+	) (schema.PackageSpec, error) {
+		<-ctx.Done()
+		close(oldDownloadCanceled)
+		return schema.PackageSpec{}, ctx.Err()
+	}
+	loadLocalPackageSpec = func(path string) (schema.PackageSpec, error) {
+		t.Fatalf("loadLocalPackageSpec should not be called, got path=%s", path)
+		return schema.PackageSpec{}, nil
+	}
+
+	err := compare("aws", "github://api.github.com/pulumi", "old", "--local", 100, false, false)
+	if assert.Error(t, err) {
+		assert.True(t, strings.Contains(err.Error(), "get current user"))
+	}
+
+	select {
+	case <-oldDownloadCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("old schema download goroutine was not canceled")
+	}
+}
+
+type errorWriter struct{}
+
+func (errorWriter) Write(p []byte) (int, error) {
+	return 0, errors.New("write failed")
 }
 
 func TestBreakingResourceRequired(t *testing.T) {

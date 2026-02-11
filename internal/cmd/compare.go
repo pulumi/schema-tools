@@ -18,6 +18,12 @@ import (
 	comparepkg "github.com/pulumi/schema-tools/pkg/compare"
 )
 
+var (
+	currentUser          = user.Current
+	downloadSchema       = pkg.DownloadSchema
+	loadLocalPackageSpec = pkg.LoadLocalPackageSpec
+)
+
 func compareCmd() *cobra.Command {
 	var provider, repository, oldCommit, newCommit string
 	var maxChanges int
@@ -65,10 +71,10 @@ func compare(
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var schOld schema.PackageSpec
-	schOldDone := make(chan error)
+	schOldDone := make(chan error, 1)
 	go func() {
 		var err error
-		schOld, err = pkg.DownloadSchema(ctx, repository, provider, oldCommit)
+		schOld, err = downloadSchema(ctx, repository, provider, oldCommit)
 		if err != nil {
 			cancel()
 		}
@@ -77,12 +83,14 @@ func compare(
 
 	var schNew schema.PackageSpec
 	if newCommit == "--local" {
-		usr, _ := user.Current()
+		usr, err := currentUser()
+		if err != nil {
+			return fmt.Errorf("get current user: %w", err)
+		}
 		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi/%s", usr.HomeDir, provider)
 		schemaFile := pkg.StandardSchemaPath(provider)
 		schemaPath := filepath.Join(basePath, schemaFile)
-		var err error
-		schNew, err = pkg.LoadLocalPackageSpec(schemaPath)
+		schNew, err = loadLocalPackageSpec(schemaPath)
 		if err != nil {
 			return err
 		}
@@ -92,13 +100,13 @@ func compare(
 		if err != nil {
 			return fmt.Errorf("unable to construct absolute path to schema.json: %w", err)
 		}
-		schNew, err = pkg.LoadLocalPackageSpec(schemaPath)
+		schNew, err = loadLocalPackageSpec(schemaPath)
 		if err != nil {
 			return err
 		}
 	} else {
 		var err error
-		schNew, err = pkg.DownloadSchema(ctx, repository, provider, newCommit)
+		schNew, err = downloadSchema(ctx, repository, provider, newCommit)
 		if err != nil {
 			return err
 		}
@@ -120,8 +128,7 @@ func renderCompareOutput(out io.Writer, result comparepkg.CompareResult, jsonMod
 		return comparepkg.RenderJSON(out, result, summaryMode)
 	}
 	if summaryMode {
-		comparepkg.RenderSummary(out, result)
-		return nil
+		return comparepkg.RenderSummary(out, result)
 	}
 	comparepkg.RenderText(out, result)
 	return nil

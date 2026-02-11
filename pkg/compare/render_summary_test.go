@@ -2,6 +2,7 @@ package compare
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -16,7 +17,9 @@ func TestRenderSummaryIncludesCountsOnly(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	RenderSummary(&out, result)
+	if err := RenderSummary(&out, result); err != nil {
+		t.Fatalf("RenderSummary returned error: %v", err)
+	}
 
 	text := out.String()
 	if !strings.Contains(text, "Summary by category:") {
@@ -28,4 +31,21 @@ func TestRenderSummaryIncludesCountsOnly(t *testing.T) {
 	if strings.Contains(text, "e1") || strings.Contains(text, "e2") {
 		t.Fatalf("did not expect entries in summary text output: %s", text)
 	}
+}
+
+func TestRenderSummaryWriteError(t *testing.T) {
+	result := CompareResult{
+		Summary: []SummaryItem{{Category: "missing-input", Count: 1}},
+	}
+
+	err := RenderSummary(failingWriter{}, result)
+	if err == nil {
+		t.Fatal("expected write error")
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write(p []byte) (int, error) {
+	return 0, errors.New("boom")
 }
