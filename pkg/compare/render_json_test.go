@@ -3,6 +3,7 @@ package compare
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -82,6 +83,28 @@ func TestRenderJSONSummaryOnly(t *testing.T) {
 	if !bytes.Contains(out.Bytes(), []byte("missing-input")) || !bytes.Contains(out.Bytes(), []byte("e1")) {
 		t.Fatalf("expected summary entries in summary-only output, got %s", out.String())
 	}
+	if bytes.Contains(out.Bytes(), []byte(`"breaking_changes"`)) {
+		t.Fatalf("expected summary-only JSON to omit breaking_changes key, got %s", out.String())
+	}
+	if bytes.Contains(out.Bytes(), []byte(`"new_resources"`)) || bytes.Contains(out.Bytes(), []byte(`"new_functions"`)) {
+		t.Fatalf("expected summary-only JSON to omit new_resources/new_functions keys, got %s", out.String())
+	}
+}
+
+func TestRenderJSONWriteError(t *testing.T) {
+	result := CompareResult{
+		Summary: []SummaryItem{{Category: "missing-input", Count: 1}},
+	}
+	err := RenderJSON(jsonFailingWriter{}, result, false)
+	if err == nil {
+		t.Fatal("expected write error")
+	}
+}
+
+type jsonFailingWriter struct{}
+
+func (jsonFailingWriter) Write(p []byte) (int, error) {
+	return 0, errors.New("boom")
 }
 
 func TestRenderJSONFixtureContent(t *testing.T) {

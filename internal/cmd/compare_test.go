@@ -60,8 +60,14 @@ func TestRenderCompareOutputModes(t *testing.T) {
 		err := renderCompareOutput(&out, result, true, true)
 		assert.NoError(t, err)
 		assert.Contains(t, out.String(), `"summary": [`)
+		assert.Contains(t, out.String(), `"missing-input"`)
+		assert.Contains(t, out.String(), `"entries": [`)
 		assert.NotContains(t, out.String(), `"line-1"`)
 		assert.NotContains(t, out.String(), `"r1"`)
+		assert.NotContains(t, out.String(), `"f1"`)
+		assert.NotContains(t, out.String(), `"breaking_changes":`)
+		assert.NotContains(t, out.String(), `"new_resources":`)
+		assert.NotContains(t, out.String(), `"new_functions":`)
 	})
 
 	t.Run("summary write error", func(t *testing.T) {

@@ -44,6 +44,17 @@ func TestRenderSummaryWriteError(t *testing.T) {
 	}
 }
 
+func TestRenderSummaryEmpty(t *testing.T) {
+	var out bytes.Buffer
+	err := RenderSummary(&out, CompareResult{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.String() != "No breaking changes found.\n" {
+		t.Fatalf("unexpected empty summary output: %q", out.String())
+	}
+}
+
 type failingWriter struct{}
 
 func (failingWriter) Write(p []byte) (int, error) {
