@@ -22,13 +22,23 @@ import (
 
 func compareCmd() *cobra.Command {
 	var provider, repository, oldCommit, newCommit string
+	var oldPath, newPath string
 	var maxChanges int
 
 	command := &cobra.Command{
 		Use:   "compare",
 		Short: "Compare two versions of a Pulumi schema",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return compare(provider, repository, oldCommit, newCommit, maxChanges)
+			if newCommit == "" && newPath == "" {
+				return fmt.Errorf("either --new-commit or --new-path must be set")
+			}
+			if newCommit != "" && newPath != "" {
+				return fmt.Errorf("--new-commit and --new-path are mutually exclusive")
+			}
+			if oldCommit != "" && oldPath != "" {
+				return fmt.Errorf("--old-commit and --old-path are mutually exclusive")
+			}
+			return compare(provider, repository, oldCommit, newCommit, oldPath, newPath, maxChanges)
 		},
 	}
 
@@ -39,12 +49,15 @@ func compareCmd() *cobra.Command {
 		"github://api.github.com/pulumi", "the Git repository to download the schema file from")
 	_ = command.MarkFlagRequired("provider")
 
-	command.Flags().StringVarP(&oldCommit, "old-commit", "o", "master",
-		"the old commit to compare with (defaults to master)")
+	command.Flags().StringVarP(&oldCommit, "old-commit", "o", "",
+		"the old commit to compare with (defaults to master when no --old-path is set)")
+	command.Flags().StringVar(&oldPath, "old-path", "",
+		"path to a local schema file to use as the old version")
 
 	command.Flags().StringVarP(&newCommit, "new-commit", "n", "",
 		"the new commit to compare against the old commit")
-	_ = command.MarkFlagRequired("new-commit")
+	command.Flags().StringVar(&newPath, "new-path", "",
+		"path to a local schema file to use as the new version")
 
 	command.Flags().IntVarP(&maxChanges, "max-changes", "m", 500,
 		"the maximum number of breaking changes to display. Pass -1 to display all changes")
@@ -52,14 +65,29 @@ func compareCmd() *cobra.Command {
 	return command
 }
 
-func compare(provider string, repository string, oldCommit string, newCommit string, maxChanges int) error {
+func compare(provider string, repository string, oldCommit string, newCommit string, oldPath string, newPath string, maxChanges int) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	loadLocal := func(path string) (schema.PackageSpec, error) {
+		schemaPath, err := filepath.Abs(path)
+		if err != nil {
+			return schema.PackageSpec{}, fmt.Errorf("unable to construct absolute path to schema.json: %w", err)
+		}
+		return pkg.LoadLocalPackageSpec(schemaPath)
+	}
+
 	var schOld schema.PackageSpec
 	schOldDone := make(chan error)
 	go func() {
 		var err error
-		schOld, err = pkg.DownloadSchema(ctx, repository, provider, oldCommit)
+		switch {
+		case oldPath != "":
+			schOld, err = loadLocal(oldPath)
+		case oldCommit != "":
+			schOld, err = pkg.DownloadSchema(ctx, repository, provider, oldCommit)
+		default:
+			schOld, err = pkg.DownloadSchema(ctx, repository, provider, "master")
+		}
 		if err != nil {
 			cancel()
 		}
@@ -67,22 +95,30 @@ func compare(provider string, repository string, oldCommit string, newCommit str
 	}()
 
 	var schNew schema.PackageSpec
-	if newCommit == "--local" {
+	if newPath != "" {
+		var err error
+		schNew, err = loadLocal(newPath)
+		if err != nil {
+			return err
+		}
+	} else if strings.HasPrefix(newCommit, "--local-path=") {
+		fmt.Fprintln(os.Stderr, "Warning: --local-path= in --new-commit is deprecated, use --new-path instead")
+		parts := strings.Split(newCommit, "=")
+		if len(parts) < 2 || parts[1] == "" {
+			return fmt.Errorf("invalid --local-path value: %q", newCommit)
+		}
+		var err error
+		schNew, err = loadLocal(parts[1])
+		if err != nil {
+			return err
+		}
+	} else if newCommit == "--local" {
+		fmt.Fprintln(os.Stderr, "Warning: --local in --new-commit is deprecated, use --new-path instead")
 		usr, _ := user.Current()
 		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi/%s", usr.HomeDir, provider)
 		schemaFile := pkg.StandardSchemaPath(provider)
 		schemaPath := filepath.Join(basePath, schemaFile)
 		var err error
-		schNew, err = pkg.LoadLocalPackageSpec(schemaPath)
-		if err != nil {
-			return err
-		}
-	} else if strings.HasPrefix(newCommit, "--local-path=") {
-		parts := strings.Split(newCommit, "=")
-		schemaPath, err := filepath.Abs(parts[1])
-		if err != nil {
-			return fmt.Errorf("unable to construct absolute path to schema.json: %w", err)
-		}
 		schNew, err = pkg.LoadLocalPackageSpec(schemaPath)
 		if err != nil {
 			return err
