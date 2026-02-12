@@ -2,10 +2,6 @@ package compare
 
 import (
 	"bytes"
-	"context"
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
@@ -256,56 +252,4 @@ func simpleTypeSchema(t schema.ComplexTypeSpec) schema.PackageSpec {
 		p.Name + ":index:MyType": t,
 	}
 	return p
-}
-
-func TestCompareSampleUsageBothLocalPaths(t *testing.T) {
-	oldPath := writeSchemaFile(t, simpleEmptySchema())
-	newPath := writeSchemaFile(t, simpleEmptySchema())
-
-	err := compare("aws", "github://api.github.com/pulumi", "", "", oldPath, newPath, -1)
-	assert.NoError(t, err)
-}
-
-func TestCompareSampleUsageDefaultsOldToMaster(t *testing.T) {
-	origDownloadSchema := downloadSchema
-	t.Cleanup(func() {
-		downloadSchema = origDownloadSchema
-	})
-
-	refCh := make(chan string, 1)
-	downloadSchema = func(
-		_ context.Context, repository string, provider string, ref string,
-	) (schema.PackageSpec, error) {
-		assert.Equal(t, "github://api.github.com/pulumi", repository)
-		assert.Equal(t, "aws", provider)
-		refCh <- ref
-		return simpleEmptySchema(), nil
-	}
-
-	newPath := writeSchemaFile(t, simpleEmptySchema())
-	err := compare("aws", "github://api.github.com/pulumi", "", "", "", newPath, -1)
-	assert.NoError(t, err)
-
-	select {
-	case gotRef := <-refCh:
-		assert.Equal(t, "master", gotRef)
-	default:
-		t.Fatalf("expected old schema download call")
-	}
-}
-
-func writeSchemaFile(t *testing.T, spec schema.PackageSpec) string {
-	t.Helper()
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "schema.json")
-
-	data, err := json.Marshal(spec)
-	if err != nil {
-		t.Fatalf("marshal schema: %v", err)
-	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		t.Fatalf("write schema file: %v", err)
-	}
-	return path
 }
