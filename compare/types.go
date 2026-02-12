@@ -1,7 +1,5 @@
 package compare
 
-import internalcompare "github.com/pulumi/schema-tools/internal/compare"
-
 // Options configures compare behavior.
 type Options struct {
 	Provider   string
@@ -21,7 +19,4 @@ type Result struct {
 	BreakingChanges []string      `json:"breaking_changes"`
 	NewResources    []string      `json:"new_resources"`
 	NewFunctions    []string      `json:"new_functions"`
-
-	report     internalcompare.Report
-	maxChanges int
 }

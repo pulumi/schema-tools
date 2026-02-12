@@ -13,12 +13,10 @@ func TestAnalyzeNoBreakingChanges(t *testing.T) {
 	oldSchema := simpleResourceSchema(simpleResource([]string{"value"}, nil))
 	newSchema := simpleResourceSchema(simpleResource([]string{"value"}, nil))
 
-	var out bytes.Buffer
 	report := Analyze("my-pkg", oldSchema, newSchema)
-	RenderText(&out, report, 10_000)
-
-	assert.Contains(t, out.String(), "### Does the PR have any schema changes?")
-	assert.Contains(t, out.String(), "Looking good! No breaking changes found.")
+	assert.Equal(t, 0, report.Violations.Display(&bytes.Buffer{}, 10_000))
+	assert.Empty(t, report.NewResources)
+	assert.Empty(t, report.NewFunctions)
 }
 
 func TestBreakingResourceRequired(t *testing.T) {
