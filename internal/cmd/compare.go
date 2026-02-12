@@ -12,9 +12,8 @@ import (
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/spf13/cobra"
 
-	comparepkg "github.com/pulumi/schema-tools/internal/compare"
+	"github.com/pulumi/schema-tools/internal/compare"
 	"github.com/pulumi/schema-tools/internal/pkg"
-	"github.com/pulumi/schema-tools/internal/util/diagtree"
 )
 
 func compareCmd() *cobra.Command {
@@ -35,7 +34,7 @@ func compareCmd() *cobra.Command {
 			if oldCommit != "" && oldPath != "" {
 				return fmt.Errorf("--old-commit and --old-path are mutually exclusive")
 			}
-			return compare(provider, repository, oldCommit, newCommit, oldPath, newPath, maxChanges)
+			return runCompare(provider, repository, oldCommit, newCommit, oldPath, newPath, maxChanges)
 		},
 	}
 
@@ -62,7 +61,7 @@ func compareCmd() *cobra.Command {
 	return command
 }
 
-func compare(provider string, repository string, oldCommit string, newCommit string, oldPath string, newPath string, maxChanges int) error {
+func runCompare(provider string, repository string, oldCommit string, newCommit string, oldPath string, newPath string, maxChanges int) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	loadLocal := func(path string) (schema.PackageSpec, error) {
@@ -136,11 +135,7 @@ func compare(provider string, repository string, oldCommit string, newCommit str
 	return nil
 }
 
-func breakingChanges(oldSchema, newSchema schema.PackageSpec) *diagtree.Node {
-	return comparepkg.BreakingChanges(oldSchema, newSchema)
-}
-
 func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec, maxChanges int) {
-	report := comparepkg.Analyze(provider, oldSchema, newSchema)
-	comparepkg.RenderText(out, report, maxChanges)
+	report := compare.Analyze(provider, oldSchema, newSchema)
+	compare.RenderText(out, report, maxChanges)
 }
