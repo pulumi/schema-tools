@@ -20,6 +20,12 @@ import (
 	"github.com/pulumi/schema-tools/internal/util/set"
 )
 
+var (
+	downloadSchema       = pkg.DownloadSchema
+	loadLocalPackageSpec = pkg.LoadLocalPackageSpec
+	currentUser          = user.Current
+)
+
 func compareCmd() *cobra.Command {
 	var provider, repository, oldCommit, newCommit string
 	var oldPath, newPath string
@@ -73,7 +79,7 @@ func compare(provider string, repository string, oldCommit string, newCommit str
 		if err != nil {
 			return schema.PackageSpec{}, fmt.Errorf("unable to construct absolute path to schema.json: %w", err)
 		}
-		return pkg.LoadLocalPackageSpec(schemaPath)
+		return loadLocalPackageSpec(schemaPath)
 	}
 
 	var schOld schema.PackageSpec
@@ -84,9 +90,9 @@ func compare(provider string, repository string, oldCommit string, newCommit str
 		case oldPath != "":
 			schOld, err = loadLocal(oldPath)
 		case oldCommit != "":
-			schOld, err = pkg.DownloadSchema(ctx, repository, provider, oldCommit)
+			schOld, err = downloadSchema(ctx, repository, provider, oldCommit)
 		default:
-			schOld, err = pkg.DownloadSchema(ctx, repository, provider, "master")
+			schOld, err = downloadSchema(ctx, repository, provider, "master")
 		}
 		if err != nil {
 			cancel()
@@ -114,7 +120,7 @@ func compare(provider string, repository string, oldCommit string, newCommit str
 		}
 	} else if newCommit == "--local" {
 		fmt.Fprintln(os.Stderr, "Warning: --local in --new-commit is deprecated, use --new-path instead")
-		usr, _ := user.Current()
+		usr, _ := currentUser()
 		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi/%s", usr.HomeDir, provider)
 		schemaFile := pkg.StandardSchemaPath(provider)
 		schemaPath := filepath.Join(basePath, schemaFile)
@@ -125,7 +131,7 @@ func compare(provider string, repository string, oldCommit string, newCommit str
 		}
 	} else {
 		var err error
-		schNew, err = pkg.DownloadSchema(ctx, repository, provider, newCommit)
+		schNew, err = downloadSchema(ctx, repository, provider, newCommit)
 		if err != nil {
 			return err
 		}
