@@ -2,8 +2,8 @@ package compare
 
 import internalcompare "github.com/pulumi/schema-tools/internal/compare"
 
-// CompareOptions configures compare behavior.
-type CompareOptions struct {
+// Options configures compare behavior.
+type Options struct {
 	Provider   string
 	MaxChanges int
 }
@@ -15,8 +15,8 @@ type SummaryItem struct {
 	Entries  []string `json:"entries,omitempty"`
 }
 
-// CompareResult is the structured output of schema comparison.
-type CompareResult struct {
+// Result is the structured output of schema comparison.
+type Result struct {
 	Summary         []SummaryItem `json:"summary"`
 	BreakingChanges []string      `json:"breaking_changes"`
 	NewResources    []string      `json:"new_resources"`

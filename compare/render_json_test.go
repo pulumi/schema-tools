@@ -6,7 +6,7 @@ import (
 )
 
 func TestRenderJSONDeterministicOrdering(t *testing.T) {
-	result := CompareResult{
+	result := Result{
 		Summary: []SummaryItem{
 			{
 				Category: "zeta-category",

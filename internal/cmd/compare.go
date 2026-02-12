@@ -12,8 +12,8 @@ import (
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/spf13/cobra"
 
+	compare "github.com/pulumi/schema-tools/compare"
 	"github.com/pulumi/schema-tools/internal/pkg"
-	comparepkg "github.com/pulumi/schema-tools/pkg/compare"
 )
 
 func compareCmd() *cobra.Command {
@@ -136,9 +136,9 @@ func runCompare(provider string, repository string, oldCommit string, newCommit 
 }
 
 func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec, maxChanges int) {
-	result := comparepkg.Compare(oldSchema, newSchema, comparepkg.CompareOptions{
+	result := compare.Schemas(oldSchema, newSchema, compare.Options{
 		Provider:   provider,
 		MaxChanges: maxChanges,
 	})
-	comparepkg.RenderText(out, result)
+	compare.RenderText(out, result)
 }

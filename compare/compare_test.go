@@ -6,7 +6,7 @@ import (
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
-func TestCompareSortsNewResourcesAndFunctions(t *testing.T) {
+func TestSchemasSortsNewResourcesAndFunctions(t *testing.T) {
 	oldSchema := schema.PackageSpec{
 		Resources: map[string]schema.ResourceSpec{
 			"my-pkg:index:ExistingResource": {},
@@ -28,7 +28,7 @@ func TestCompareSortsNewResourcesAndFunctions(t *testing.T) {
 		},
 	}
 
-	result := Compare(oldSchema, newSchema, CompareOptions{
+	result := Schemas(oldSchema, newSchema, Options{
 		Provider:   "my-pkg",
 		MaxChanges: -1,
 	})

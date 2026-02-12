@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 )
 
 // RenderJSON writes a deterministic JSON payload for compare results.
-func RenderJSON(out io.Writer, result CompareResult) error {
-	normalized := normalizeForJSON(result)
-	data, err := json.MarshalIndent(normalized, "", "  ")
+func RenderJSON(out io.Writer, result Result) error {
+	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal compare JSON: %w", err)
 	}
@@ -20,12 +20,19 @@ func RenderJSON(out io.Writer, result CompareResult) error {
 	return nil
 }
 
-func normalizeForJSON(result CompareResult) CompareResult {
-	normalized := CompareResult{
+// MarshalJSON produces deterministic output ordering and non-nil slices.
+func (result Result) MarshalJSON() ([]byte, error) {
+	normalized := normalizeForJSON(result)
+	type alias Result
+	return json.Marshal(alias(normalized))
+}
+
+func normalizeForJSON(result Result) Result {
+	normalized := Result{
 		Summary:         normalizeSummary(result.Summary),
-		BreakingChanges: cloneOrEmpty(result.BreakingChanges),
-		NewResources:    cloneOrEmpty(result.NewResources),
-		NewFunctions:    cloneOrEmpty(result.NewFunctions),
+		BreakingChanges: ensureSlice(slices.Clone(result.BreakingChanges)),
+		NewResources:    ensureSlice(slices.Clone(result.NewResources)),
+		NewFunctions:    ensureSlice(slices.Clone(result.NewFunctions)),
 	}
 	sort.Strings(normalized.NewResources)
 	sort.Strings(normalized.NewFunctions)
@@ -38,7 +45,7 @@ func normalizeSummary(items []SummaryItem) []SummaryItem {
 	}
 	normalized := make([]SummaryItem, len(items))
 	for i, item := range items {
-		entryCopy := cloneOrEmpty(item.Entries)
+		entryCopy := ensureSlice(slices.Clone(item.Entries))
 		sort.Strings(entryCopy)
 		normalized[i] = SummaryItem{
 			Category: item.Category,

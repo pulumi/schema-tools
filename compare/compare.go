@@ -2,6 +2,7 @@ package compare
 
 import (
 	"io"
+	"slices"
 	"sort"
 	"strings"
 
@@ -10,17 +11,17 @@ import (
 	internalcompare "github.com/pulumi/schema-tools/internal/compare"
 )
 
-// Compare computes a structured comparison result for two package specs.
-func Compare(oldSchema, newSchema schema.PackageSpec, opts CompareOptions) CompareResult {
+// Schemas computes a structured comparison result for two package specs.
+func Schemas(oldSchema, newSchema schema.PackageSpec, opts Options) Result {
 	report := internalcompare.Analyze(opts.Provider, oldSchema, newSchema)
 	sort.Strings(report.NewResources)
 	sort.Strings(report.NewFunctions)
 
-	result := CompareResult{
+	result := Result{
 		Summary:         []SummaryItem{},
 		BreakingChanges: splitViolations(report, opts.MaxChanges),
-		NewResources:    cloneOrEmpty(report.NewResources),
-		NewFunctions:    cloneOrEmpty(report.NewFunctions),
+		NewResources:    ensureSlice(slices.Clone(report.NewResources)),
+		NewFunctions:    ensureSlice(slices.Clone(report.NewFunctions)),
 		report:          report,
 		maxChanges:      opts.MaxChanges,
 	}
@@ -28,7 +29,7 @@ func Compare(oldSchema, newSchema schema.PackageSpec, opts CompareOptions) Compa
 }
 
 // RenderText writes the current human-readable compare output.
-func RenderText(out io.Writer, result CompareResult) {
+func RenderText(out io.Writer, result Result) {
 	internalcompare.RenderText(out, result.report, result.maxChanges)
 }
 
@@ -46,11 +47,9 @@ func displayViolations(report internalcompare.Report, maxChanges int) string {
 	return out.String()
 }
 
-func cloneOrEmpty(xs []string) []string {
-	if len(xs) == 0 {
+func ensureSlice(xs []string) []string {
+	if xs == nil {
 		return []string{}
 	}
-	clone := make([]string, len(xs))
-	copy(clone, xs)
-	return clone
+	return xs
 }
