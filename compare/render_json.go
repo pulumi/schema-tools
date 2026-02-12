@@ -2,23 +2,9 @@ package compare
 
 import (
 	"encoding/json"
-	"fmt"
-	"io"
 	"slices"
 	"sort"
 )
-
-// RenderJSON writes a deterministic JSON payload for compare results.
-func RenderJSON(out io.Writer, result Result) error {
-	data, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal compare JSON: %w", err)
-	}
-	if _, err := out.Write(data); err != nil {
-		return fmt.Errorf("write compare JSON: %w", err)
-	}
-	return nil
-}
 
 // MarshalJSON produces deterministic output ordering and non-nil slices.
 func (result Result) MarshalJSON() ([]byte, error) {

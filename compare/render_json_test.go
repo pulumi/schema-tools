@@ -1,7 +1,7 @@
 package compare
 
 import (
-	"bytes"
+	"encoding/json"
 	"testing"
 )
 
@@ -24,9 +24,9 @@ func TestRenderJSONDeterministicOrdering(t *testing.T) {
 		NewFunctions:    []string{"zeta.fn", "alpha.fn"},
 	}
 
-	var out bytes.Buffer
-	if err := RenderJSON(&out, result); err != nil {
-		t.Fatalf("RenderJSON failed: %v", err)
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent failed: %v", err)
 	}
 
 	expected := `{
@@ -61,7 +61,7 @@ func TestRenderJSONDeterministicOrdering(t *testing.T) {
     "zeta.fn"
   ]
 }`
-	if out.String() != expected {
-		t.Fatalf("unexpected JSON output:\n%s", out.String())
+	if string(data) != expected {
+		t.Fatalf("unexpected JSON output:\n%s", string(data))
 	}
 }
