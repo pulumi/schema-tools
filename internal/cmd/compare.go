@@ -12,7 +12,7 @@ import (
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/spf13/cobra"
 
-	compare "github.com/pulumi/schema-tools/compare"
+	"github.com/pulumi/schema-tools/compare"
 	"github.com/pulumi/schema-tools/internal/pkg"
 )
 
