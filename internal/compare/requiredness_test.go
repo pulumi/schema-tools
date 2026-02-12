@@ -1,4 +1,4 @@
-package cmd
+package compare
 
 import (
 	"bytes"
@@ -9,32 +9,43 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestAnalyzeNoBreakingChanges(t *testing.T) {
+	oldSchema := simpleResourceSchema(simpleResource([]string{"value"}, nil))
+	newSchema := simpleResourceSchema(simpleResource([]string{"value"}, nil))
+
+	var out bytes.Buffer
+	report := Analyze("my-pkg", oldSchema, newSchema)
+	RenderText(&out, report, 10_000)
+
+	assert.Contains(t, out.String(), "### Does the PR have any schema changes?")
+	assert.Contains(t, out.String(), "Looking good! No breaking changes found.")
+}
+
 func TestBreakingResourceRequired(t *testing.T) {
 	tests := []breakingTestCase{
-		{}, // No required => no breaking
-
-		{ // No change => no breaking
+		{},
+		{
 			OldRequired: []string{"value"},
 			NewRequired: []string{"value"},
 		},
-		{ // Making an output optional is breaking
+		{
 			OldRequired: []string{"value"},
 			ExpectedOutput: expectedRes(func(n *diagtree.Node) {
 				n.Label("required").Value("value").
 					SetDescription(diagtree.Info, "property is no longer Required")
 			}),
 		},
-		{ // Making an output required is not breaking
+		{
 			NewRequired: []string{"value"},
 		},
-		{ // But making an input required is breaking
+		{
 			NewRequiredInputs: []string{"list"},
 			ExpectedOutput: expectedRes(func(n *diagtree.Node) {
 				n.Label("required inputs").Value("list").
 					SetDescription(diagtree.Info, "input has changed to Required")
 			}),
 		},
-		{ // Making an input optional is not breaking
+		{
 			OldRequiredInputs: []string{"list"},
 		},
 	}
@@ -44,59 +55,36 @@ func TestBreakingResourceRequired(t *testing.T) {
 	})
 }
 
-func simpleResource(required, requiredInputs []string) schema.ResourceSpec {
-	props := func() map[string]schema.PropertySpec {
-		return map[string]schema.PropertySpec{
-			"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
-			"list": {TypeSpec: schema.TypeSpec{
-				Type:  "array",
-				Items: &schema.TypeSpec{Type: "number"},
-			}},
-		}
-	}
-	r := schema.ResourceSpec{
-		ObjectTypeSpec: schema.ObjectTypeSpec{
-			Properties: props(),
-			Required:   required,
-		},
-		InputProperties: props(),
-		RequiredInputs:  requiredInputs,
-	}
-	return r
-}
-
 func TestRemovedProperty(t *testing.T) {
 	old := simpleResource([]string{"field1"}, nil)
 	old.Properties["field1"] = schema.PropertySpec{TypeSpec: schema.TypeSpec{Type: "string"}}
 	oldSchema := simpleResourceSchema(old)
 	newSchema := simpleResourceSchema(simpleResource(nil, nil))
-	changes := *breakingChanges(oldSchema, newSchema)
+	changes := *BreakingChanges(oldSchema, newSchema)
 	assert.Equal(t, expectedRes(func(n *diagtree.Node) {
 		n.Label("properties").Value("field1").
 			SetDescription(diagtree.Warn, `missing output "field1"`)
 	}), changes)
-
 }
 
 func TestBreakingFunctionRequired(t *testing.T) {
 	tests := []breakingTestCase{
-		{}, // No required => no breaking
-
-		{ // No change => no breaking
+		{},
+		{
 			OldRequired: []string{"value"},
 			NewRequired: []string{"value"},
 		},
-		{ // Making an output optional is breaking
+		{
 			OldRequired: []string{"value"},
 			ExpectedOutput: expectedFunc(func(n *diagtree.Node) {
 				n.Label("outputs").Label("required").Value("value").SetDescription(diagtree.Info,
 					"property is no longer Required")
 			}),
 		},
-		{ // Making an output required is not breaking
+		{
 			NewRequired: []string{"value"},
 		},
-		{ // But making an input required is breaking
+		{
 			OldRequiredInputs: []string{},
 			NewRequiredInputs: []string{"list"},
 			ExpectedOutput: expectedFunc(func(n *diagtree.Node) {
@@ -104,7 +92,7 @@ func TestBreakingFunctionRequired(t *testing.T) {
 					"input has changed to Required")
 			}),
 		},
-		{ // Making an input optional is not breaking
+		{
 			OldRequiredInputs: []string{"list"},
 		},
 	}
@@ -131,13 +119,12 @@ func TestBreakingFunctionRequired(t *testing.T) {
 
 func TestBreakingTypeRequired(t *testing.T) {
 	tests := []breakingTestCase{
-		{}, // No required => no breaking
-
-		{ // No change => no breaking
+		{},
+		{
 			OldRequired: []string{"value"},
 			NewRequired: []string{"value"},
 		},
-		{ // Adding a requirement is breaking
+		{
 			OldRequired: []string{"value"},
 			NewRequired: []string{"value", "list"},
 			ExpectedOutput: expectedTyp(func(n *diagtree.Node) {
@@ -145,7 +132,7 @@ func TestBreakingTypeRequired(t *testing.T) {
 					"property has changed to Required")
 			}),
 		},
-		{ // Removing a requirement is breaking
+		{
 			OldRequired: []string{"value", "list"},
 			NewRequired: []string{"value"},
 			ExpectedOutput: expectedTyp(func(n *diagtree.Node) {
@@ -203,7 +190,7 @@ func testBreakingRequired(
 			oldSchema := newT(tt.OldRequired, tt.OldRequiredInputs)
 			newSchema := newT(tt.NewRequired, tt.NewRequiredInputs)
 
-			violations := breakingChanges(oldSchema, newSchema)
+			violations := BreakingChanges(oldSchema, newSchema)
 
 			expected, actual := new(bytes.Buffer), new(bytes.Buffer)
 
@@ -222,6 +209,27 @@ func simpleEmptySchema() schema.PackageSpec {
 	}
 }
 
+func simpleResource(required, requiredInputs []string) schema.ResourceSpec {
+	props := func() map[string]schema.PropertySpec {
+		return map[string]schema.PropertySpec{
+			"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+			"list": {TypeSpec: schema.TypeSpec{
+				Type:  "array",
+				Items: &schema.TypeSpec{Type: "number"},
+			}},
+		}
+	}
+	r := schema.ResourceSpec{
+		ObjectTypeSpec: schema.ObjectTypeSpec{
+			Properties: props(),
+			Required:   required,
+		},
+		InputProperties: props(),
+		RequiredInputs:  requiredInputs,
+	}
+	return r
+}
+
 func simpleResourceSchema(r schema.ResourceSpec) schema.PackageSpec {
 	p := simpleEmptySchema()
 	p.Resources = map[string]schema.ResourceSpec{
@@ -237,6 +245,7 @@ func simpleFunctionSchema(f schema.FunctionSpec) schema.PackageSpec {
 	}
 	return p
 }
+
 func simpleTypeSchema(t schema.ComplexTypeSpec) schema.PackageSpec {
 	p := simpleEmptySchema()
 	p.Types = map[string]schema.ComplexTypeSpec{
