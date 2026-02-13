@@ -22,6 +22,18 @@ type compareDeps struct {
 	loadLocalPackageSpec func(string) (schema.PackageSpec, error)
 }
 
+type compareInput struct {
+	provider    string
+	repository  string
+	oldCommit   string
+	newCommit   string
+	oldPath     string
+	newPath     string
+	maxChanges  int
+	jsonMode    bool
+	summaryMode bool
+}
+
 func defaultCompareDeps() compareDeps {
 	return compareDeps{
 		currentUser:          user.Current,
@@ -49,9 +61,17 @@ func compareCmd() *cobra.Command {
 			if oldCommit != "" && oldPath != "" {
 				return fmt.Errorf("--old-commit and --old-path are mutually exclusive")
 			}
-			return runCompareCmd(
-				provider, repository, oldCommit, newCommit, oldPath, newPath, maxChanges, jsonMode, summaryMode,
-			)
+			return runCompareCmd(compareInput{
+				provider:    provider,
+				repository:  repository,
+				oldCommit:   oldCommit,
+				newCommit:   newCommit,
+				oldPath:     oldPath,
+				newPath:     newPath,
+				maxChanges:  maxChanges,
+				jsonMode:    jsonMode,
+				summaryMode: summaryMode,
+			})
 		},
 	}
 
@@ -80,34 +100,11 @@ func compareCmd() *cobra.Command {
 	return command
 }
 
-func runCompareCmd(
-	provider string,
-	repository string,
-	oldCommit string,
-	newCommit string,
-	oldPath string,
-	newPath string,
-	maxChanges int,
-	jsonMode bool,
-	summaryMode bool,
-) error {
-	return runCompareCmdWithDeps(
-		provider, repository, oldCommit, newCommit, oldPath, newPath, maxChanges, jsonMode, summaryMode, defaultCompareDeps(),
-	)
+func runCompareCmd(input compareInput) error {
+	return runCompareCmdWithDeps(input, defaultCompareDeps())
 }
 
-func runCompareCmdWithDeps(
-	provider string,
-	repository string,
-	oldCommit string,
-	newCommit string,
-	oldPath string,
-	newPath string,
-	maxChanges int,
-	jsonMode bool,
-	summaryMode bool,
-	deps compareDeps,
-) error {
+func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	loadLocal := func(path string) (schema.PackageSpec, error) {
@@ -123,12 +120,12 @@ func runCompareCmdWithDeps(
 	go func() {
 		var err error
 		switch {
-		case oldPath != "":
-			schOld, err = loadLocal(oldPath)
-		case oldCommit != "":
-			schOld, err = deps.downloadSchema(ctx, repository, provider, oldCommit)
+		case input.oldPath != "":
+			schOld, err = loadLocal(input.oldPath)
+		case input.oldCommit != "":
+			schOld, err = deps.downloadSchema(ctx, input.repository, input.provider, input.oldCommit)
 		default:
-			schOld, err = deps.downloadSchema(ctx, repository, provider, "master")
+			schOld, err = deps.downloadSchema(ctx, input.repository, input.provider, "master")
 		}
 		if err != nil {
 			cancel()
@@ -137,31 +134,31 @@ func runCompareCmdWithDeps(
 	}()
 
 	var schNew schema.PackageSpec
-	if newPath != "" {
+	if input.newPath != "" {
 		var err error
-		schNew, err = loadLocal(newPath)
+		schNew, err = loadLocal(input.newPath)
 		if err != nil {
 			return err
 		}
-	} else if strings.HasPrefix(newCommit, "--local-path=") {
+	} else if strings.HasPrefix(input.newCommit, "--local-path=") {
 		fmt.Fprintln(os.Stderr, "Warning: --local-path= in --new-commit is deprecated, use --new-path instead")
-		parts := strings.Split(newCommit, "=")
+		parts := strings.Split(input.newCommit, "=")
 		if len(parts) < 2 || parts[1] == "" {
-			return fmt.Errorf("invalid --local-path value: %q", newCommit)
+			return fmt.Errorf("invalid --local-path value: %q", input.newCommit)
 		}
 		var err error
 		schNew, err = loadLocal(parts[1])
 		if err != nil {
 			return err
 		}
-	} else if newCommit == "--local" {
+	} else if input.newCommit == "--local" {
 		fmt.Fprintln(os.Stderr, "Warning: --local in --new-commit is deprecated, use --new-path instead")
 		usr, err := deps.currentUser()
 		if err != nil {
 			return fmt.Errorf("get current user: %w", err)
 		}
-		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi/%s", usr.HomeDir, provider)
-		schemaFile := pkg.StandardSchemaPath(provider)
+		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi/%s", usr.HomeDir, input.provider)
+		schemaFile := pkg.StandardSchemaPath(input.provider)
 		schemaPath := filepath.Join(basePath, schemaFile)
 		schNew, err = deps.loadLocalPackageSpec(schemaPath)
 		if err != nil {
@@ -169,7 +166,7 @@ func runCompareCmdWithDeps(
 		}
 	} else {
 		var err error
-		schNew, err = deps.downloadSchema(ctx, repository, provider, newCommit)
+		schNew, err = deps.downloadSchema(ctx, input.repository, input.provider, input.newCommit)
 		if err != nil {
 			return err
 		}
@@ -180,10 +177,10 @@ func runCompareCmdWithDeps(
 	}
 
 	result := compare.Schemas(schOld, schNew, compare.Options{
-		Provider:   provider,
-		MaxChanges: maxChanges,
+		Provider:   input.provider,
+		MaxChanges: input.maxChanges,
 	})
-	return renderCompareOutput(os.Stdout, result, jsonMode, summaryMode)
+	return renderCompareOutput(os.Stdout, result, input.jsonMode, input.summaryMode)
 }
 
 func renderCompareOutput(out io.Writer, result compare.Result, jsonMode bool, summaryMode bool) error {
@@ -195,12 +192,4 @@ func renderCompareOutput(out io.Writer, result compare.Result, jsonMode bool, su
 	}
 	compare.RenderText(out, result)
 	return nil
-}
-
-func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec, maxChanges int) {
-	result := compare.Schemas(oldSchema, newSchema, compare.Options{
-		Provider:   provider,
-		MaxChanges: maxChanges,
-	})
-	compare.RenderText(out, result)
 }

@@ -33,7 +33,15 @@ func splitViolations(report internalcompare.Report, maxChanges int) []string {
 	if displayed == "" {
 		return []string{}
 	}
-	return strings.Split(displayed, "\n")
+	lines := strings.Split(displayed, "\n")
+	filtered := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+	return filtered
 }
 
 func displayViolations(report internalcompare.Report, maxChanges int) string {
@@ -54,11 +62,13 @@ func summarize(report internalcompare.Report) []SummaryItem {
 	entries := map[string][]string{}
 
 	report.Violations.WalkDisplayed(func(node *diagtree.Node) {
+		// WalkDisplayed includes displayed branch nodes. Summary items only count
+		// concrete diagnostics, which always carry a description.
 		if node.Description == "" {
 			return
 		}
-		path := internalcompare.NodePath(node)
-		entry := internalcompare.NodeEntry(node)
+		path := nodePath(node)
+		entry := nodeEntry(node)
 		category := classify(path, node.Description)
 		counts[category]++
 		if entry != "" {
@@ -89,6 +99,8 @@ func summarize(report internalcompare.Report) []SummaryItem {
 }
 
 func classify(path string, description string) string {
+	// Keep specific "missing" path patterns first so they do not get swallowed
+	// by the broader "description == missing" cases below.
 	switch {
 	case strings.HasPrefix(path, "Resources:") && strings.Contains(path, ": inputs:") && description == "missing":
 		return "missing-input"
@@ -115,6 +127,27 @@ func classify(path string, description string) string {
 	default:
 		return "other"
 	}
+}
+
+func nodePath(node *diagtree.Node) string {
+	if node == nil {
+		return ""
+	}
+	return strings.Join(node.PathTitles(), ": ")
+}
+
+func nodeEntry(node *diagtree.Node) string {
+	if node == nil {
+		return ""
+	}
+	path := nodePath(node)
+	if node.Description == "" {
+		return path
+	}
+	if path == "" {
+		return node.Description
+	}
+	return path + " " + node.Description
 }
 
 func sortAndUnique(values []string) []string {

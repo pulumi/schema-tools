@@ -6,18 +6,18 @@ import (
 	"github.com/pulumi/schema-tools/internal/util/diagtree"
 )
 
-func NodePath(node *diagtree.Node) string {
+func nodePath(node *diagtree.Node) string {
 	if node == nil {
 		return ""
 	}
 	return strings.Join(node.PathTitles(), ": ")
 }
 
-func NodeEntry(node *diagtree.Node) string {
+func nodeEntry(node *diagtree.Node) string {
 	if node == nil {
 		return ""
 	}
-	path := NodePath(node)
+	path := nodePath(node)
 	if node.Description == "" {
 		return path
 	}

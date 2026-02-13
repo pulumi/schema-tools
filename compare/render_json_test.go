@@ -3,8 +3,8 @@ package compare
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -99,20 +99,28 @@ func TestRenderJSONSummaryOnly(t *testing.T) {
 	}
 }
 
+func TestRenderJSONEndsWithTrailingNewline(t *testing.T) {
+	result := Result{
+		Summary: []SummaryItem{{Category: "missing-input", Count: 1}},
+	}
+
+	var out bytes.Buffer
+	if err := RenderJSON(&out, result, false); err != nil {
+		t.Fatalf("RenderJSON failed: %v", err)
+	}
+	if !strings.HasSuffix(out.String(), "\n") {
+		t.Fatalf("expected trailing newline, got %q", out.String())
+	}
+}
+
 func TestRenderJSONWriteError(t *testing.T) {
 	result := Result{
 		Summary: []SummaryItem{{Category: "missing-input", Count: 1}},
 	}
-	err := RenderJSON(jsonFailingWriter{}, result, false)
+	err := RenderJSON(failingWriter{}, result, false)
 	if err == nil {
 		t.Fatal("expected write error")
 	}
-}
-
-type jsonFailingWriter struct{}
-
-func (jsonFailingWriter) Write(p []byte) (int, error) {
-	return 0, errors.New("boom")
 }
 
 func TestRenderJSONFixtureContent(t *testing.T) {

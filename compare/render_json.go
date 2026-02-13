@@ -49,6 +49,9 @@ func RenderJSON(out io.Writer, result Result, summaryOnly bool) error {
 	if _, err := out.Write(data); err != nil {
 		return fmt.Errorf("write compare JSON: %w", err)
 	}
+	if _, err := out.Write([]byte("\n")); err != nil {
+		return fmt.Errorf("write compare JSON: %w", err)
+	}
 	return nil
 }
 

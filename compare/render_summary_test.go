@@ -2,7 +2,6 @@ package compare
 
 import (
 	"bytes"
-	"errors"
 	"strings"
 	"testing"
 )
@@ -53,10 +52,4 @@ func TestRenderSummaryEmpty(t *testing.T) {
 	if out.String() != "No breaking changes found.\n" {
 		t.Fatalf("unexpected empty summary output: %q", out.String())
 	}
-}
-
-type failingWriter struct{}
-
-func (failingWriter) Write(p []byte) (int, error) {
-	return 0, errors.New("boom")
 }

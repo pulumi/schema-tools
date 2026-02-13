@@ -11,11 +11,11 @@ func TestNodePathAndEntry(t *testing.T) {
 	leaf := root.Label("Resources").Value("pkg:index:Res").Label("inputs").Value("name")
 	leaf.SetDescription(diagtree.Warn, "missing")
 
-	path := NodePath(leaf)
+	path := nodePath(leaf)
 	if path != `Resources: "pkg:index:Res": inputs: "name"` {
 		t.Fatalf("unexpected path: %q", path)
 	}
-	entry := NodeEntry(leaf)
+	entry := nodeEntry(leaf)
 	if entry != `Resources: "pkg:index:Res": inputs: "name" missing` {
 		t.Fatalf("unexpected entry: %q", entry)
 	}
