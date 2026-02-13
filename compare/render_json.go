@@ -20,8 +20,6 @@ func normalizeForJSON(result Result) Result {
 		NewResources:    ensureSlice(slices.Clone(result.NewResources)),
 		NewFunctions:    ensureSlice(slices.Clone(result.NewFunctions)),
 	}
-	sort.Strings(normalized.NewResources)
-	sort.Strings(normalized.NewFunctions)
 	return normalized
 }
 

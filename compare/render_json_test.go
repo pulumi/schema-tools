@@ -53,12 +53,12 @@ func TestRenderJSONDeterministicOrdering(t *testing.T) {
     "line-1"
   ],
   "new_resources": [
-    "alpha.Resource",
-    "zeta.Resource"
+    "zeta.Resource",
+    "alpha.Resource"
   ],
   "new_functions": [
-    "alpha.fn",
-    "zeta.fn"
+    "zeta.fn",
+    "alpha.fn"
   ]
 }`
 	if string(data) != expected {

@@ -10,7 +10,7 @@ type Options struct {
 type SummaryItem struct {
 	Category string   `json:"category"`
 	Count    int      `json:"count"`
-	Entries  []string `json:"entries,omitempty"`
+	Entries  []string `json:"entries"`
 }
 
 // Result is the structured output of schema comparison.

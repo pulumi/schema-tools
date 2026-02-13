@@ -1,6 +1,7 @@
 package compare
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
@@ -36,22 +37,10 @@ func TestSchemasSortsNewResourcesAndFunctions(t *testing.T) {
 	if len(result.Summary) != 0 {
 		t.Fatalf("expected no summary items in foundation scope, got %v", result.Summary)
 	}
-	if got, want := result.NewResources, []string{"index.ZetaResource", "module.AlphaResource"}; !equalStrings(got, want) {
+	if got, want := result.NewResources, []string{"index.ZetaResource", "module.AlphaResource"}; !slices.Equal(got, want) {
 		t.Fatalf("new resources mismatch: got %v want %v", got, want)
 	}
-	if got, want := result.NewFunctions, []string{"index.zetaFunction", "module.alphaFunction"}; !equalStrings(got, want) {
+	if got, want := result.NewFunctions, []string{"index.zetaFunction", "module.alphaFunction"}; !slices.Equal(got, want) {
 		t.Fatalf("new functions mismatch: got %v want %v", got, want)
 	}
-}
-
-func equalStrings(got, want []string) bool {
-	if len(got) != len(want) {
-		return false
-	}
-	for i := range got {
-		if got[i] != want[i] {
-			return false
-		}
-	}
-	return true
 }

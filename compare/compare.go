@@ -26,6 +26,8 @@ func Schemas(oldSchema, newSchema schema.PackageSpec, opts Options) Result {
 }
 
 func splitViolations(report internalcompare.Report, maxChanges int) []string {
+	// BreakingChanges currently stores rendered output lines from the internal
+	// diagnostic tree. This assumes each displayed violation item is single-line.
 	displayed := strings.TrimRight(displayViolations(report, maxChanges), "\n")
 	if displayed == "" {
 		return []string{}

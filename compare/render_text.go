@@ -3,8 +3,6 @@ package compare
 import (
 	"fmt"
 	"io"
-	"slices"
-	"sort"
 	"strings"
 )
 
@@ -15,7 +13,7 @@ func RenderText(out io.Writer, result Result) {
 	case 0:
 		fmt.Fprintln(out, "Looking good! No breaking changes found.")
 	case 1:
-		fmt.Fprintln(out, "Found 1 breaking change: ")
+		fmt.Fprintln(out, "Found 1 breaking change:")
 	default:
 		fmt.Fprintf(out, "Found %d breaking changes:\n", len(result.BreakingChanges))
 	}
@@ -23,10 +21,8 @@ func RenderText(out io.Writer, result Result) {
 		fmt.Fprintln(out, strings.Join(result.BreakingChanges, "\n"))
 	}
 
-	newResources := ensureSlice(slices.Clone(result.NewResources))
-	newFunctions := ensureSlice(slices.Clone(result.NewFunctions))
-	sort.Strings(newResources)
-	sort.Strings(newFunctions)
+	newResources := result.NewResources
+	newFunctions := result.NewFunctions
 
 	if len(newResources) > 0 {
 		fmt.Fprintln(out, "\n#### New resources:")
