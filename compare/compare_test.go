@@ -82,6 +82,14 @@ func TestSchemasBuildsSummaryWithEntriesAndPaths(t *testing.T) {
 	if !reflect.DeepEqual(gotEntries, expectedFixtureSummaryEntries()) {
 		t.Fatalf("summary entries mismatch:\n got: %v\nwant: %v", gotEntries, expectedFixtureSummaryEntries())
 	}
+	if len(result.BreakingChanges) == 0 {
+		t.Fatal("expected fixture to produce breaking changes")
+	}
+	for i, line := range result.BreakingChanges {
+		if line == "" {
+			t.Fatalf("unexpected blank breaking change line at index %d", i)
+		}
+	}
 }
 
 func mustLoadFixtureSchemas(t testing.TB) (schema.PackageSpec, schema.PackageSpec) {

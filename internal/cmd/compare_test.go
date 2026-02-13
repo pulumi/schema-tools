@@ -83,7 +83,15 @@ func TestCompareLocalCurrentUserErrorCancelsOldSchemaDownload(t *testing.T) {
 		return schema.PackageSpec{}, nil
 	}
 
-	err := runCompareCmdWithDeps("aws", "github://api.github.com/pulumi", "old", "--local", "", "", 100, false, false, deps)
+	err := runCompareCmdWithDeps(compareInput{
+		provider:    "aws",
+		repository:  "github://api.github.com/pulumi",
+		oldCommit:   "old",
+		newCommit:   "--local",
+		maxChanges:  100,
+		jsonMode:    false,
+		summaryMode: false,
+	}, deps)
 	if assert.Error(t, err) {
 		assert.True(t, strings.Contains(err.Error(), "get current user"))
 	}
@@ -105,10 +113,14 @@ func TestCompareSchemasFixtureTextOutput(t *testing.T) {
 	oldSchema, newSchema := mustLoadCompareFixtureSchemas(t)
 
 	var out bytes.Buffer
-	compareSchemas(&out, "my-pkg", oldSchema, newSchema, -1)
+	result := compare.Schemas(oldSchema, newSchema, compare.Options{
+		Provider:   "my-pkg",
+		MaxChanges: -1,
+	})
+	compare.RenderText(&out, result)
 
 	text := out.String()
-	assert.Contains(t, text, "Found 15 breaking changes:")
+	assert.Contains(t, text, "Found 14 breaking changes:")
 	assert.Contains(t, text, `"my-pkg:index:RemovedResource" missing`)
 	assert.Contains(t, text, `"my-pkg:index:removedFunction" missing`)
 	assert.Contains(t, text, `type changed from "string" to "integer"`)

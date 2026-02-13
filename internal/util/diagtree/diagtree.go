@@ -67,6 +67,8 @@ func (m *Node) PathTitles() []string {
 	return parts
 }
 
+// WalkDisplayed visits every displayed node in the tree, including
+// intermediate branch nodes.
 func (m *Node) WalkDisplayed(visit func(*Node)) {
 	if m == nil || visit == nil {
 		return
