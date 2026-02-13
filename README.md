@@ -141,6 +141,43 @@ To compare local schema files:
 $ schema-tools compare -p aws --old-path ./schemas/aws-old.json --new-path ./schemas/aws-new.json
 ```
 
+To emit machine-readable JSON output:
+
+```shell
+$ schema-tools compare -p docker -o v3.0.0 -n v4.0.0 --json
+{
+  "summary": [ {"category": "...", "count": 1} ],
+  "breaking_changes": [...],
+  "new_resources": [...],
+  "new_functions": [...]
+}
+```
+
+To emit summary-only output (category counts only):
+
+```shell
+$ schema-tools compare -p docker -o v3.0.0 -n v4.0.0 --summary
+Summary by category:
+- missing-input: 1
+```
+
+To emit summary-only JSON (includes summary entries):
+
+```shell
+$ schema-tools compare -p docker -o v3.0.0 -n v4.0.0 --json --summary
+{
+  "summary": [
+    {
+      "category": "missing-input",
+      "count": 1,
+      "entries": [
+        "Functions: \"docker:index/getNetwork:getNetwork\": inputs: \"id\" missing input \"id\""
+      ]
+    }
+  ]
+}
+```
+
 ## Squeeze
 
 To show the backwards-incompatible changes between two versioned resources:

@@ -1,61 +1,63 @@
-package diagtree_test
+package diagtree
 
 import (
 	"bytes"
 	"testing"
-
-	"github.com/pulumi/schema-tools/internal/util/diagtree"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestPrunedDisplay(t *testing.T) {
 	t.Parallel()
-	n := func(f func(*diagtree.Node)) *diagtree.Node {
-		n := &diagtree.Node{Title: "Top Level"}
+	n := func(f func(*Node)) *Node {
+		n := &Node{Title: "Top Level"}
 		f(n)
 		n.Prune()
 		return n
 	}
-	nn := func(f func(*diagtree.Node)) *diagtree.Node {
-		return n(func(n *diagtree.Node) {
+	nn := func(f func(*Node)) *Node {
+		return n(func(n *Node) {
 			f(n.Label("l1").Label("l2"))
 		})
 	}
 
-	tests := []testCase{
+	tests := []struct {
+		input         *Node
+		expected      string
+		expectedCount int
+		maxItems      int
+	}{
 		{
-			input: n(func(n *diagtree.Node) {
-				n.SetDescription(diagtree.Info, "A top level value (%d)", 1)
+			input: n(func(n *Node) {
+				n.SetDescription(Info, "A top level value (%d)", 1)
 			}),
 			expected:      "### `🟢` Top Level A top level value (1)\n",
 			maxItems:      10,
 			expectedCount: 1,
 		},
 		{
-			input: nn(func(n *diagtree.Node) {
+			input: nn(func(n *Node) {
 				n = n.Label("l3")
-				n.SetDescription(diagtree.Info, "A nested value")
+				n.SetDescription(Info, "A nested value")
 			}),
 			expected:      "### Top Level\n#### l1\n- `🟢` l2: l3 A nested value\n",
 			maxItems:      10,
 			expectedCount: 1,
 		},
 		{
-			input: nn(func(n *diagtree.Node) {
-				n.SetDescription(diagtree.Info, "nested descriptions")
-				n.Label("value1").SetDescription(diagtree.Warn, "warn")
-				n.Label("value2").SetDescription(diagtree.Danger, "danger")
+			input: nn(func(n *Node) {
+				n.SetDescription(Info, "nested descriptions")
+				n.Label("value1").SetDescription(Warn, "warn")
+				n.Label("value2").SetDescription(Danger, "danger")
 			}),
 			expected:      "### Top Level\n#### l1\n- `🟢` l2 nested descriptions:\n    - `🟡` value1 warn\n    - `🔴` value2 danger\n",
 			maxItems:      10,
 			expectedCount: 3,
 		},
 		{
-			input: nn(func(n *diagtree.Node) {
+			input: nn(func(n *Node) {
 				n.Label("no data").Value("still nothing")
 				bt := n.Label("branching tree")
 				bt.Label("empty branch")
-				bt.Value("has description").SetDescription(diagtree.Info, "a description")
+				bt.Value("has description").SetDescription(Info, "a description")
 				n.Label("another top level branch")
 			}),
 			expected:      "### Top Level\n#### l1\n- `🟢` l2: branching tree: \"has description\" a description\n",
@@ -68,22 +70,75 @@ func TestPrunedDisplay(t *testing.T) {
 		tt := tt
 		t.Run("", func(t *testing.T) {
 			t.Parallel()
-			tt.check(t)
+			actual := new(bytes.Buffer)
+			actualCount := tt.input.Display(actual, tt.maxItems)
+			if actualCount != tt.expectedCount {
+				t.Fatalf("displayed count: got %d, want %d", actualCount, tt.expectedCount)
+			}
+			if actual.String() != tt.expected {
+				t.Fatalf("display output mismatch:\n got: %q\nwant: %q", actual.String(), tt.expected)
+			}
 		})
 	}
 }
 
-type testCase struct {
-	input *diagtree.Node
+func TestPathTitles(t *testing.T) {
+	root := &Node{}
+	leaf := root.Label("Resources").Value("pkg:index:Res").Label("inputs").Value("name")
+	leaf.SetDescription(Warn, "missing")
 
-	expected      string
-	expectedCount int
-	maxItems      int
+	parts := leaf.PathTitles()
+	want := []string{"Resources", `"pkg:index:Res"`, "inputs", `"name"`}
+	if len(parts) != len(want) {
+		t.Fatalf("unexpected length %d (%v)", len(parts), parts)
+	}
+	for i := range parts {
+		if parts[i] != want[i] {
+			t.Fatalf("unexpected part[%d]=%q want %q (%v)", i, parts[i], want[i], parts)
+		}
+	}
 }
 
-func (tt testCase) check(t *testing.T) {
-	actual := new(bytes.Buffer)
-	actualCount := tt.input.Display(actual, tt.maxItems)
-	assert.Equal(t, tt.expectedCount, actualCount)
-	assert.Equal(t, tt.expected, actual.String())
+func TestWalkDisplayed(t *testing.T) {
+	root := &Node{}
+	shown := root.Label("Resources").Value("r1")
+	shown.SetDescription(Danger, "missing")
+	root.Label("Resources").Value("r2")
+
+	count := 0
+	root.WalkDisplayed(func(n *Node) {
+		if n.Title != "" {
+			count++
+		}
+	})
+
+	if count != 2 {
+		t.Fatalf("expected 2 displayed titled nodes, got %d", count)
+	}
+}
+
+func TestLabelReusesSameChildNode(t *testing.T) {
+	root := &Node{}
+	a := root.Label("Resources")
+	b := root.Label("Resources")
+	if a != b {
+		t.Fatalf("expected repeated label lookup to return same node")
+	}
+}
+
+func TestPruneRebuildsLookupIndex(t *testing.T) {
+	root := &Node{}
+	keep := root.Label("keep")
+	keep.SetDescription(Info, "visible")
+	root.Label("drop")
+
+	root.Prune()
+
+	got := root.Label("drop")
+	if got.Title != "drop" {
+		t.Fatalf("expected recreated node title drop, got %q", got.Title)
+	}
+	if len(root.subfields) != 2 {
+		t.Fatalf("expected keep + recreated drop after prune, got %d children", len(root.subfields))
+	}
 }
