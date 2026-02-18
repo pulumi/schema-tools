@@ -210,6 +210,8 @@ func TestRenderCompareOutputFixtureJSON(t *testing.T) {
 
 func mustLoadCompareFixtureSchemas(t testing.TB) (schema.PackageSpec, schema.PackageSpec) {
 	t.Helper()
+	// Keep in sync with compare/compare_test.go fixture loaders by design:
+	// package boundaries prevent sharing local *_test.go helpers directly.
 	return mustLoadCompareFixtureSchema(t, "schema-old.json"),
 		mustLoadCompareFixtureSchema(t, "schema-new.json")
 }

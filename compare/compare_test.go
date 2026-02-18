@@ -194,8 +194,98 @@ func TestClassifyDiagnosticDescriptions(t *testing.T) {
 	}
 }
 
+func TestSchemasClassificationContractWithInternalDiagnostics(t *testing.T) {
+	tests := []struct {
+		name            string
+		oldSchema       schema.PackageSpec
+		newSchema       schema.PackageSpec
+		wantCategory    string
+		wantCategoryCnt int
+	}{
+		{
+			name: "missing function input maps to missing-input",
+			oldSchema: schemaWithFunction("my-pkg:index:MyFunction", schema.FunctionSpec{
+				Inputs: &schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"name": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			}),
+			newSchema: schemaWithFunction("my-pkg:index:MyFunction", schema.FunctionSpec{
+				Inputs: &schema.ObjectTypeSpec{Properties: map[string]schema.PropertySpec{}},
+			}),
+			wantCategory:    "missing-input",
+			wantCategoryCnt: 1,
+		},
+		{
+			name: "missing function output maps to missing-output",
+			oldSchema: schemaWithFunction("my-pkg:index:MyFunction", schema.FunctionSpec{
+				Outputs: &schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			}),
+			newSchema: schemaWithFunction("my-pkg:index:MyFunction", schema.FunctionSpec{
+				Outputs: &schema.ObjectTypeSpec{Properties: map[string]schema.PropertySpec{}},
+			}),
+			wantCategory:    "missing-output",
+			wantCategoryCnt: 1,
+		},
+		{
+			name: "missing type property maps to missing-property",
+			oldSchema: schemaWithType("my-pkg:index:MyType", schema.ComplexTypeSpec{
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			}),
+			newSchema: schemaWithType("my-pkg:index:MyType", schema.ComplexTypeSpec{
+				ObjectTypeSpec: schema.ObjectTypeSpec{Properties: map[string]schema.PropertySpec{}},
+			}),
+			wantCategory:    "missing-property",
+			wantCategoryCnt: 1,
+		},
+		{
+			name: "invoke signature change maps to signature-changed",
+			oldSchema: schemaWithFunction("my-pkg:index:MyFunction", schema.FunctionSpec{
+				Inputs: nil,
+			}),
+			newSchema: schemaWithFunction("my-pkg:index:MyFunction", schema.FunctionSpec{
+				Inputs: &schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"arg": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			}),
+			wantCategory:    "signature-changed",
+			wantCategoryCnt: 1,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := Schemas(tc.oldSchema, tc.newSchema, Options{Provider: "my-pkg", MaxChanges: -1})
+
+			gotCounts := map[string]int{}
+			for _, item := range result.Summary {
+				gotCounts[item.Category] = item.Count
+			}
+			if gotCounts["other"] != 0 {
+				t.Fatalf("unexpected fallback category in summary: %v", result.Summary)
+			}
+			if gotCounts[tc.wantCategory] != tc.wantCategoryCnt {
+				t.Fatalf("expected %q count %d, got summary=%v", tc.wantCategory, tc.wantCategoryCnt, result.Summary)
+			}
+		})
+	}
+}
+
 func mustLoadFixtureSchemas(t testing.TB) (schema.PackageSpec, schema.PackageSpec) {
 	t.Helper()
+	// Keep in sync with internal/cmd/compare_test.go helpers by design:
+	// tests in these two packages cannot share *_test.go helpers directly.
 	oldSchema := mustReadFixtureSchema(t, "schema-old.json")
 	newSchema := mustReadFixtureSchema(t, "schema-new.json")
 	return oldSchema, newSchema
@@ -250,6 +340,24 @@ func expectedFixtureSummaryEntries() map[string][]string {
 		},
 		"type-changed": {
 			`Types: "my-pkg:index:MyType": properties: "field" type changed from "string" to "integer"`,
+		},
+	}
+}
+
+func schemaWithFunction(token string, fn schema.FunctionSpec) schema.PackageSpec {
+	return schema.PackageSpec{
+		Name: "my-pkg",
+		Functions: map[string]schema.FunctionSpec{
+			token: fn,
+		},
+	}
+}
+
+func schemaWithType(token string, typ schema.ComplexTypeSpec) schema.PackageSpec {
+	return schema.PackageSpec{
+		Name: "my-pkg",
+		Types: map[string]schema.ComplexTypeSpec{
+			token: typ,
 		},
 	}
 }

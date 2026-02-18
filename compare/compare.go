@@ -68,7 +68,7 @@ func summarize(report internalcompare.Report) []SummaryItem {
 			return
 		}
 		path := nodePath(node)
-		entry := nodeEntry(node)
+		entry := nodeEntry(path, node.Description)
 		category := classify(path, node.Description)
 		counts[category]++
 		if entry != "" {
@@ -139,18 +139,14 @@ func nodePath(node *diagtree.Node) string {
 	return strings.Join(node.PathTitles(), ": ")
 }
 
-func nodeEntry(node *diagtree.Node) string {
-	if node == nil {
-		return ""
-	}
-	path := nodePath(node)
-	if node.Description == "" {
+func nodeEntry(path string, description string) string {
+	if description == "" {
 		return path
 	}
 	if path == "" {
-		return node.Description
+		return description
 	}
-	return path + " " + node.Description
+	return path + " " + description
 }
 
 func sortAndUnique(values []string) []string {
@@ -158,6 +154,7 @@ func sortAndUnique(values []string) []string {
 		return []string{}
 	}
 	out := slices.Clone(values)
+	// slices.Compact only removes adjacent duplicates, so sorting is required.
 	sort.Strings(out)
 	return slices.Compact(out)
 }
