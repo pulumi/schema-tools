@@ -99,6 +99,9 @@ func summarize(report internalcompare.Report) []SummaryItem {
 }
 
 func classify(path string, description string) string {
+	// NOTE: category matching is intentionally coupled to internal compare
+	// diagnostics text (for example "missing input", "has changed to Required").
+	// If those strings change in internal/compare, update this mapping.
 	// Keep specific "missing" path patterns first so they do not get swallowed
 	// by the broader "description == missing" cases below.
 	switch {
@@ -154,15 +157,7 @@ func sortAndUnique(values []string) []string {
 	if len(values) == 0 {
 		return []string{}
 	}
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
+	out := slices.Clone(values)
 	sort.Strings(out)
-	return out
+	return slices.Compact(out)
 }

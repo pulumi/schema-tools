@@ -2,17 +2,17 @@ package compare
 
 import (
 	"encoding/json"
-	"fmt"
-	"io"
 	"slices"
 	"sort"
 )
 
-type summaryOnlyJSON struct {
+// SummaryJSONOutput is the compare --json --summary payload shape.
+type SummaryJSONOutput struct {
 	Summary []SummaryItem `json:"summary"`
 }
 
-type fullJSON struct {
+// FullJSONOutput is the compare --json payload shape.
+type FullJSONOutput struct {
 	Summary         []SummaryItem `json:"summary"`
 	BreakingChanges []string      `json:"breaking_changes"`
 	NewResources    []string      `json:"new_resources"`
@@ -20,39 +20,30 @@ type fullJSON struct {
 }
 
 // MarshalJSON produces deterministic output ordering and non-nil slices.
+// It preserves SummaryItem.Entries as the full structured API representation.
 func (result Result) MarshalJSON() ([]byte, error) {
 	normalized := normalizeForJSON(result)
 	type alias Result
 	return json.Marshal(alias(normalized))
 }
 
-// RenderJSON writes a deterministic JSON payload for compare results.
-func RenderJSON(out io.Writer, result Result, summaryOnly bool) error {
+// NewSummaryJSONOutput normalizes a compare result to the summary-only CLI JSON
+// shape, preserving summary entries.
+func NewSummaryJSONOutput(result Result) SummaryJSONOutput {
 	normalized := normalizeForJSON(result)
+	return SummaryJSONOutput{Summary: normalized.Summary}
+}
 
-	var payload any
-	if summaryOnly {
-		payload = summaryOnlyJSON{Summary: normalized.Summary}
-	} else {
-		payload = fullJSON{
-			Summary:         summaryWithoutEntries(normalized.Summary),
-			BreakingChanges: normalized.BreakingChanges,
-			NewResources:    normalized.NewResources,
-			NewFunctions:    normalized.NewFunctions,
-		}
+// NewFullJSONOutput normalizes a compare result to the full CLI JSON shape.
+// Summary entries are omitted to keep payloads compact.
+func NewFullJSONOutput(result Result) FullJSONOutput {
+	normalized := normalizeForJSON(result)
+	return FullJSONOutput{
+		Summary:         summaryWithoutEntries(normalized.Summary),
+		BreakingChanges: normalized.BreakingChanges,
+		NewResources:    normalized.NewResources,
+		NewFunctions:    normalized.NewFunctions,
 	}
-
-	data, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal compare JSON: %w", err)
-	}
-	if _, err := out.Write(data); err != nil {
-		return fmt.Errorf("write compare JSON: %w", err)
-	}
-	if _, err := out.Write([]byte("\n")); err != nil {
-		return fmt.Errorf("write compare JSON: %w", err)
-	}
-	return nil
 }
 
 func normalizeForJSON(result Result) Result {

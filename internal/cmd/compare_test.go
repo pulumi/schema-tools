@@ -31,6 +31,7 @@ func TestRenderCompareOutputModes(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Contains(t, out.String(), `"breaking_changes": [`)
 		assert.Contains(t, out.String(), `"line-1"`)
+		assert.True(t, strings.HasSuffix(out.String(), "\n"))
 	})
 
 	t.Run("summary text", func(t *testing.T) {
@@ -61,6 +62,18 @@ func TestRenderCompareOutputModes(t *testing.T) {
 		err := renderCompareOutput(errorWriter{}, result, false, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "write summary output")
+	})
+
+	t.Run("json write error", func(t *testing.T) {
+		err := renderCompareOutput(errorWriter{}, result, true, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "write compare JSON")
+	})
+
+	t.Run("text write error", func(t *testing.T) {
+		err := renderCompareOutput(errorWriter{}, result, false, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "write compare text output")
 	})
 }
 
@@ -117,7 +130,7 @@ func TestCompareSchemasFixtureTextOutput(t *testing.T) {
 		Provider:   "my-pkg",
 		MaxChanges: -1,
 	})
-	compare.RenderText(&out, result)
+	assert.NoError(t, compare.RenderText(&out, result))
 
 	text := out.String()
 	assert.Contains(t, text, "Found 14 breaking changes:")

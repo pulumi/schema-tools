@@ -92,6 +92,108 @@ func TestSchemasBuildsSummaryWithEntriesAndPaths(t *testing.T) {
 	}
 }
 
+func TestClassifyDiagnosticDescriptions(t *testing.T) {
+	tests := []struct {
+		name        string
+		path        string
+		description string
+		want        string
+	}{
+		{
+			name:        "resource missing input by path and missing description",
+			path:        `Resources: "pkg:index:Res": inputs: "name"`,
+			description: "missing",
+			want:        "missing-input",
+		},
+		{
+			name:        "type missing property by path and missing description",
+			path:        `Types: "pkg:index:Type": properties: "name"`,
+			description: "missing",
+			want:        "missing-property",
+		},
+		{
+			name:        "function missing input by message",
+			path:        `Functions: "pkg:index:getThing": inputs: "name"`,
+			description: `missing input "name"`,
+			want:        "missing-input",
+		},
+		{
+			name:        "missing output",
+			path:        `Functions: "pkg:index:getThing": outputs: "name"`,
+			description: "missing output",
+			want:        "missing-output",
+		},
+		{
+			name:        "missing resource",
+			path:        `Resources: "pkg:index:Res"`,
+			description: "missing",
+			want:        "missing-resource",
+		},
+		{
+			name:        "missing function",
+			path:        `Functions: "pkg:index:getThing"`,
+			description: "missing",
+			want:        "missing-function",
+		},
+		{
+			name:        "missing type",
+			path:        `Types: "pkg:index:Type"`,
+			description: "missing",
+			want:        "missing-type",
+		},
+		{
+			name:        "type changed",
+			path:        "any",
+			description: `type changed from "string" to "integer"`,
+			want:        "type-changed",
+		},
+		{
+			name:        "had no type",
+			path:        "any",
+			description: "had no type but now has %+v",
+			want:        "type-changed",
+		},
+		{
+			name:        "now has no type",
+			path:        "any",
+			description: "had %+v but now has no type",
+			want:        "type-changed",
+		},
+		{
+			name:        "optional to required",
+			path:        "any",
+			description: "input has changed to Required",
+			want:        "optional-to-required",
+		},
+		{
+			name:        "required to optional",
+			path:        "any",
+			description: "property is no longer Required",
+			want:        "required-to-optional",
+		},
+		{
+			name:        "signature changed",
+			path:        `Functions: "pkg:index:getThing"`,
+			description: "signature change (pulumi.InvokeOptions)->T => (Args, pulumi.InvokeOptions)->T",
+			want:        "signature-changed",
+		},
+		{
+			name:        "fallback other",
+			path:        "any",
+			description: "something unexpected",
+			want:        "other",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := classify(tc.path, tc.description); got != tc.want {
+				t.Fatalf("classify(%q, %q) = %q, want %q", tc.path, tc.description, got, tc.want)
+			}
+		})
+	}
+}
+
 func mustLoadFixtureSchemas(t testing.TB) (schema.PackageSpec, schema.PackageSpec) {
 	t.Helper()
 	oldSchema := mustReadFixtureSchema(t, "schema-old.json")

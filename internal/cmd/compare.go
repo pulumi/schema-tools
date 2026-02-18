@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -185,11 +186,22 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 
 func renderCompareOutput(out io.Writer, result compare.Result, jsonMode bool, summaryMode bool) error {
 	if jsonMode {
-		return compare.RenderJSON(out, result, summaryMode)
+		encoder := json.NewEncoder(out)
+		encoder.SetIndent("", "  ")
+
+		var payload any
+		if summaryMode {
+			payload = compare.NewSummaryJSONOutput(result)
+		} else {
+			payload = compare.NewFullJSONOutput(result)
+		}
+		if err := encoder.Encode(payload); err != nil {
+			return fmt.Errorf("write compare JSON: %w", err)
+		}
+		return nil
 	}
 	if summaryMode {
 		return compare.RenderSummary(out, result)
 	}
-	compare.RenderText(out, result)
-	return nil
+	return compare.RenderText(out, result)
 }
