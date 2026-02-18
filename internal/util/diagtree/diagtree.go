@@ -14,15 +14,16 @@ type Node struct {
 	Description string
 	Severity    Severity
 
-	subfields []*Node
-	doDisplay bool
-	parent    *Node
+	subfields       []*Node
+	subfieldByTitle map[string]*Node
+	doDisplay       bool
+	parent          *Node
 }
 
 func (m *Node) subfield(name string) *Node {
 	contract.Assertf(name != "", "we cannot display an empty name")
-	for _, v := range m.subfields {
-		if v.Title == name {
+	if m.subfieldByTitle != nil {
+		if v, ok := m.subfieldByTitle[name]; ok {
 			return v
 		}
 	}
@@ -30,6 +31,10 @@ func (m *Node) subfield(name string) *Node {
 		Title:  name,
 		parent: m,
 	}
+	if m.subfieldByTitle == nil {
+		m.subfieldByTitle = map[string]*Node{}
+	}
+	m.subfieldByTitle[name] = v
 	m.subfields = append(m.subfields, v)
 	return v
 }
@@ -40,6 +45,45 @@ func (m *Node) Label(name string) *Node {
 
 func (m *Node) Value(value string) *Node {
 	return m.subfield(fmt.Sprintf("%q", value))
+}
+
+func (m *Node) PathTitles() []string {
+	if m == nil {
+		return nil
+	}
+
+	parts := []string{}
+	for n := m; n != nil; n = n.parent {
+		if n.Title == "" {
+			continue
+		}
+		parts = append(parts, n.Title)
+	}
+
+	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
+		parts[i], parts[j] = parts[j], parts[i]
+	}
+
+	return parts
+}
+
+// WalkDisplayed visits every displayed node in the tree, including
+// intermediate branch nodes.
+func (m *Node) WalkDisplayed(visit func(*Node)) {
+	if m == nil || visit == nil {
+		return
+	}
+	m.walkDisplayed(visit)
+}
+
+func (m *Node) walkDisplayed(visit func(*Node)) {
+	if m == nil || !m.doDisplay {
+		return
+	}
+	visit(m)
+	for _, child := range m.subfields {
+		child.walkDisplayed(visit)
+	}
 }
 
 func (m *Node) Prune() {
@@ -55,6 +99,14 @@ func (m *Node) Prune() {
 		sfs = nil
 	}
 	m.subfields = sfs
+	if len(sfs) == 0 {
+		m.subfieldByTitle = nil
+		return
+	}
+	m.subfieldByTitle = make(map[string]*Node, len(sfs))
+	for _, child := range sfs {
+		m.subfieldByTitle[child.Title] = child
+	}
 }
 
 func (m *Node) levelPrefix(level int) string {

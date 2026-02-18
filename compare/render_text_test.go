@@ -8,7 +8,9 @@ import (
 
 func TestRenderTextNoBreakingChanges(t *testing.T) {
 	var out bytes.Buffer
-	RenderText(&out, Result{})
+	if err := RenderText(&out, Result{}); err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
 
 	text := out.String()
 	if !strings.Contains(text, "Looking good! No breaking changes found.") {
@@ -18,10 +20,12 @@ func TestRenderTextNoBreakingChanges(t *testing.T) {
 
 func TestRenderTextPreservesNewResourcesAndFunctionsOrder(t *testing.T) {
 	var out bytes.Buffer
-	RenderText(&out, Result{
+	if err := RenderText(&out, Result{
 		NewResources: []string{"zeta.Resource", "alpha.Resource"},
 		NewFunctions: []string{"zeta.fn", "alpha.fn"},
-	})
+	}); err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
 
 	text := out.String()
 	if first, second := strings.Index(text, "- `zeta.Resource`"), strings.Index(text, "- `alpha.Resource`"); first == -1 || second == -1 || first > second {
@@ -34,7 +38,9 @@ func TestRenderTextPreservesNewResourcesAndFunctionsOrder(t *testing.T) {
 
 func TestRenderTextOneBreakingChange(t *testing.T) {
 	var out bytes.Buffer
-	RenderText(&out, Result{BreakingChanges: []string{"`🔴` test violation"}})
+	if err := RenderText(&out, Result{BreakingChanges: []string{"`🔴` test violation"}}); err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
 
 	text := out.String()
 	if !strings.Contains(text, "Found 1 breaking change:\n") {
@@ -47,7 +53,9 @@ func TestRenderTextOneBreakingChange(t *testing.T) {
 
 func TestRenderTextManyBreakingChanges(t *testing.T) {
 	var out bytes.Buffer
-	RenderText(&out, Result{BreakingChanges: []string{"`🔴` first", "`🟡` second"}})
+	if err := RenderText(&out, Result{BreakingChanges: []string{"`🔴` first", "`🟡` second"}}); err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
 
 	text := out.String()
 	if !strings.Contains(text, "Found 2 breaking changes:\n") {
@@ -55,5 +63,12 @@ func TestRenderTextManyBreakingChanges(t *testing.T) {
 	}
 	if !strings.Contains(text, "`🔴` first\n`🟡` second") {
 		t.Fatalf("expected all breaking change lines, got:\n%s", text)
+	}
+}
+
+func TestRenderTextWriteError(t *testing.T) {
+	err := RenderText(failingWriter{}, Result{BreakingChanges: []string{"boom"}})
+	if err == nil {
+		t.Fatal("expected write error")
 	}
 }

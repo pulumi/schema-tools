@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -16,10 +17,37 @@ import (
 	"github.com/pulumi/schema-tools/internal/pkg"
 )
 
+type compareDeps struct {
+	currentUser          func() (*user.User, error)
+	downloadSchema       func(context.Context, string, string, string) (schema.PackageSpec, error)
+	loadLocalPackageSpec func(string) (schema.PackageSpec, error)
+}
+
+type compareInput struct {
+	provider    string
+	repository  string
+	oldCommit   string
+	newCommit   string
+	oldPath     string
+	newPath     string
+	maxChanges  int
+	jsonMode    bool
+	summaryMode bool
+}
+
+func defaultCompareDeps() compareDeps {
+	return compareDeps{
+		currentUser:          user.Current,
+		downloadSchema:       pkg.DownloadSchema,
+		loadLocalPackageSpec: pkg.LoadLocalPackageSpec,
+	}
+}
+
 func compareCmd() *cobra.Command {
 	var provider, repository, oldCommit, newCommit string
 	var oldPath, newPath string
 	var maxChanges int
+	var jsonMode, summaryMode bool
 
 	command := &cobra.Command{
 		Use:   "compare",
@@ -34,7 +62,17 @@ func compareCmd() *cobra.Command {
 			if oldCommit != "" && oldPath != "" {
 				return fmt.Errorf("--old-commit and --old-path are mutually exclusive")
 			}
-			return runCompare(provider, repository, oldCommit, newCommit, oldPath, newPath, maxChanges)
+			return runCompareCmd(compareInput{
+				provider:    provider,
+				repository:  repository,
+				oldCommit:   oldCommit,
+				newCommit:   newCommit,
+				oldPath:     oldPath,
+				newPath:     newPath,
+				maxChanges:  maxChanges,
+				jsonMode:    jsonMode,
+				summaryMode: summaryMode,
+			})
 		},
 	}
 
@@ -57,11 +95,18 @@ func compareCmd() *cobra.Command {
 
 	command.Flags().IntVarP(&maxChanges, "max-changes", "m", 500,
 		"the maximum number of breaking changes to display. Pass -1 to display all changes")
+	command.Flags().BoolVar(&jsonMode, "json", false, "render compare output as JSON")
+	command.Flags().BoolVar(&summaryMode, "summary", false,
+		"render summary-only output (text counts; with --json, includes entry details)")
 
 	return command
 }
 
-func runCompare(provider string, repository string, oldCommit string, newCommit string, oldPath string, newPath string, maxChanges int) error {
+func runCompareCmd(input compareInput) error {
+	return runCompareCmdWithDeps(input, defaultCompareDeps())
+}
+
+func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	loadLocal := func(path string) (schema.PackageSpec, error) {
@@ -69,20 +114,20 @@ func runCompare(provider string, repository string, oldCommit string, newCommit 
 		if err != nil {
 			return schema.PackageSpec{}, fmt.Errorf("unable to construct absolute path to schema.json: %w", err)
 		}
-		return pkg.LoadLocalPackageSpec(schemaPath)
+		return deps.loadLocalPackageSpec(schemaPath)
 	}
 
 	var schOld schema.PackageSpec
-	schOldDone := make(chan error)
+	schOldDone := make(chan error, 1)
 	go func() {
 		var err error
 		switch {
-		case oldPath != "":
-			schOld, err = loadLocal(oldPath)
-		case oldCommit != "":
-			schOld, err = pkg.DownloadSchema(ctx, repository, provider, oldCommit)
+		case input.oldPath != "":
+			schOld, err = loadLocal(input.oldPath)
+		case input.oldCommit != "":
+			schOld, err = deps.downloadSchema(ctx, input.repository, input.provider, input.oldCommit)
 		default:
-			schOld, err = pkg.DownloadSchema(ctx, repository, provider, "master")
+			schOld, err = deps.downloadSchema(ctx, input.repository, input.provider, "master")
 		}
 		if err != nil {
 			cancel()
@@ -91,37 +136,39 @@ func runCompare(provider string, repository string, oldCommit string, newCommit 
 	}()
 
 	var schNew schema.PackageSpec
-	if newPath != "" {
+	if input.newPath != "" {
 		var err error
-		schNew, err = loadLocal(newPath)
+		schNew, err = loadLocal(input.newPath)
 		if err != nil {
 			return err
 		}
-	} else if strings.HasPrefix(newCommit, "--local-path=") {
+	} else if strings.HasPrefix(input.newCommit, "--local-path=") {
 		fmt.Fprintln(os.Stderr, "Warning: --local-path= in --new-commit is deprecated, use --new-path instead")
-		parts := strings.Split(newCommit, "=")
+		parts := strings.Split(input.newCommit, "=")
 		if len(parts) < 2 || parts[1] == "" {
-			return fmt.Errorf("invalid --local-path value: %q", newCommit)
+			return fmt.Errorf("invalid --local-path value: %q", input.newCommit)
 		}
 		var err error
 		schNew, err = loadLocal(parts[1])
 		if err != nil {
 			return err
 		}
-	} else if newCommit == "--local" {
+	} else if input.newCommit == "--local" {
 		fmt.Fprintln(os.Stderr, "Warning: --local in --new-commit is deprecated, use --new-path instead")
-		usr, _ := user.Current()
-		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi/%s", usr.HomeDir, provider)
-		schemaFile := pkg.StandardSchemaPath(provider)
+		usr, err := deps.currentUser()
+		if err != nil {
+			return fmt.Errorf("get current user: %w", err)
+		}
+		basePath := fmt.Sprintf("%s/go/src/github.com/pulumi/%s", usr.HomeDir, input.provider)
+		schemaFile := pkg.StandardSchemaPath(input.provider)
 		schemaPath := filepath.Join(basePath, schemaFile)
-		var err error
-		schNew, err = pkg.LoadLocalPackageSpec(schemaPath)
+		schNew, err = deps.loadLocalPackageSpec(schemaPath)
 		if err != nil {
 			return err
 		}
 	} else {
 		var err error
-		schNew, err = pkg.DownloadSchema(ctx, repository, provider, newCommit)
+		schNew, err = deps.downloadSchema(ctx, input.repository, input.provider, input.newCommit)
 		if err != nil {
 			return err
 		}
@@ -131,14 +178,31 @@ func runCompare(provider string, repository string, oldCommit string, newCommit 
 		return err
 	}
 
-	compareSchemas(os.Stdout, provider, schOld, schNew, maxChanges)
-	return nil
+	result := compare.Schemas(schOld, schNew, compare.Options{
+		Provider:   input.provider,
+		MaxChanges: input.maxChanges,
+	})
+	return renderCompareOutput(os.Stdout, result, input.jsonMode, input.summaryMode)
 }
 
-func compareSchemas(out io.Writer, provider string, oldSchema, newSchema schema.PackageSpec, maxChanges int) {
-	result := compare.Schemas(oldSchema, newSchema, compare.Options{
-		Provider:   provider,
-		MaxChanges: maxChanges,
-	})
-	compare.RenderText(out, result)
+func renderCompareOutput(out io.Writer, result compare.Result, jsonMode bool, summaryMode bool) error {
+	if jsonMode {
+		encoder := json.NewEncoder(out)
+		encoder.SetIndent("", "  ")
+
+		var payload any
+		if summaryMode {
+			payload = compare.NewSummaryJSONOutput(result)
+		} else {
+			payload = compare.NewFullJSONOutput(result)
+		}
+		if err := encoder.Encode(payload); err != nil {
+			return fmt.Errorf("write compare JSON: %w", err)
+		}
+		return nil
+	}
+	if summaryMode {
+		return compare.RenderSummary(out, result)
+	}
+	return compare.RenderText(out, result)
 }
