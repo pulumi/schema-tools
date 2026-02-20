@@ -3,24 +3,31 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/spf13/cobra"
 
 	"github.com/pulumi/schema-tools/compare"
+	"github.com/pulumi/schema-tools/internal/normalize"
 	"github.com/pulumi/schema-tools/internal/pkg"
 )
 
 type compareDeps struct {
 	currentUser          func() (*user.User, error)
 	downloadSchema       func(context.Context, string, string, string) (schema.PackageSpec, error)
+	downloadRepoFile     func(context.Context, string, string, string, string) ([]byte, error)
 	loadLocalPackageSpec func(string) (schema.PackageSpec, error)
+	parseMetadata        func([]byte) (*normalize.MetadataEnvelope, error)
+	normalizeSchemas     func(schema.PackageSpec, schema.PackageSpec, *normalize.MetadataEnvelope, *normalize.MetadataEnvelope) (normalize.Result, error)
 }
 
 type compareInput struct {
@@ -39,8 +46,33 @@ func defaultCompareDeps() compareDeps {
 	return compareDeps{
 		currentUser:          user.Current,
 		downloadSchema:       pkg.DownloadSchema,
+		downloadRepoFile:     pkg.DownloadRepoFile,
 		loadLocalPackageSpec: pkg.LoadLocalPackageSpec,
+		parseMetadata:        normalize.ParseMetadata,
+		normalizeSchemas:     normalize.Normalize,
 	}
+}
+
+var ErrCompareMetadataRequired = errors.New("compare metadata required")
+
+type compareMetadataRequiredError struct {
+	Side   string
+	Source string
+	Path   string
+	Commit string
+	Err    error
+}
+
+func (e *compareMetadataRequiredError) Error() string {
+	return fmt.Sprintf("compare %s metadata required: %s@%s:%s", e.Side, e.Source, e.Commit, e.Path)
+}
+
+func (e *compareMetadataRequiredError) Unwrap() error {
+	return e.Err
+}
+
+func (e *compareMetadataRequiredError) Is(target error) bool {
+	return target == ErrCompareMetadataRequired
 }
 
 func compareCmd() *cobra.Command {
@@ -81,7 +113,6 @@ func compareCmd() *cobra.Command {
 
 	command.Flags().StringVarP(&repository, "repository", "r",
 		"github://api.github.com/pulumi", "the Git repository to download the schema file from")
-	_ = command.MarkFlagRequired("provider")
 
 	command.Flags().StringVarP(&oldCommit, "old-commit", "o", "",
 		"the old commit to compare with (defaults to master when no --old-path is set)")
@@ -107,6 +138,11 @@ func runCompareCmd(input compareInput) error {
 }
 
 func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
+	deps = applyCompareDepsDefaults(deps)
+	if strings.TrimSpace(input.provider) == "" {
+		return fmt.Errorf("--provider must be set")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	loadLocal := func(path string) (schema.PackageSpec, error) {
@@ -117,6 +153,11 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 		return deps.loadLocalPackageSpec(schemaPath)
 	}
 
+	oldCommit := input.oldCommit
+	if oldCommit == "" && input.oldPath == "" {
+		oldCommit = "master"
+	}
+
 	var schOld schema.PackageSpec
 	schOldDone := make(chan error, 1)
 	go func() {
@@ -124,10 +165,8 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 		switch {
 		case input.oldPath != "":
 			schOld, err = loadLocal(input.oldPath)
-		case input.oldCommit != "":
-			schOld, err = deps.downloadSchema(ctx, input.repository, input.provider, input.oldCommit)
 		default:
-			schOld, err = deps.downloadSchema(ctx, input.repository, input.provider, "master")
+			schOld, err = deps.downloadSchema(ctx, input.repository, input.provider, oldCommit)
 		}
 		if err != nil {
 			cancel()
@@ -136,23 +175,28 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 	}()
 
 	var schNew schema.PackageSpec
+	newCommit := input.newCommit
+	newIsLocal := false
 	if input.newPath != "" {
 		var err error
 		schNew, err = loadLocal(input.newPath)
 		if err != nil {
 			return err
 		}
+		newIsLocal = true
 	} else if strings.HasPrefix(input.newCommit, "--local-path=") {
 		fmt.Fprintln(os.Stderr, "Warning: --local-path= in --new-commit is deprecated, use --new-path instead")
-		parts := strings.Split(input.newCommit, "=")
-		if len(parts) < 2 || parts[1] == "" {
+		_, localPath, ok := strings.Cut(input.newCommit, "=")
+		if !ok || localPath == "" {
 			return fmt.Errorf("invalid --local-path value: %q", input.newCommit)
 		}
 		var err error
-		schNew, err = loadLocal(parts[1])
+		schNew, err = loadLocal(localPath)
 		if err != nil {
 			return err
 		}
+		newCommit = ""
+		newIsLocal = true
 	} else if input.newCommit == "--local" {
 		fmt.Fprintln(os.Stderr, "Warning: --local in --new-commit is deprecated, use --new-path instead")
 		usr, err := deps.currentUser()
@@ -166,6 +210,8 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 		if err != nil {
 			return err
 		}
+		newCommit = ""
+		newIsLocal = true
 	} else {
 		var err error
 		schNew, err = deps.downloadSchema(ctx, input.repository, input.provider, input.newCommit)
@@ -178,11 +224,130 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 		return err
 	}
 
-	result := compare.Schemas(schOld, schNew, compare.Options{
+	var oldMetadata, newMetadata *normalize.MetadataEnvelope
+	remoteCompare := input.oldPath == "" && !newIsLocal && !isFileRepositoryURL(input.repository)
+	if remoteCompare {
+		var err error
+		oldMetadata, err = resolveCompareMetadataSource(
+			ctx, deps, "old", input.provider, input.repository, oldCommit,
+		)
+		if err != nil {
+			return err
+		}
+		newMetadata, err = resolveCompareMetadataSource(
+			ctx, deps, "new", input.provider, input.repository, newCommit,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	normalizedOld, normalizedNew := schOld, schNew
+	normalizedRenames := []normalize.TokenRename{}
+	normalizedMaxItemsOne := []normalize.MaxItemsOneChange{}
+	if remoteCompare {
+		normalized, err := deps.normalizeSchemas(schOld, schNew, oldMetadata, newMetadata)
+		if err != nil {
+			return fmt.Errorf("normalize schemas: %w", err)
+		}
+		normalizedOld, normalizedNew = normalized.OldSchema, normalized.NewSchema
+		normalizedRenames = normalized.Renames
+		normalizedMaxItemsOne = normalized.MaxItemsOne
+	}
+
+	result := compare.Schemas(normalizedOld, normalizedNew, compare.Options{
 		Provider:   input.provider,
-		MaxChanges: input.maxChanges,
+		MaxChanges: compareEngineMaxChanges(remoteCompare, input.maxChanges),
 	})
+	result = addNormalizationRenames(result, normalizedRenames)
+	result = addNormalizationMaxItemsOne(result, normalizedMaxItemsOne)
+	// Intentionally cap after normalization injections so synthetic breaking changes
+	// (rename/maxItemsOne) participate in the same final max-changes policy.
+	// maxChanges == 0 is valid and yields zero rendered breaking changes.
+	result = applyMaxChangesLimit(result, input.maxChanges)
 	return renderCompareOutput(os.Stdout, result, input.jsonMode, input.summaryMode)
+}
+
+func applyCompareDepsDefaults(deps compareDeps) compareDeps {
+	defaults := defaultCompareDeps()
+	if deps.currentUser == nil {
+		deps.currentUser = defaults.currentUser
+	}
+	if deps.downloadSchema == nil {
+		deps.downloadSchema = defaults.downloadSchema
+	}
+	if deps.downloadRepoFile == nil {
+		deps.downloadRepoFile = defaults.downloadRepoFile
+	}
+	if deps.loadLocalPackageSpec == nil {
+		deps.loadLocalPackageSpec = defaults.loadLocalPackageSpec
+	}
+	if deps.parseMetadata == nil {
+		deps.parseMetadata = defaults.parseMetadata
+	}
+	if deps.normalizeSchemas == nil {
+		deps.normalizeSchemas = defaults.normalizeSchemas
+	}
+	return deps
+}
+
+func resolveCompareMetadataSource(
+	ctx context.Context,
+	deps compareDeps,
+	side, provider, repository, commit string,
+) (*normalize.MetadataEnvelope, error) {
+	metadataRepoPath := pkg.StandardMetadataPath(provider)
+
+	payload, err := deps.downloadRepoFile(ctx, repository, provider, commit, metadataRepoPath)
+	if err != nil {
+		if errors.Is(err, pkg.ErrRepoFileNotFound) {
+			return nil, &compareMetadataRequiredError{
+				Side:   side,
+				Source: repository,
+				Path:   metadataRepoPath,
+				Commit: commit,
+				Err:    err,
+			}
+		}
+		return nil, fmt.Errorf("download %s metadata: %w", side, err)
+	}
+
+	metadata, err := deps.parseMetadata(payload)
+	if err != nil {
+		if errors.Is(err, normalize.ErrMetadataRequired) {
+			return nil, &compareMetadataRequiredError{
+				Side:   side,
+				Source: repository,
+				Path:   metadataRepoPath,
+				Commit: commit,
+				Err:    err,
+			}
+		}
+		return nil, fmt.Errorf("parse %s metadata: %w", side, err)
+	}
+	return metadata, nil
+}
+
+func applyMaxChangesLimit(result compare.Result, maxChanges int) compare.Result {
+	if maxChanges < 0 || len(result.BreakingChanges) <= maxChanges {
+		return result
+	}
+	result.BreakingChanges = result.BreakingChanges[:maxChanges]
+	return result
+}
+
+func compareEngineMaxChanges(remoteCompare bool, maxChanges int) int {
+	// Remote compares can inject normalization-derived breaking changes after
+	// compare.Schemas, so avoid pre-capping in the engine and apply one final cap.
+	if remoteCompare {
+		return -1
+	}
+	return maxChanges
+}
+
+func isFileRepositoryURL(repository string) bool {
+	repoURL, err := url.Parse(repository)
+	return err == nil && repoURL.Scheme == "file"
 }
 
 func renderCompareOutput(out io.Writer, result compare.Result, jsonMode bool, summaryMode bool) error {
@@ -205,4 +370,151 @@ func renderCompareOutput(out io.Writer, result compare.Result, jsonMode bool, su
 		return compare.RenderSummary(out, result)
 	}
 	return compare.RenderText(out, result)
+}
+
+func addNormalizationRenames(result compare.Result, renames []normalize.TokenRename) compare.Result {
+	if len(renames) == 0 {
+		return result
+	}
+
+	entriesByCategory := map[string][]string{}
+	breakingLines := []string{}
+	seen := map[string]struct{}{}
+	for _, rename := range renames {
+		category, scopeLabel := normalizationRenameCategory(rename.Scope)
+		if category == "" || strings.TrimSpace(rename.OldToken) == "" || strings.TrimSpace(rename.NewToken) == "" {
+			continue
+		}
+
+		entry := fmt.Sprintf(`%s: %q renamed to %q`, scopeLabel, rename.OldToken, rename.NewToken)
+		key := category + "|" + entry
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		entriesByCategory[category] = append(entriesByCategory[category], entry)
+		breakingLines = append(breakingLines, fmt.Sprintf("`🔴` %s", entry))
+	}
+
+	if len(breakingLines) == 0 {
+		return result
+	}
+	result = prependNormalizationBreakingLines(result, breakingLines)
+	result = mergeNormalizationSummaryEntries(result, entriesByCategory)
+	return result
+}
+
+func addNormalizationMaxItemsOne(result compare.Result, changes []normalize.MaxItemsOneChange) compare.Result {
+	if len(changes) == 0 {
+		return result
+	}
+
+	const category = "max-items-one-changed"
+	entries := []string{}
+	breakingLines := []string{}
+	seen := map[string]struct{}{}
+	for _, change := range changes {
+		scopeLabel := normalizationScopeLabel(change.Scope)
+		if scopeLabel == "" || strings.TrimSpace(change.Token) == "" || strings.TrimSpace(change.Field) == "" {
+			continue
+		}
+
+		location := change.Location
+		if strings.TrimSpace(location) == "" {
+			location = "properties"
+		}
+		entry := fmt.Sprintf(`%s: %q: %s: %q maxItemsOne changed from %q to %q`,
+			scopeLabel, change.Token, location, change.Field, change.OldType, change.NewType)
+		if _, ok := seen[entry]; ok {
+			continue
+		}
+		seen[entry] = struct{}{}
+		entries = append(entries, entry)
+		breakingLines = append(breakingLines, fmt.Sprintf("`🔴` %s", entry))
+	}
+	if len(entries) == 0 {
+		return result
+	}
+
+	result = prependNormalizationBreakingLines(result, breakingLines)
+	result = mergeNormalizationSummaryEntries(result, map[string][]string{
+		category: entries,
+	})
+	return result
+}
+
+func prependNormalizationBreakingLines(result compare.Result, lines []string) compare.Result {
+	if len(lines) == 0 {
+		return result
+	}
+	sort.Strings(lines)
+	result.BreakingChanges = append(lines, result.BreakingChanges...)
+	return result
+}
+
+func mergeNormalizationSummaryEntries(result compare.Result, entriesByCategory map[string][]string) compare.Result {
+	if len(entriesByCategory) == 0 {
+		return result
+	}
+	summaryByCategory := map[string]int{}
+	for i := range result.Summary {
+		summaryByCategory[result.Summary[i].Category] = i
+	}
+	for category := range entriesByCategory {
+		sort.Strings(entriesByCategory[category])
+	}
+	for _, category := range sortedSummaryCategories(entriesByCategory) {
+		entries := entriesByCategory[category]
+		if idx, ok := summaryByCategory[category]; ok {
+			result.Summary[idx].Entries = append(result.Summary[idx].Entries, entries...)
+			sort.Strings(result.Summary[idx].Entries)
+			result.Summary[idx].Count += len(entries)
+			continue
+		}
+		result.Summary = append(result.Summary, compare.SummaryItem{
+			Category: category,
+			Count:    len(entries),
+			Entries:  entries,
+		})
+	}
+
+	sort.Slice(result.Summary, func(i, j int) bool {
+		return result.Summary[i].Category < result.Summary[j].Category
+	})
+	return result
+}
+
+func normalizationScopeLabel(scope string) string {
+	switch scope {
+	case "resources":
+		return "Resources"
+	case "datasources":
+		return "Functions"
+	default:
+		return ""
+	}
+}
+
+func normalizationRenameCategory(scope string) (string, string) {
+	switch scope {
+	case "resources":
+		return "renamed-resource", "Resources"
+	case "datasources":
+		return "renamed-function", "Functions"
+	default:
+		return "", ""
+	}
+}
+
+func sortedSummaryCategories(entriesByCategory map[string][]string) []string {
+	if len(entriesByCategory) == 0 {
+		return nil
+	}
+	categories := make([]string, 0, len(entriesByCategory))
+	for category := range entriesByCategory {
+		categories = append(categories, category)
+	}
+	sort.Strings(categories)
+	return categories
 }

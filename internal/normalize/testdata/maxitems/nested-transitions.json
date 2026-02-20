@@ -1,0 +1,103 @@
+{
+  "old": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget": {
+          "current": "pkg:index/widget:Widget",
+          "fields": {
+            "list": {
+              "maxItemsOne": true,
+              "elem": {
+                "fields": {
+                  "child": {
+                    "maxItemsOne": false
+                  }
+                }
+              }
+            },
+            "name": {}
+          }
+        }
+      },
+      "datasources": {
+        "pkg_get_widget": {
+          "current": "pkg:index/getWidget:getWidget",
+          "fields": {
+            "items": {
+              "maxItemsOne": true
+            }
+          }
+        }
+      }
+    }
+  },
+  "new": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget": {
+          "current": "pkg:index/widget:Widget",
+          "fields": {
+            "list": {
+              "maxItemsOne": false,
+              "elem": {
+                "fields": {
+                  "child": {
+                    "maxItemsOne": false
+                  }
+                }
+              }
+            },
+            "name": {
+              "maxItemsOne": false
+            }
+          }
+        }
+      },
+      "datasources": {
+        "pkg_get_widget": {
+          "current": "pkg:index/getWidget:getWidget",
+          "fields": {
+            "items": {
+              "maxItemsOne": true
+            }
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "resources": {
+      "pkg_widget": {
+        "list": {
+          "old": true,
+          "new": false,
+          "transition": "changed"
+        },
+        "list[*]": {
+          "old": null,
+          "new": null,
+          "transition": "unknown"
+        },
+        "list[*].child": {
+          "old": false,
+          "new": false,
+          "transition": "unchanged"
+        },
+        "name": {
+          "old": null,
+          "new": false,
+          "transition": "unknown"
+        }
+      }
+    },
+    "datasources": {
+      "pkg_get_widget": {
+        "items": {
+          "old": true,
+          "new": true,
+          "transition": "unchanged"
+        }
+      }
+    }
+  }
+}

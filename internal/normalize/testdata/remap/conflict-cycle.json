@@ -1,0 +1,62 @@
+{
+  "old": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget_a": {
+          "current": "pkg:index/widgetA:WidgetA",
+          "past": [
+            {
+              "name": "pkg:index/widgetLegacy:Widget",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        },
+        "pkg_widget_b": {
+          "current": "pkg:index/widgetB:WidgetB",
+          "past": [
+            {
+              "name": "pkg:index/widgetLegacy:Widget",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        }
+      },
+      "datasources": {
+        "pkg_get_widget_a": {
+          "current": "pkg:index/getWidgetA:getWidgetA",
+          "past": [
+            {
+              "name": "pkg:index/getWidgetB:getWidgetB",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        },
+        "pkg_get_widget_b": {
+          "current": "pkg:index/getWidgetB:getWidgetB",
+          "past": [
+            {
+              "name": "pkg:index/getWidgetA:getWidgetA",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        }
+      }
+    }
+  },
+  "new": {
+    "auto-aliasing": {}
+  },
+  "expected": {
+    "old": {},
+    "new": {},
+    "diagnosticKinds": [
+      "conflict",
+      "cycle",
+      "bridge_semantic_gap"
+    ]
+  }
+}

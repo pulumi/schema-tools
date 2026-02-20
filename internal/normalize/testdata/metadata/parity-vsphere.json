@@ -1,0 +1,39 @@
+{
+  "auto-aliasing": {
+    "resources": {
+      "vsphere_compute_cluster": {
+        "current": "vsphere:index/computeCluster:ComputeCluster",
+        "majorVersion": 4,
+        "fields": {
+          "host_image": {
+            "maxItemsOne": true,
+            "elem": {
+              "fields": {
+                "component": {
+                  "maxItemsOne": false,
+                  "future-field": "ignored"
+                }
+              }
+            }
+          },
+          "tags": {
+            "maxItemsOne": false
+          }
+        },
+        "futureTokenField": {
+          "ignored": true
+        }
+      }
+    },
+    "datasources": {
+      "vsphere_content_library": {
+        "current": "vsphere:index/contentLibrary:ContentLibrary",
+        "majorVersion": 4
+      }
+    }
+  },
+  "auto-settings": {
+    "runtimeOnly": true
+  },
+  "future-top-level": "ignored"
+}

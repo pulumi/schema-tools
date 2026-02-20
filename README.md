@@ -141,6 +141,11 @@ To compare local schema files:
 $ schema-tools compare -p aws --old-path ./schemas/aws-old.json --new-path ./schemas/aws-new.json
 ```
 
+Normalization behavior in this initial PR:
+- Remote compare flow (`--old-commit`/`--new-commit`, including default old=`master`) automatically loads bridge metadata from the same repo/commit and applies strict metadata normalization.
+- Expected metadata location for remote schema downloads: `provider/cmd/pulumi-resource-<provider>/bridge-metadata.json`.
+- Local-path compare flow (`--old-path` or `--new-path`) remains legacy/unaffected in this PR.
+
 To emit machine-readable JSON output:
 
 ```shell

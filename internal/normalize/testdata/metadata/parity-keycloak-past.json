@@ -1,0 +1,28 @@
+{
+  "auto-aliasing": {
+    "resources": {
+      "keycloak_openid_audience_resolve_protocol_mapper": {
+        "current": "keycloak:openid/audienceResolveProtocolMapper:AudienceResolveProtocolMapper",
+        "majorVersion": 6,
+        "past": [
+          {
+            "name": "keycloak:openid/audienceResolveProtocolMappter:AudienceResolveProtocolMappter",
+            "inCodegen": true,
+            "majorVersion": 5
+          }
+        ]
+      }
+    },
+    "datasources": {
+      "keycloak_openid_client": {
+        "current": "keycloak:index/openidClient:OpenidClient",
+        "majorVersion": 6,
+        "fields": {
+          "valid_redirect_uris": {
+            "maxItemsOne": false
+          }
+        }
+      }
+    }
+  }
+}

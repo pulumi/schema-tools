@@ -1,0 +1,9 @@
+{
+  "auto-aliasing": {
+    "resources": {
+      "pkg_r1": {
+        "majorVersion": 1
+      }
+    }
+  }
+}
