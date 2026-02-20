@@ -141,6 +141,7 @@ func TestBuildNormalizationChangesProducesTypedChanges(t *testing.T) {
 			Token:    "pkg:index:Widget",
 			Location: "inputs",
 			Field:    "filter",
+			NewField: "filters",
 			OldType:  "string",
 			NewType:  "array",
 		},
@@ -149,6 +150,7 @@ func TestBuildNormalizationChangesProducesTypedChanges(t *testing.T) {
 			Token:    "pkg:index:Widget",
 			Location: "inputs",
 			Field:    "filter",
+			NewField: "filters",
 			OldType:  "string",
 			NewType:  "array",
 		},
@@ -184,7 +186,7 @@ func TestBuildNormalizationChangesProducesTypedChanges(t *testing.T) {
 	if maxItems.Location != "inputs" || maxItems.Scope != compare.ScopeResource || !maxItems.Breaking {
 		t.Fatalf("unexpected max-items-one change: %+v", maxItems)
 	}
-	if !strings.Contains(maxItems.Message, `"filter" maxItemsOne changed`) {
+	if !strings.Contains(maxItems.Message, `"filter" renamed to "filters" and type changed from "string" to "array"`) {
 		t.Fatalf("unexpected max-items-one message: %+v", maxItems)
 	}
 }
@@ -211,7 +213,7 @@ func TestCompareSchemasFixtureTextOutput(t *testing.T) {
 	assert.Contains(t, text, `- "my-pkg:index:removedFunction":`)
 	assert.Contains(t, text, `type changed from "string" to "integer"`)
 	assert.Contains(t, text, `input has changed to Required`)
-	assert.Contains(t, text, `property is no longer Required`)
+	assert.NotContains(t, text, `property is no longer Required`)
 }
 
 func TestRenderCompareOutputFixtureJSON(t *testing.T) {

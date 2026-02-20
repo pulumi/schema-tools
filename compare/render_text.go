@@ -95,13 +95,23 @@ func selectTextChanges(changes []Change, maxChanges int) []Change {
 	if len(changes) == 0 {
 		return []Change{}
 	}
-	if maxChanges < 0 || len(changes) <= maxChanges {
-		return changes
+
+	breakingOnly := make([]Change, 0, len(changes))
+	for _, change := range changes {
+		if change.Breaking {
+			breakingOnly = append(breakingOnly, change)
+		}
+	}
+	if len(breakingOnly) == 0 {
+		return []Change{}
+	}
+	if maxChanges < 0 || len(breakingOnly) <= maxChanges {
+		return breakingOnly
 	}
 	if maxChanges == 0 {
 		return []Change{}
 	}
-	return changes[:maxChanges]
+	return breakingOnly[:maxChanges]
 }
 
 func writeGroupedSections(

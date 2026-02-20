@@ -449,17 +449,25 @@ func buildNormalizationMaxItemsOneChanges(changes []normalize.MaxItemsOneChange)
 		if strings.TrimSpace(location) == "" {
 			location = "properties"
 		}
+
+		oldField := strings.TrimSpace(change.Field)
+		newField := strings.TrimSpace(change.NewField)
+		message := fmt.Sprintf(`%q type changed from %q to %q`, oldField, change.OldType, change.NewType)
+		if newField != "" && newField != oldField {
+			message = fmt.Sprintf(`%q renamed to %q and type changed from %q to %q`,
+				oldField, newField, change.OldType, change.NewType)
+		}
+
 		out = append(out, compare.Change{
 			Scope:    scope,
 			Token:    change.Token,
 			Location: location,
-			Path:     fmt.Sprintf(`%s: %q: %s: %q`, scopeLabel, change.Token, location, change.Field),
+			Path:     fmt.Sprintf(`%s: %q: %s: %q`, scopeLabel, change.Token, location, oldField),
 			Kind:     "max-items-one-changed",
 			Severity: compare.SeverityError,
 			Breaking: true,
 			Source:   compare.SourceNormalize,
-			Message: fmt.Sprintf(`%q maxItemsOne changed from %q to %q`,
-				change.Field, change.OldType, change.NewType),
+			Message:  message,
 		})
 	}
 	return out

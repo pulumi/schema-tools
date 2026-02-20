@@ -111,6 +111,47 @@ func TestRenderTextManyBreakingChanges(t *testing.T) {
 	}
 }
 
+func TestRenderTextOmitsNonBreakingChanges(t *testing.T) {
+	var out bytes.Buffer
+	err := RenderText(&out, Result{
+		Changes: []Change{
+			{
+				Scope:    ScopeResource,
+				Token:    "pkg:index:A",
+				Location: "inputs",
+				Path:     `Resources: "pkg:index:A": inputs: "name"`,
+				Kind:     "missing-input",
+				Severity: SeverityWarn,
+				Breaking: true,
+				Source:   SourceEngine,
+				Message:  "missing",
+			},
+			{
+				Scope:    ScopeResource,
+				Token:    "pkg:index:A",
+				Location: "general",
+				Path:     `Resources: "pkg:index:A"`,
+				Kind:     "deprecated-resource-alias",
+				Severity: SeverityInfo,
+				Breaking: false,
+				Source:   SourceNormalize,
+				Message:  "retained as deprecated alias",
+			},
+		},
+	}, -1)
+	if err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
+
+	text := out.String()
+	if !strings.Contains(text, "Found 1 breaking change:") {
+		t.Fatalf("expected only breaking changes to be counted, got:\n%s", text)
+	}
+	if strings.Contains(text, "deprecated alias") {
+		t.Fatalf("expected non-breaking change to be omitted from text, got:\n%s", text)
+	}
+}
+
 func TestRenderTextMaxChangesCapsDisplayedLinesOnly(t *testing.T) {
 	var out bytes.Buffer
 	err := RenderText(&out, Result{

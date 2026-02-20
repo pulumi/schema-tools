@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/pulumi/inflector"
+	"github.com/pulumi/pulumi-terraform-bridge/v3/pkg/tfbridge"
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
@@ -34,7 +36,9 @@ func applyMaxItemsOneNormalization(
 		if !ok {
 			continue
 		}
-		tfToken, ok := resolveCanonicalTFToken(scopeResources, token, context.tokenRemap, resourceIndex)
+		tfToken, ok := resolveSchemaTokenTFToken(
+			scopeResources, token, context.tokenRemap, resourceIndex, oldMetadata, newMetadata,
+		)
 		if !ok {
 			continue
 		}
@@ -78,7 +82,9 @@ func applyMaxItemsOneNormalization(
 		if !ok {
 			continue
 		}
-		tfToken, ok := resolveCanonicalTFToken(scopeDataSources, token, context.tokenRemap, functionIndex)
+		tfToken, ok := resolveSchemaTokenTFToken(
+			scopeDataSources, token, context.tokenRemap, functionIndex, oldMetadata, newMetadata,
+		)
 		if !ok {
 			continue
 		}
@@ -147,7 +153,7 @@ func normalizePropertyMapByFieldEvidence(
 	changes := []MaxItemsOneChange{}
 	for _, path := range SortedEvidencePaths(evidence) {
 		pathEvidence := evidence[path]
-		if pathEvidence.Transition != MaxItemsOneTransitionChanged {
+		if !shouldNormalizeByFieldEvidence(pathEvidence) {
 			continue
 		}
 		pathParts, ok := parseFieldPath(path)
@@ -155,11 +161,11 @@ func normalizePropertyMapByFieldEvidence(
 			continue
 		}
 
-		oldType, ok := lookupTypeSpecAtPath(oldSchema, oldProps, pathParts)
+		oldResolvedPath, oldType, ok := resolveTypeSpecAtPath(oldSchema, oldProps, pathParts)
 		if !ok {
 			continue
 		}
-		newType, ok := lookupTypeSpecAtPath(*normalizedNew, updated, pathParts)
+		newResolvedPath, newType, ok := resolveTypeSpecAtPath(*normalizedNew, updated, pathParts)
 		if !ok {
 			continue
 		}
@@ -167,22 +173,61 @@ func normalizePropertyMapByFieldEvidence(
 			continue
 		}
 
-		nextProps, ok := setTypeSpecAtPath(normalizedNew, updated, pathParts, oldType, localTypeRefUseIndex)
+		renameFromPath := cloneFieldPathParts(newResolvedPath)
+		renameToPath := cloneFieldPathParts(oldResolvedPath)
+		if leafPathName(renameFromPath) != leafPathName(renameToPath) {
+			if renamedProps, renamed := renameResolvedLeafProperty(
+				normalizedNew,
+				updated,
+				renameFromPath,
+				renameToPath,
+				localTypeRefUseIndex,
+			); renamed {
+				updated = renamedProps
+			}
+		}
+
+		nextProps, ok := setTypeSpecAtPath(
+			normalizedNew,
+			updated,
+			oldResolvedPath,
+			oldType,
+			localTypeRefUseIndex,
+		)
 		if !ok {
 			continue
 		}
 		updated = nextProps
-		changes = append(changes, MaxItemsOneChange{
+		change := MaxItemsOneChange{
 			Scope:    scope,
 			Token:    token,
 			Location: location,
-			Field:    path,
+			Field:    fieldPathString(oldResolvedPath),
 			OldType:  typeIdentifier(&oldType),
 			NewType:  typeIdentifier(&newType),
-		})
+		}
+		newFieldPath := fieldPathString(newResolvedPath)
+		if change.Field != "" && newFieldPath != "" && change.Field != newFieldPath {
+			change.NewField = newFieldPath
+		}
+		changes = append(changes, change)
 	}
 
 	return updated, changes
+}
+
+func shouldNormalizeByFieldEvidence(pathEvidence FieldPathEvidence) bool {
+	if pathEvidence.Transition == MaxItemsOneTransitionChanged {
+		return true
+	}
+
+	// Older bridge metadata can omit field entries on one side of history. Treat
+	// one-sided unknown values as candidate transitions and let schema type checks
+	// decide whether this is a real maxItemsOne array<->single rewrite.
+	if pathEvidence.Transition != MaxItemsOneTransitionUnknown {
+		return false
+	}
+	return (pathEvidence.Old == nil) != (pathEvidence.New == nil)
 }
 
 // canonicalTFTokenIndex resolves canonical identities back to TF token keys. When
@@ -249,6 +294,88 @@ func resolveCanonicalTFToken(
 	return tfToken, ok
 }
 
+// resolveSchemaTokenTFToken resolves schema token -> TF token using canonical
+// identity when unambiguous, with a metadata-history fallback for cases where
+// multiple TF tokens intentionally share overlapping token aliases.
+func resolveSchemaTokenTFToken(
+	scope, token string,
+	remap TokenRemap,
+	index map[string]string,
+	oldMetadata, newMetadata *MetadataEnvelope,
+) (string, bool) {
+	if tfToken, ok := resolveCanonicalTFToken(scope, token, remap, index); ok {
+		return tfToken, true
+	}
+
+	type ranked struct {
+		tfToken string
+		rank    int
+	}
+	candidates := map[string]ranked{}
+	addCandidate := func(tfToken string, rank int) {
+		if strings.TrimSpace(tfToken) == "" {
+			return
+		}
+		if existing, ok := candidates[tfToken]; ok && existing.rank <= rank {
+			return
+		}
+		candidates[tfToken] = ranked{tfToken: tfToken, rank: rank}
+	}
+
+	collect := func(historyByTFToken map[string]*TokenHistory, isNewSnapshot bool) {
+		for _, tfToken := range sortedKeys(historyByTFToken) {
+			history := historyByTFToken[tfToken]
+			if history == nil {
+				continue
+			}
+			current := strings.TrimSpace(history.Current)
+			if current == token {
+				// Prefer new-current matches over old-current matches.
+				if isNewSnapshot {
+					addCandidate(tfToken, 1)
+				} else {
+					addCandidate(tfToken, 2)
+				}
+				continue
+			}
+			for _, alias := range history.Past {
+				if strings.TrimSpace(alias.Name) != token {
+					continue
+				}
+				if isNewSnapshot {
+					addCandidate(tfToken, 3)
+				} else {
+					addCandidate(tfToken, 4)
+				}
+				break
+			}
+		}
+	}
+
+	collect(readHistoryMap(newMetadata, scope == scopeResources), true)
+	collect(readHistoryMap(oldMetadata, scope == scopeResources), false)
+
+	if len(candidates) == 0 {
+		return "", false
+	}
+	minRank := 999
+	for _, candidate := range candidates {
+		if candidate.rank < minRank {
+			minRank = candidate.rank
+		}
+	}
+	matched := []string{}
+	for _, candidate := range candidates {
+		if candidate.rank == minRank {
+			matched = append(matched, candidate.tfToken)
+		}
+	}
+	if len(matched) != 1 {
+		return "", false
+	}
+	return matched[0], true
+}
+
 // parseFieldPath parses flattened field-history paths.
 // Example: "settings[*].name" => [{Name:"settings",Elem:true}, {Name:"name",Elem:false}]
 func parseFieldPath(path string) ([]fieldPathPart, bool) {
@@ -276,19 +403,86 @@ func parseFieldPath(path string) ([]fieldPathPart, bool) {
 	return parts, true
 }
 
+func cloneFieldPathParts(parts []fieldPathPart) []fieldPathPart {
+	if len(parts) == 0 {
+		return nil
+	}
+	out := make([]fieldPathPart, len(parts))
+	copy(out, parts)
+	return out
+}
+
+func leafPathName(parts []fieldPathPart) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[len(parts)-1].Name
+}
+
+func fieldPathString(parts []fieldPathPart) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	segments := make([]string, 0, len(parts))
+	for _, part := range parts {
+		segment := part.Name
+		if part.Elem {
+			segment += "[*]"
+		}
+		segments = append(segments, segment)
+	}
+	return strings.Join(segments, ".")
+}
+
+func resolveTypeSpecAtPath(
+	pkg schema.PackageSpec,
+	props map[string]schema.PropertySpec,
+	path []fieldPathPart,
+) ([]fieldPathPart, schema.TypeSpec, bool) {
+	if len(path) == 0 {
+		return nil, schema.TypeSpec{}, false
+	}
+
+	currentProps := props
+	resolved := make([]fieldPathPart, 0, len(path))
+	for i, part := range path {
+		propKey, ok := resolvePropertyName(currentProps, part.Name)
+		if !ok {
+			return nil, schema.TypeSpec{}, false
+		}
+
+		resolvedPart := fieldPathPart{Name: propKey, Elem: part.Elem}
+		resolved = append(resolved, resolvedPart)
+
+		prop := currentProps[propKey]
+		currentType := prop.TypeSpec
+		if part.Elem {
+			if currentType.Type != "array" || currentType.Items == nil {
+				return nil, schema.TypeSpec{}, false
+			}
+			currentType = *currentType.Items
+		}
+		if i == len(path)-1 {
+			return resolved, currentType, true
+		}
+
+		nextProps, ok := objectPropertiesForTypeSpec(pkg, currentType)
+		if !ok {
+			return nil, schema.TypeSpec{}, false
+		}
+		currentProps = nextProps
+	}
+
+	return nil, schema.TypeSpec{}, false
+}
+
 func lookupTypeSpecAtPath(
 	pkg schema.PackageSpec,
 	props map[string]schema.PropertySpec,
 	path []fieldPathPart,
 ) (schema.TypeSpec, bool) {
-	if len(path) == 0 {
-		return schema.TypeSpec{}, false
-	}
-	prop, ok := props[path[0].Name]
-	if !ok {
-		return schema.TypeSpec{}, false
-	}
-	return lookupTypeSpecFromProperty(pkg, prop, path[0], path[1:])
+	_, ts, ok := resolveTypeSpecAtPath(pkg, props, path)
+	return ts, ok
 }
 
 func lookupTypeSpecFromProperty(
@@ -338,18 +532,109 @@ func setTypeSpecAtPath(
 		return props, false
 	}
 
-	prop, ok := props[path[0].Name]
+	propKey, ok := resolvePropertyName(props, path[0].Name)
 	if !ok {
 		return props, false
 	}
-	updatedProp, ok := setTypeSpecFromProperty(pkg, prop, path[0], path[1:], replacement, localTypeRefUseIndex)
+	prop := props[propKey]
+	head := path[0]
+	head.Name = propKey
+	updatedProp, ok := setTypeSpecFromProperty(pkg, prop, head, path[1:], replacement, localTypeRefUseIndex)
 	if !ok {
 		return props, false
 	}
 
 	out := clonePropertySpecMap(props)
-	out[path[0].Name] = updatedProp
+	out[propKey] = updatedProp
 	return out, true
+}
+
+func renameResolvedLeafProperty(
+	pkg *schema.PackageSpec,
+	props map[string]schema.PropertySpec,
+	fromPath []fieldPathPart,
+	toPath []fieldPathPart,
+	localTypeRefUseIndex map[string]int,
+) (map[string]schema.PropertySpec, bool) {
+	if len(fromPath) == 0 || len(fromPath) != len(toPath) {
+		return props, false
+	}
+	for i := 0; i < len(fromPath)-1; i++ {
+		if fromPath[i].Name != toPath[i].Name || fromPath[i].Elem != toPath[i].Elem {
+			return props, false
+		}
+	}
+
+	fromKey := fromPath[len(fromPath)-1].Name
+	toKey := toPath[len(toPath)-1].Name
+	if fromKey == toKey {
+		return props, true
+	}
+	return renameResolvedPropertyKeyAtPath(pkg, props, fromPath[:len(fromPath)-1], fromKey, toKey, localTypeRefUseIndex)
+}
+
+func renameResolvedPropertyKeyAtPath(
+	pkg *schema.PackageSpec,
+	props map[string]schema.PropertySpec,
+	path []fieldPathPart,
+	fromKey, toKey string,
+	localTypeRefUseIndex map[string]int,
+) (map[string]schema.PropertySpec, bool) {
+	if len(path) == 0 {
+		prop, ok := props[fromKey]
+		if !ok {
+			return props, false
+		}
+		if _, exists := props[toKey]; exists {
+			return props, false
+		}
+		out := clonePropertySpecMap(props)
+		out[toKey] = prop
+		delete(out, fromKey)
+		return out, true
+	}
+
+	part := path[0]
+	prop, ok := props[part.Name]
+	if !ok {
+		return props, false
+	}
+
+	current := prop.TypeSpec
+	if part.Elem {
+		if current.Type != "array" || current.Items == nil {
+			return props, false
+		}
+		current = *current.Items
+	}
+
+	typeToken, ok := localTypeToken(current.Ref)
+	if !ok {
+		return props, false
+	}
+	typeSpec, ok := pkg.Types[typeToken]
+	if !ok {
+		return props, false
+	}
+	// Avoid cross-token side effects when nested local object refs are shared.
+	if localTypeExternalRefUseCount(localTypeRefUseIndex, typeToken) > 1 {
+		return props, false
+	}
+
+	updatedTypeProps, ok := renameResolvedPropertyKeyAtPath(
+		pkg,
+		typeSpec.Properties,
+		path[1:],
+		fromKey,
+		toKey,
+		localTypeRefUseIndex,
+	)
+	if !ok {
+		return props, false
+	}
+	typeSpec.Properties = updatedTypeProps
+	pkg.Types[typeToken] = typeSpec
+	return props, true
 }
 
 func setTypeSpecFromProperty(
@@ -483,6 +768,44 @@ func clonePropertySpecMap(props map[string]schema.PropertySpec) map[string]schem
 		out[key] = value
 	}
 	return out
+}
+
+func resolvePropertyName(props map[string]schema.PropertySpec, metadataFieldName string) (string, bool) {
+	if len(props) == 0 || strings.TrimSpace(metadataFieldName) == "" {
+		return "", false
+	}
+	for _, candidate := range metadataFieldNameCandidates(metadataFieldName) {
+		if _, ok := props[candidate]; ok {
+			return candidate, true
+		}
+	}
+	return "", false
+}
+
+func metadataFieldNameCandidates(name string) []string {
+	seen := map[string]struct{}{}
+	candidates := []string{}
+	add := func(v string) {
+		if strings.TrimSpace(v) == "" {
+			return
+		}
+		if _, ok := seen[v]; ok {
+			return
+		}
+		seen[v] = struct{}{}
+		candidates = append(candidates, v)
+	}
+
+	// Use bridge naming first (snake_case -> lowerCamel), then bridge inflector variants.
+	add(name)
+	add(tfbridge.TerraformToPulumiNameV2(name, nil, nil))
+
+	seed := append([]string(nil), candidates...)
+	for _, base := range seed {
+		add(inflector.Pluralize(base))
+		add(inflector.Singularize(base))
+	}
+	return candidates
 }
 
 func buildLocalTypeRefUseCountIndex(pkg schema.PackageSpec) map[string]int {

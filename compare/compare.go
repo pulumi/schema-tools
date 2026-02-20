@@ -38,11 +38,96 @@ func MergeChanges(result Result, additional []Change) Result {
 	merged := make([]Change, 0, len(result.Changes)+len(additional))
 	merged = append(merged, result.Changes...)
 	merged = append(merged, additional...)
+	merged = suppressTypeChangesExplainedByNormalization(merged)
 	merged = sortChanges(merged)
 	result.Changes = ensureChangeSlice(merged)
 	result.Grouped = groupChanges(merged)
 	result.Summary = summarize(merged)
 	return result
+}
+
+func suppressTypeChangesExplainedByNormalization(changes []Change) []Change {
+	if len(changes) == 0 {
+		return []Change{}
+	}
+
+	normalizationFields := map[string][]string{}
+	for _, change := range changes {
+		if change.Source != SourceNormalize || change.Kind != "max-items-one-changed" {
+			continue
+		}
+		if change.Scope != ScopeResource && change.Scope != ScopeFunction {
+			continue
+		}
+		field := trailingQuotedValue(change.Path)
+		if strings.TrimSpace(field) == "" {
+			continue
+		}
+		key := impactLookupKey(change.Scope, change.Token, change.Location)
+		normalizationFields[key] = append(normalizationFields[key], field)
+	}
+
+	out := make([]Change, 0, len(changes))
+	for _, change := range changes {
+		if isTypeChangeExplainedByNormalization(change, normalizationFields) {
+			continue
+		}
+		out = append(out, change)
+	}
+	return out
+}
+
+func isTypeChangeExplainedByNormalization(change Change, normalizationFields map[string][]string) bool {
+	if change.Scope != ScopeType || change.Kind != "type-changed" || change.Source != SourceEngine {
+		return false
+	}
+	if len(change.ImpactedBy) == 0 {
+		return false
+	}
+
+	hasResourceOrFunctionImpact := false
+	for _, impact := range change.ImpactedBy {
+		if impact.Scope != ScopeResource && impact.Scope != ScopeFunction {
+			continue
+		}
+		hasResourceOrFunctionImpact = true
+		fields := normalizationFields[impactLookupKey(impact.Scope, impact.Token, impact.Location)]
+		if len(fields) == 0 {
+			return false
+		}
+
+		matched := false
+		for _, field := range fields {
+			if impactPathMatchesField(impact.Path, field) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+
+	return hasResourceOrFunctionImpact
+}
+
+func impactLookupKey(scope ChangeScope, token, location string) string {
+	return string(scope) + "|" + token + "|" + location
+}
+
+func impactPathMatchesField(path, field string) bool {
+	path = strings.TrimSpace(path)
+	field = strings.TrimSpace(field)
+	if path == "" || field == "" {
+		return false
+	}
+	if path == field {
+		return true
+	}
+	if strings.HasPrefix(path, field+"[*]") || strings.HasPrefix(path, field+".") || strings.HasPrefix(path, field+"{}") {
+		return true
+	}
+	return strings.HasPrefix(field, path+"[*]") || strings.HasPrefix(field, path+".") || strings.HasPrefix(field, path+"{}")
 }
 
 func attachTypeImpactMetadata(changes []Change, oldSchema, newSchema schema.PackageSpec) []Change {

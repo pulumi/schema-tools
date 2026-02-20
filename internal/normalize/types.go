@@ -47,6 +47,9 @@ type MaxItemsOneChange struct {
 	Token    string
 	Location string
 	Field    string
+	// NewField is set when normalization also resolves a property rename
+	// for the same root transition (for example loggings -> logging).
+	NewField string
 	OldType  string
 	NewType  string
 }

@@ -2,15 +2,25 @@
   "summary": [
     {
       "category": "deprecated-resource-alias",
-      "count": 1
+      "count": 1,
+      "entries": [
+        "Resources: \"aws:s3/bucketAclV2:BucketAclV2\" retained as deprecated alias; migrate to \"aws:s3/bucketAcl:BucketAcl\""
+      ]
     },
     {
       "category": "max-items-one-changed",
-      "count": 5
-    },
-    {
-      "category": "type-changed",
-      "count": 1
+      "count": 9,
+      "entries": [
+        "Functions: \"aws:lb/getListenerRule:getListenerRule\": inputs: \"action[*].forward\" \"action[*].forward\" renamed to \"action[*].forwards\" and type changed from \"#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward\" to \"array\"",
+        "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\" \"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\"",
+        "Resources: \"aws:paymentcryptography/key:Key\": properties: \"keyAttributes\" \"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\"",
+        "Resources: \"aws:s3/bucket:Bucket\": inputs: \"loggings\" \"loggings\" renamed to \"logging\" and type changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\"",
+        "Resources: \"aws:s3/bucket:Bucket\": inputs: \"versionings\" \"versionings\" renamed to \"versioning\" and type changed from \"array\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\"",
+        "Resources: \"aws:s3/bucket:Bucket\": inputs: \"websites\" \"websites\" renamed to \"website\" and type changed from \"array\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\"",
+        "Resources: \"aws:s3/bucket:Bucket\": properties: \"loggings\" \"loggings\" renamed to \"logging\" and type changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\"",
+        "Resources: \"aws:s3/bucket:Bucket\": properties: \"versionings\" \"versionings\" renamed to \"versioning\" and type changed from \"array\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\"",
+        "Resources: \"aws:s3/bucket:Bucket\": properties: \"websites\" \"websites\" renamed to \"website\" and type changed from \"array\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
+      ]
     }
   ],
   "changes": [
@@ -23,7 +33,7 @@
       "severity": "error",
       "breaking": true,
       "source": "normalize",
-      "message": "\"keyAttributes\" maxItemsOne changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
+      "message": "\"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
     },
     {
       "scope": "resource",
@@ -34,29 +44,73 @@
       "severity": "error",
       "breaking": true,
       "source": "normalize",
-      "message": "\"keyAttributes\" maxItemsOne changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
+      "message": "\"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
     },
     {
       "scope": "resource",
       "token": "aws:s3/bucket:Bucket",
       "location": "inputs",
-      "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"logging\"",
+      "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"loggings\"",
       "kind": "max-items-one-changed",
       "severity": "error",
       "breaking": true,
       "source": "normalize",
-      "message": "\"logging\" maxItemsOne changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
+      "message": "\"loggings\" renamed to \"logging\" and type changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
+    },
+    {
+      "scope": "resource",
+      "token": "aws:s3/bucket:Bucket",
+      "location": "inputs",
+      "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"versionings\"",
+      "kind": "max-items-one-changed",
+      "severity": "error",
+      "breaking": true,
+      "source": "normalize",
+      "message": "\"versionings\" renamed to \"versioning\" and type changed from \"array\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\""
+    },
+    {
+      "scope": "resource",
+      "token": "aws:s3/bucket:Bucket",
+      "location": "inputs",
+      "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"websites\"",
+      "kind": "max-items-one-changed",
+      "severity": "error",
+      "breaking": true,
+      "source": "normalize",
+      "message": "\"websites\" renamed to \"website\" and type changed from \"array\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
     },
     {
       "scope": "resource",
       "token": "aws:s3/bucket:Bucket",
       "location": "properties",
-      "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"logging\"",
+      "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"loggings\"",
       "kind": "max-items-one-changed",
       "severity": "error",
       "breaking": true,
       "source": "normalize",
-      "message": "\"logging\" maxItemsOne changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
+      "message": "\"loggings\" renamed to \"logging\" and type changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
+    },
+    {
+      "scope": "resource",
+      "token": "aws:s3/bucket:Bucket",
+      "location": "properties",
+      "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"versionings\"",
+      "kind": "max-items-one-changed",
+      "severity": "error",
+      "breaking": true,
+      "source": "normalize",
+      "message": "\"versionings\" renamed to \"versioning\" and type changed from \"array\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\""
+    },
+    {
+      "scope": "resource",
+      "token": "aws:s3/bucket:Bucket",
+      "location": "properties",
+      "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"websites\"",
+      "kind": "max-items-one-changed",
+      "severity": "error",
+      "breaking": true,
+      "source": "normalize",
+      "message": "\"websites\" renamed to \"website\" and type changed from \"array\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
     },
     {
       "scope": "resource",
@@ -66,7 +120,7 @@
       "severity": "info",
       "breaking": false,
       "source": "normalize",
-      "message": "Deprecated in favor of aws:s3/bucketAcl:BucketAcl"
+      "message": "retained as deprecated alias; migrate to \"aws:s3/bucketAcl:BucketAcl\""
     },
     {
       "scope": "function",
@@ -77,27 +131,7 @@
       "severity": "error",
       "breaking": true,
       "source": "normalize",
-      "message": "\"action[*].forward\" maxItemsOne changed from \"#/types/...Forward\" to \"array\""
-    },
-    {
-      "scope": "type",
-      "token": "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
-      "location": "properties",
-      "path": "Types: \"aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\": properties: \"keyModesOfUse\"",
-      "kind": "type-changed",
-      "severity": "warn",
-      "breaking": true,
-      "source": "engine",
-      "message": "type changed from \"string\" to \"array\"",
-      "impactedBy": [
-        {
-          "scope": "resource",
-          "token": "aws:paymentcryptography/key:Key",
-          "location": "inputs",
-          "path": "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\""
-        }
-      ],
-      "impactCount": 1
+      "message": "\"action[*].forward\" renamed to \"action[*].forwards\" and type changed from \"#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward\" to \"array\""
     }
   ],
   "grouped": {
@@ -113,7 +147,7 @@
             "severity": "error",
             "breaking": true,
             "source": "normalize",
-            "message": "\"keyAttributes\" maxItemsOne changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
+            "message": "\"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
           }
         ],
         "properties": [
@@ -126,7 +160,7 @@
             "severity": "error",
             "breaking": true,
             "source": "normalize",
-            "message": "\"keyAttributes\" maxItemsOne changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
+            "message": "\"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
           }
         ]
       },
@@ -136,12 +170,34 @@
             "scope": "resource",
             "token": "aws:s3/bucket:Bucket",
             "location": "inputs",
-            "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"logging\"",
+            "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"loggings\"",
             "kind": "max-items-one-changed",
             "severity": "error",
             "breaking": true,
             "source": "normalize",
-            "message": "\"logging\" maxItemsOne changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
+            "message": "\"loggings\" renamed to \"logging\" and type changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
+          },
+          {
+            "scope": "resource",
+            "token": "aws:s3/bucket:Bucket",
+            "location": "inputs",
+            "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"versionings\"",
+            "kind": "max-items-one-changed",
+            "severity": "error",
+            "breaking": true,
+            "source": "normalize",
+            "message": "\"versionings\" renamed to \"versioning\" and type changed from \"array\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\""
+          },
+          {
+            "scope": "resource",
+            "token": "aws:s3/bucket:Bucket",
+            "location": "inputs",
+            "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"websites\"",
+            "kind": "max-items-one-changed",
+            "severity": "error",
+            "breaking": true,
+            "source": "normalize",
+            "message": "\"websites\" renamed to \"website\" and type changed from \"array\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
           }
         ],
         "properties": [
@@ -149,12 +205,34 @@
             "scope": "resource",
             "token": "aws:s3/bucket:Bucket",
             "location": "properties",
-            "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"logging\"",
+            "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"loggings\"",
             "kind": "max-items-one-changed",
             "severity": "error",
             "breaking": true,
             "source": "normalize",
-            "message": "\"logging\" maxItemsOne changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
+            "message": "\"loggings\" renamed to \"logging\" and type changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
+          },
+          {
+            "scope": "resource",
+            "token": "aws:s3/bucket:Bucket",
+            "location": "properties",
+            "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"versionings\"",
+            "kind": "max-items-one-changed",
+            "severity": "error",
+            "breaking": true,
+            "source": "normalize",
+            "message": "\"versionings\" renamed to \"versioning\" and type changed from \"array\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\""
+          },
+          {
+            "scope": "resource",
+            "token": "aws:s3/bucket:Bucket",
+            "location": "properties",
+            "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"websites\"",
+            "kind": "max-items-one-changed",
+            "severity": "error",
+            "breaking": true,
+            "source": "normalize",
+            "message": "\"websites\" renamed to \"website\" and type changed from \"array\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
           }
         ]
       },
@@ -168,7 +246,7 @@
             "severity": "info",
             "breaking": false,
             "source": "normalize",
-            "message": "Deprecated in favor of aws:s3/bucketAcl:BucketAcl"
+            "message": "retained as deprecated alias; migrate to \"aws:s3/bucketAcl:BucketAcl\""
           }
         ]
       }
@@ -185,40 +263,15 @@
             "severity": "error",
             "breaking": true,
             "source": "normalize",
-            "message": "\"action[*].forward\" maxItemsOne changed from \"#/types/...Forward\" to \"array\""
+            "message": "\"action[*].forward\" renamed to \"action[*].forwards\" and type changed from \"#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward\" to \"array\""
           }
         ]
       }
     },
-    "types": {
-      "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes": {
-        "properties": [
-          {
-            "scope": "type",
-            "token": "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
-            "location": "properties",
-            "path": "Types: \"aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\": properties: \"keyModesOfUse\"",
-            "kind": "type-changed",
-            "severity": "warn",
-            "breaking": true,
-            "source": "engine",
-            "message": "type changed from \"string\" to \"array\"",
-            "impactedBy": [
-              {
-                "scope": "resource",
-                "token": "aws:paymentcryptography/key:Key",
-                "location": "inputs",
-                "path": "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\""
-              }
-            ],
-            "impactCount": 1
-          }
-        ]
-      }
-    }
+    "types": {}
   },
   "new_resources": [
-    "s3.bucketAcl.BucketAcl"
+    "s3/bucketAcl.BucketAcl"
   ],
   "new_functions": []
 }

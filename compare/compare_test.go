@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"slices"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
@@ -363,6 +364,75 @@ func TestSchemasAttachesTypeImpactMetadata(t *testing.T) {
 	}
 	if !reflect.DeepEqual(typeChange.ImpactedBy, wantImpacts) {
 		t.Fatalf("impact metadata mismatch:\n got: %+v\nwant: %+v", typeChange.ImpactedBy, wantImpacts)
+	}
+}
+
+func TestMergeChangesSuppressesTypeChangesExplainedByNormalization(t *testing.T) {
+	result := Result{
+		Changes: []Change{
+			{
+				Scope:    ScopeType,
+				Token:    "pkg:index:Shared",
+				Location: "properties",
+				Path:     `Types: "pkg:index:Shared": properties: "value"`,
+				Kind:     "type-changed",
+				Severity: SeverityWarn,
+				Breaking: true,
+				Source:   SourceEngine,
+				Message:  `type changed from "array" to "string"`,
+				ImpactedBy: []ImpactRef{
+					{Scope: ScopeResource, Token: "pkg:index:Widget", Location: "inputs", Path: "config[*]"},
+				},
+				ImpactCount: 1,
+			},
+			{
+				Scope:    ScopeType,
+				Token:    "pkg:index:Shared",
+				Location: "properties",
+				Path:     `Types: "pkg:index:Shared": properties: "other"`,
+				Kind:     "type-changed",
+				Severity: SeverityWarn,
+				Breaking: true,
+				Source:   SourceEngine,
+				Message:  `type changed from "array" to "string"`,
+				ImpactedBy: []ImpactRef{
+					{Scope: ScopeResource, Token: "pkg:index:Widget", Location: "inputs", Path: "other[*]"},
+				},
+				ImpactCount: 1,
+			},
+		},
+	}
+
+	additional := []Change{
+		{
+			Scope:    ScopeResource,
+			Token:    "pkg:index:Widget",
+			Location: "inputs",
+			Path:     `Resources: "pkg:index:Widget": inputs: "config"`,
+			Kind:     "max-items-one-changed",
+			Severity: SeverityError,
+			Breaking: true,
+			Source:   SourceNormalize,
+			Message:  `"config" type changed from "array" to "string"`,
+		},
+	}
+
+	merged := MergeChanges(result, additional)
+	if len(merged.Changes) != 2 {
+		t.Fatalf("expected one type change to be suppressed, got %d changes (%+v)", len(merged.Changes), merged.Changes)
+	}
+
+	var preservedType bool
+	for _, change := range merged.Changes {
+		if change.Scope == ScopeType && strings.Contains(change.Path, `"other"`) {
+			preservedType = true
+		}
+		if change.Scope == ScopeType && strings.Contains(change.Path, `"value"`) {
+			t.Fatalf("expected normalization-explained type change to be suppressed: %+v", change)
+		}
+	}
+	if !preservedType {
+		t.Fatalf("expected unmatched type change to remain, got %+v", merged.Changes)
 	}
 }
 
