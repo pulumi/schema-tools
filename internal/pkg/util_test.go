@@ -123,6 +123,27 @@ func TestDownloadSchemaFileRepositoryRoot(t *testing.T) {
 	assert.Equal(t, "test", spec.Name)
 }
 
+func TestDownloadSchemaFileRepositorySchemaPathCompatibility(t *testing.T) {
+	tmpDir := t.TempDir()
+	schemaPath := filepath.Join(tmpDir, "schema.json")
+	assert.NoError(t, os.WriteFile(schemaPath, []byte(`{"name":"legacy"}`), 0o600))
+
+	spec, err := DownloadSchema(context.Background(), "file:"+schemaPath, "unifi", "local")
+
+	assert.NoError(t, err)
+	assert.Equal(t, "legacy", spec.Name)
+}
+
+func TestDownloadSchemaFileRepositorySchemaPathMissing(t *testing.T) {
+	missingPath := filepath.Join(t.TempDir(), "schema.json")
+
+	_, err := DownloadSchema(context.Background(), "file:"+missingPath, "unifi", "local")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), missingPath)
+	assert.NotContains(t, err.Error(), StandardSchemaPath("unifi"))
+}
+
 func TestDownloadRepoFileMetadataGithub(t *testing.T) {
 	defer gock.Off()
 

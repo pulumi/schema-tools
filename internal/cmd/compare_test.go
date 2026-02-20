@@ -180,16 +180,100 @@ func TestApplyMaxChangesLimit(t *testing.T) {
 }
 
 func TestCompareEngineMaxChanges(t *testing.T) {
-	t.Run("remote compare uses uncapped engine output", func(t *testing.T) {
-		assert.Equal(t, -1, compareEngineMaxChanges(true, 10))
-		assert.Equal(t, -1, compareEngineMaxChanges(true, 0))
+	t.Run("remote compare unlimited remains uncapped", func(t *testing.T) {
+		assert.Equal(t, -1, compareEngineMaxChanges(true, -1, 0))
+		assert.Equal(t, -1, compareEngineMaxChanges(true, -1, 10))
+	})
+
+	t.Run("remote compare with small max reserves synthetic budget", func(t *testing.T) {
+		assert.Equal(t, 1, compareEngineMaxChanges(true, 3, 2))
+		assert.Equal(t, 0, compareEngineMaxChanges(true, 2, 2))
+		assert.Equal(t, 0, compareEngineMaxChanges(true, 2, 5))
 	})
 
 	t.Run("local compare preserves requested cap", func(t *testing.T) {
-		assert.Equal(t, 10, compareEngineMaxChanges(false, 10))
-		assert.Equal(t, 0, compareEngineMaxChanges(false, 0))
-		assert.Equal(t, -1, compareEngineMaxChanges(false, -1))
+		assert.Equal(t, 10, compareEngineMaxChanges(false, 10, 99))
+		assert.Equal(t, 0, compareEngineMaxChanges(false, 0, 99))
+		assert.Equal(t, -1, compareEngineMaxChanges(false, -1, 99))
 	})
+}
+
+func TestNormalizationSyntheticBreakingChangeCount(t *testing.T) {
+	renames := []normalize.TokenRename{
+		{Scope: "resources", OldToken: "pkg:index:A", NewToken: "pkg:index:B"},
+		{Scope: "resources", OldToken: "pkg:index:A", NewToken: "pkg:index:B"}, // duplicate
+		{Scope: "unknown", OldToken: "pkg:index:X", NewToken: "pkg:index:Y"},   // ignored
+	}
+	maxItems := []normalize.MaxItemsOneChange{
+		{
+			Scope:    "resources",
+			Token:    "pkg:index:Widget",
+			Location: "inputs",
+			Field:    "filter",
+			OldType:  "string",
+			NewType:  "array",
+		},
+		{
+			Scope:    "resources",
+			Token:    "pkg:index:Widget",
+			Location: "inputs",
+			Field:    "filter",
+			OldType:  "string",
+			NewType:  "array",
+		}, // duplicate
+		{
+			Scope:   "resources",
+			Token:   "pkg:index:Widget",
+			OldType: "string",
+			NewType: "array",
+		}, // missing field, ignored
+	}
+
+	assert.Equal(t, 2, normalizationSyntheticBreakingChangeCount(renames, maxItems))
+}
+
+func TestBuildNormalizationRenameEntriesDeduplicates(t *testing.T) {
+	entriesByCategory, breakingLines := buildNormalizationRenameEntries([]normalize.TokenRename{
+		{Scope: "resources", OldToken: "pkg:index:A", NewToken: "pkg:index:B"},
+		{Scope: "resources", OldToken: "pkg:index:A", NewToken: "pkg:index:B"},
+		{Scope: "datasources", OldToken: "pkg:index:getA", NewToken: "pkg:index:getB"},
+	})
+
+	assert.Len(t, breakingLines, 2)
+	assert.Equal(t, []string{`Functions: "pkg:index:getA" renamed to "pkg:index:getB"`}, entriesByCategory["renamed-function"])
+	assert.Equal(t, []string{`Resources: "pkg:index:A" renamed to "pkg:index:B"`}, entriesByCategory["renamed-resource"])
+}
+
+func TestBuildNormalizationMaxItemsOneEntriesDeduplicates(t *testing.T) {
+	entries, breakingLines := buildNormalizationMaxItemsOneEntries([]normalize.MaxItemsOneChange{
+		{
+			Scope:    "resources",
+			Token:    "pkg:index:Widget",
+			Location: "inputs",
+			Field:    "filter",
+			OldType:  "string",
+			NewType:  "array",
+		},
+		{
+			Scope:    "resources",
+			Token:    "pkg:index:Widget",
+			Location: "inputs",
+			Field:    "filter",
+			OldType:  "string",
+			NewType:  "array",
+		},
+		{
+			Scope: "resources",
+			Token: "pkg:index:Widget",
+			Field: "labels",
+		},
+	})
+
+	assert.Len(t, breakingLines, 2)
+	assert.Equal(t, []string{
+		`Resources: "pkg:index:Widget": inputs: "filter" maxItemsOne changed from "string" to "array"`,
+		`Resources: "pkg:index:Widget": properties: "labels" maxItemsOne changed from "" to ""`,
+	}, entries)
 }
 
 func TestCompareRequiresProvider(t *testing.T) {

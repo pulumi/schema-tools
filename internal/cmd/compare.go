@@ -260,8 +260,12 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 	}
 
 	result := compare.Schemas(normalizedOld, normalizedNew, compare.Options{
-		Provider:   input.provider,
-		MaxChanges: compareEngineMaxChanges(remoteCompare, input.maxChanges),
+		Provider: input.provider,
+		MaxChanges: compareEngineMaxChanges(
+			remoteCompare,
+			input.maxChanges,
+			normalizationSyntheticBreakingChangeCount(normalizedRenames, normalizedMaxItemsOne),
+		),
 	})
 	result = addNormalizationRenames(result, normalizedRenames)
 	result = addNormalizationMaxItemsOne(result, normalizedMaxItemsOne)
@@ -346,14 +350,20 @@ func applyMaxChangesLimit(result compare.Result, maxChanges int) compare.Result 
 }
 
 // compareEngineMaxChanges controls pre-capping in compare.Schemas.
-// Remote mode returns -1 so normalization-injected lines are included before final capping.
-func compareEngineMaxChanges(remoteCompare bool, maxChanges int) int {
-	// Remote compares can inject normalization-derived breaking changes after
-	// compare.Schemas, so avoid pre-capping in the engine and apply one final cap.
-	if remoteCompare {
+// Remote mode reserves max-changes budget for normalization-injected lines.
+func compareEngineMaxChanges(remoteCompare bool, maxChanges int, syntheticBreakingLines int) int {
+	if !remoteCompare {
+		return maxChanges
+	}
+	if maxChanges < 0 {
 		return -1
 	}
-	return maxChanges
+
+	engineBudget := maxChanges - syntheticBreakingLines
+	if engineBudget < 0 {
+		return 0
+	}
+	return engineBudget
 }
 
 // isFileRepositoryURL reports whether --repository uses the file: scheme.
@@ -388,10 +398,41 @@ func renderCompareOutput(out io.Writer, result compare.Result, jsonMode bool, su
 // addNormalizationRenames injects normalization-derived token rename changes into
 // both breaking-change lines and summary categories.
 func addNormalizationRenames(result compare.Result, renames []normalize.TokenRename) compare.Result {
-	if len(renames) == 0 {
+	entriesByCategory, breakingLines := buildNormalizationRenameEntries(renames)
+	if len(breakingLines) == 0 {
+		return result
+	}
+	result = prependNormalizationBreakingLines(result, breakingLines)
+	result = mergeNormalizationSummaryEntries(result, entriesByCategory)
+	return result
+}
+
+// addNormalizationMaxItemsOne injects normalization-derived maxItemsOne transition
+// changes into both breaking-change lines and summary categories.
+func addNormalizationMaxItemsOne(result compare.Result, changes []normalize.MaxItemsOneChange) compare.Result {
+	const category = "max-items-one-changed"
+	entries, breakingLines := buildNormalizationMaxItemsOneEntries(changes)
+	if len(entries) == 0 {
 		return result
 	}
 
+	result = prependNormalizationBreakingLines(result, breakingLines)
+	result = mergeNormalizationSummaryEntries(result, map[string][]string{
+		category: entries,
+	})
+	return result
+}
+
+func normalizationSyntheticBreakingChangeCount(
+	renames []normalize.TokenRename,
+	maxItemsOne []normalize.MaxItemsOneChange,
+) int {
+	_, renameBreakingLines := buildNormalizationRenameEntries(renames)
+	_, maxItemsOneBreakingLines := buildNormalizationMaxItemsOneEntries(maxItemsOne)
+	return len(renameBreakingLines) + len(maxItemsOneBreakingLines)
+}
+
+func buildNormalizationRenameEntries(renames []normalize.TokenRename) (map[string][]string, []string) {
 	entriesByCategory := map[string][]string{}
 	breakingLines := []string{}
 	seen := map[string]struct{}{}
@@ -411,23 +452,10 @@ func addNormalizationRenames(result compare.Result, renames []normalize.TokenRen
 		entriesByCategory[category] = append(entriesByCategory[category], entry)
 		breakingLines = append(breakingLines, fmt.Sprintf("`🔴` %s", entry))
 	}
-
-	if len(breakingLines) == 0 {
-		return result
-	}
-	result = prependNormalizationBreakingLines(result, breakingLines)
-	result = mergeNormalizationSummaryEntries(result, entriesByCategory)
-	return result
+	return entriesByCategory, breakingLines
 }
 
-// addNormalizationMaxItemsOne injects normalization-derived maxItemsOne transition
-// changes into both breaking-change lines and summary categories.
-func addNormalizationMaxItemsOne(result compare.Result, changes []normalize.MaxItemsOneChange) compare.Result {
-	if len(changes) == 0 {
-		return result
-	}
-
-	const category = "max-items-one-changed"
+func buildNormalizationMaxItemsOneEntries(changes []normalize.MaxItemsOneChange) ([]string, []string) {
 	entries := []string{}
 	breakingLines := []string{}
 	seen := map[string]struct{}{}
@@ -450,15 +478,7 @@ func addNormalizationMaxItemsOne(result compare.Result, changes []normalize.MaxI
 		entries = append(entries, entry)
 		breakingLines = append(breakingLines, fmt.Sprintf("`🔴` %s", entry))
 	}
-	if len(entries) == 0 {
-		return result
-	}
-
-	result = prependNormalizationBreakingLines(result, breakingLines)
-	result = mergeNormalizationSummaryEntries(result, map[string][]string{
-		category: entries,
-	})
-	return result
+	return entries, breakingLines
 }
 
 // prependNormalizationBreakingLines inserts synthetic normalization lines ahead of

@@ -37,6 +37,25 @@ func (e *RepoFileNotFoundError) Is(target error) bool {
 
 func DownloadSchema(ctx context.Context, repositoryUrl string,
 	provider string, commit string) (schema.PackageSpec, error) {
+	if filePath, isFileURL, err := parseFileRepositoryPath(repositoryUrl); err != nil {
+		return schema.PackageSpec{}, err
+	} else if isFileURL {
+		fileInfo, statErr := os.Stat(filePath)
+		switch {
+		case statErr == nil && !fileInfo.IsDir():
+			// Backward compatibility: historically file: accepted a direct schema.json
+			// path. Keep this behavior while also supporting repo-root mode.
+			return LoadLocalPackageSpec(filePath)
+		case statErr == nil && fileInfo.IsDir():
+			// Directory paths use repository-root semantics below.
+		case errors.Is(statErr, os.ErrNotExist) && looksLikeSchemaFilePath(filePath):
+			// Preserve direct-file error behavior for likely schema file inputs.
+			return LoadLocalPackageSpec(filePath)
+		case statErr != nil && !errors.Is(statErr, os.ErrNotExist):
+			return schema.PackageSpec{}, statErr
+		}
+	}
+
 	body, err := DownloadRepoFile(ctx, repositoryUrl, provider, commit, StandardSchemaPath(provider))
 	if err != nil {
 		// Preserve existing schema caller behavior for missing schema files by
@@ -72,15 +91,11 @@ func downloadRepositoryFile(
 	repositoryURL, provider, commit, repositoryPath string,
 	wrapNotFound bool,
 ) ([]byte, error) {
-	repoURL, err := url.Parse(repositoryURL)
+	root, isFileURL, err := parseFileRepositoryPath(repositoryURL)
 	if err != nil {
 		return nil, err
 	}
-	if repoURL.Scheme == "file" {
-		root := repoURL.Path
-		if root == "" {
-			root = strings.TrimPrefix(repositoryURL, "file:")
-		}
+	if isFileURL {
 		localPath, err := resolveSafeRepoFilePath(root, repositoryPath)
 		if err != nil {
 			return nil, err
@@ -131,6 +146,25 @@ func downloadRepositoryFile(
 	}
 
 	return body, nil
+}
+
+func parseFileRepositoryPath(repositoryURL string) (string, bool, error) {
+	repoURL, err := url.Parse(repositoryURL)
+	if err != nil {
+		return "", false, err
+	}
+	if repoURL.Scheme != "file" {
+		return "", false, nil
+	}
+	root := repoURL.Path
+	if root == "" {
+		root = strings.TrimPrefix(repositoryURL, "file:")
+	}
+	return root, true, nil
+}
+
+func looksLikeSchemaFilePath(path string) bool {
+	return strings.EqualFold(filepath.Ext(path), ".json")
 }
 
 func resolveSafeRepoFilePath(root, repositoryPath string) (string, error) {
