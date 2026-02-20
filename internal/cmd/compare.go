@@ -225,6 +225,10 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 	}
 
 	var oldMetadata, newMetadata *normalize.MetadataEnvelope
+	// Normalize only when both sides are remote commit-based inputs.
+	// Examples:
+	// - compare -o v1.0.0 -n v1.1.0   => true (remote normalization applies)
+	// - compare --old-path a.json ... => false (legacy local/hybrid flow)
 	remoteCompare := input.oldPath == "" && !newIsLocal && !isFileRepositoryURL(input.repository)
 	if remoteCompare {
 		var err error
@@ -268,6 +272,7 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 	return renderCompareOutput(os.Stdout, result, input.jsonMode, input.summaryMode)
 }
 
+// applyCompareDepsDefaults fills unset injected dependencies for test seams.
 func applyCompareDepsDefaults(deps compareDeps) compareDeps {
 	defaults := defaultCompareDeps()
 	if deps.currentUser == nil {
@@ -291,6 +296,8 @@ func applyCompareDepsDefaults(deps compareDeps) compareDeps {
 	return deps
 }
 
+// resolveCompareMetadataSource loads and parses bridge metadata for one compare side.
+// Missing metadata is converted into ErrCompareMetadataRequired for strict remote mode.
 func resolveCompareMetadataSource(
 	ctx context.Context,
 	deps compareDeps,
@@ -328,6 +335,8 @@ func resolveCompareMetadataSource(
 	return metadata, nil
 }
 
+// applyMaxChangesLimit enforces the final rendered cap.
+// Example: maxChanges == 0 returns zero breaking change lines.
 func applyMaxChangesLimit(result compare.Result, maxChanges int) compare.Result {
 	if maxChanges < 0 || len(result.BreakingChanges) <= maxChanges {
 		return result
@@ -336,6 +345,8 @@ func applyMaxChangesLimit(result compare.Result, maxChanges int) compare.Result 
 	return result
 }
 
+// compareEngineMaxChanges controls pre-capping in compare.Schemas.
+// Remote mode returns -1 so normalization-injected lines are included before final capping.
 func compareEngineMaxChanges(remoteCompare bool, maxChanges int) int {
 	// Remote compares can inject normalization-derived breaking changes after
 	// compare.Schemas, so avoid pre-capping in the engine and apply one final cap.
@@ -345,11 +356,13 @@ func compareEngineMaxChanges(remoteCompare bool, maxChanges int) int {
 	return maxChanges
 }
 
+// isFileRepositoryURL reports whether --repository uses the file: scheme.
 func isFileRepositoryURL(repository string) bool {
 	repoURL, err := url.Parse(repository)
 	return err == nil && repoURL.Scheme == "file"
 }
 
+// renderCompareOutput writes compare results in text/json and full/summary modes.
 func renderCompareOutput(out io.Writer, result compare.Result, jsonMode bool, summaryMode bool) error {
 	if jsonMode {
 		encoder := json.NewEncoder(out)
@@ -372,6 +385,8 @@ func renderCompareOutput(out io.Writer, result compare.Result, jsonMode bool, su
 	return compare.RenderText(out, result)
 }
 
+// addNormalizationRenames injects normalization-derived token rename changes into
+// both breaking-change lines and summary categories.
 func addNormalizationRenames(result compare.Result, renames []normalize.TokenRename) compare.Result {
 	if len(renames) == 0 {
 		return result
@@ -405,6 +420,8 @@ func addNormalizationRenames(result compare.Result, renames []normalize.TokenRen
 	return result
 }
 
+// addNormalizationMaxItemsOne injects normalization-derived maxItemsOne transition
+// changes into both breaking-change lines and summary categories.
 func addNormalizationMaxItemsOne(result compare.Result, changes []normalize.MaxItemsOneChange) compare.Result {
 	if len(changes) == 0 {
 		return result
@@ -444,6 +461,8 @@ func addNormalizationMaxItemsOne(result compare.Result, changes []normalize.MaxI
 	return result
 }
 
+// prependNormalizationBreakingLines inserts synthetic normalization lines ahead of
+// engine-produced breaking changes, with deterministic ordering.
 func prependNormalizationBreakingLines(result compare.Result, lines []string) compare.Result {
 	if len(lines) == 0 {
 		return result
@@ -453,6 +472,8 @@ func prependNormalizationBreakingLines(result compare.Result, lines []string) co
 	return result
 }
 
+// mergeNormalizationSummaryEntries merges synthetic normalization categories into
+// an existing compare summary while preserving stable ordering.
 func mergeNormalizationSummaryEntries(result compare.Result, entriesByCategory map[string][]string) compare.Result {
 	if len(entriesByCategory) == 0 {
 		return result
@@ -485,6 +506,7 @@ func mergeNormalizationSummaryEntries(result compare.Result, entriesByCategory m
 	return result
 }
 
+// normalizationScopeLabel maps normalization scopes to compare output labels.
 func normalizationScopeLabel(scope string) string {
 	switch scope {
 	case "resources":
@@ -496,6 +518,7 @@ func normalizationScopeLabel(scope string) string {
 	}
 }
 
+// normalizationRenameCategory maps normalization scopes to rename summary categories.
 func normalizationRenameCategory(scope string) (string, string) {
 	switch scope {
 	case "resources":
@@ -507,6 +530,7 @@ func normalizationRenameCategory(scope string) (string, string) {
 	}
 }
 
+// sortedSummaryCategories returns category keys in lexical order.
 func sortedSummaryCategories(entriesByCategory map[string][]string) []string {
 	if len(entriesByCategory) == 0 {
 		return nil
