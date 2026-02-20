@@ -1,0 +1,41 @@
+{
+  "old": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget": {
+          "current": "pkg:index/widget:Widget"
+        }
+      },
+      "datasources": {
+        "pkg_get_widget": {
+          "current": "pkg:index/getWidget:getWidget"
+        }
+      }
+    }
+  },
+  "new": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget": {
+          "current": "pkg:index/widget:Widget"
+        }
+      },
+      "datasources": {
+        "pkg_get_widget": {
+          "current": "pkg:index/getWidget:getWidget"
+        }
+      }
+    }
+  },
+  "expected": {
+    "old": {
+      "pkg:index/widget:Widget": "pkg:index/widget:Widget",
+      "pkg:index/getWidget:getWidget": "pkg:index/getWidget:getWidget"
+    },
+    "new": {
+      "pkg:index/widget:Widget": "pkg:index/widget:Widget",
+      "pkg:index/getWidget:getWidget": "pkg:index/getWidget:getWidget"
+    },
+    "diagnosticKinds": []
+  }
+}

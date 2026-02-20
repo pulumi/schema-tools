@@ -14,29 +14,40 @@ import (
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/pulumi/schema-tools/compare"
+	"github.com/pulumi/schema-tools/internal/normalize"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestRenderCompareOutputModes(t *testing.T) {
 	result := compare.Result{
-		Summary:         []compare.SummaryItem{{Category: "missing-input", Count: 1, Entries: []string{"e1"}}},
-		BreakingChanges: []string{"line-1"},
-		NewResources:    []string{"r1"},
-		NewFunctions:    []string{"f1"},
+		Summary: []compare.SummaryItem{{Category: "missing-input", Count: 1, Entries: []string{"e1"}}},
+		Changes: []compare.Change{{
+			Scope:    compare.ScopeResource,
+			Token:    "pkg:index:Res",
+			Location: "inputs",
+			Path:     `Resources: "pkg:index:Res": inputs: "name"`,
+			Kind:     "missing-input",
+			Severity: compare.SeverityWarn,
+			Breaking: true,
+			Source:   compare.SourceEngine,
+			Message:  "missing",
+		}},
+		NewResources: []string{"r1"},
+		NewFunctions: []string{"f1"},
 	}
 
 	t.Run("json", func(t *testing.T) {
 		var out bytes.Buffer
-		err := renderCompareOutput(&out, result, true, false)
+		err := renderCompareOutput(&out, result, true, false, -1)
 		assert.NoError(t, err)
-		assert.Contains(t, out.String(), `"breaking_changes": [`)
-		assert.Contains(t, out.String(), `"line-1"`)
+		assert.Contains(t, out.String(), `"changes": [`)
+		assert.Contains(t, out.String(), `"grouped": {`)
 		assert.True(t, strings.HasSuffix(out.String(), "\n"))
 	})
 
 	t.Run("summary text", func(t *testing.T) {
 		var out bytes.Buffer
-		err := renderCompareOutput(&out, result, false, true)
+		err := renderCompareOutput(&out, result, false, true, -1)
 		assert.NoError(t, err)
 		assert.Contains(t, out.String(), "Summary by category:")
 		assert.Contains(t, out.String(), "- missing-input: 1")
@@ -45,33 +56,31 @@ func TestRenderCompareOutputModes(t *testing.T) {
 
 	t.Run("json summary", func(t *testing.T) {
 		var out bytes.Buffer
-		err := renderCompareOutput(&out, result, true, true)
+		err := renderCompareOutput(&out, result, true, true, -1)
 		assert.NoError(t, err)
 		assert.Contains(t, out.String(), `"summary": [`)
 		assert.Contains(t, out.String(), `"missing-input"`)
 		assert.Contains(t, out.String(), `"entries": [`)
-		assert.NotContains(t, out.String(), `"line-1"`)
 		assert.NotContains(t, out.String(), `"r1"`)
 		assert.NotContains(t, out.String(), `"f1"`)
-		assert.NotContains(t, out.String(), `"breaking_changes":`)
 		assert.NotContains(t, out.String(), `"new_resources":`)
 		assert.NotContains(t, out.String(), `"new_functions":`)
 	})
 
 	t.Run("summary write error", func(t *testing.T) {
-		err := renderCompareOutput(errorWriter{}, result, false, true)
+		err := renderCompareOutput(errorWriter{}, result, false, true, -1)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "write summary output")
 	})
 
 	t.Run("json write error", func(t *testing.T) {
-		err := renderCompareOutput(errorWriter{}, result, true, false)
+		err := renderCompareOutput(errorWriter{}, result, true, false, -1)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "write compare JSON")
 	})
 
 	t.Run("text write error", func(t *testing.T) {
-		err := renderCompareOutput(errorWriter{}, result, false, false)
+		err := renderCompareOutput(errorWriter{}, result, false, false, -1)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "write compare text output")
 	})
@@ -116,6 +125,70 @@ func TestCompareLocalCurrentUserErrorCancelsOldSchemaDownload(t *testing.T) {
 	}
 }
 
+func TestBuildNormalizationChangesProducesTypedChanges(t *testing.T) {
+	renames := []normalize.TokenRename{
+		{Scope: "resources", OldToken: "pkg:index:OldRes", NewToken: "pkg:index:NewRes"},
+		{
+			Scope:    "datasources",
+			OldToken: "pkg:index:getThingV2",
+			NewToken: "pkg:index:getThing",
+			Kind:     normalize.TokenRenameKindInCodegenAlias,
+		},
+	}
+	maxItemsOne := []normalize.MaxItemsOneChange{
+		{
+			Scope:    "resources",
+			Token:    "pkg:index:Widget",
+			Location: "inputs",
+			Field:    "filter",
+			OldType:  "string",
+			NewType:  "array",
+		},
+		{
+			Scope:    "resources",
+			Token:    "pkg:index:Widget",
+			Location: "inputs",
+			Field:    "filter",
+			OldType:  "string",
+			NewType:  "array",
+		},
+	}
+
+	changes := buildNormalizationChanges(renames, maxItemsOne)
+	if len(changes) != 3 {
+		t.Fatalf("expected 3 deduped changes, got %d (%+v)", len(changes), changes)
+	}
+
+	byKindToken := map[string]compare.Change{}
+	for _, change := range changes {
+		byKindToken[change.Kind+"|"+change.Token] = change
+	}
+
+	rename := byKindToken["renamed-resource|pkg:index:OldRes"]
+	if rename.Scope != compare.ScopeResource || !rename.Breaking || rename.Severity != compare.SeverityError {
+		t.Fatalf("unexpected rename change: %+v", rename)
+	}
+	if rename.Source != compare.SourceNormalize {
+		t.Fatalf("rename source must be normalize: %+v", rename)
+	}
+
+	alias := byKindToken["deprecated-function-alias|pkg:index:getThingV2"]
+	if alias.Scope != compare.ScopeFunction || alias.Breaking || alias.Severity != compare.SeverityInfo {
+		t.Fatalf("unexpected alias change: %+v", alias)
+	}
+	if !strings.Contains(alias.Message, "retained as deprecated alias") {
+		t.Fatalf("unexpected alias message: %+v", alias)
+	}
+
+	maxItems := byKindToken["max-items-one-changed|pkg:index:Widget"]
+	if maxItems.Location != "inputs" || maxItems.Scope != compare.ScopeResource || !maxItems.Breaking {
+		t.Fatalf("unexpected max-items-one change: %+v", maxItems)
+	}
+	if !strings.Contains(maxItems.Message, `"filter" maxItemsOne changed`) {
+		t.Fatalf("unexpected max-items-one message: %+v", maxItems)
+	}
+}
+
 type errorWriter struct{}
 
 func (errorWriter) Write(p []byte) (int, error) {
@@ -126,16 +199,16 @@ func TestCompareSchemasFixtureTextOutput(t *testing.T) {
 	oldSchema, newSchema := mustLoadCompareFixtureSchemas(t)
 
 	var out bytes.Buffer
-	result := compare.Schemas(oldSchema, newSchema, compare.Options{
-		Provider:   "my-pkg",
-		MaxChanges: -1,
-	})
-	assert.NoError(t, compare.RenderText(&out, result))
+	result := compare.Schemas(oldSchema, newSchema, compare.Options{Provider: "my-pkg"})
+	assert.NoError(t, compare.RenderText(&out, result, -1))
 
 	text := out.String()
-	assert.Contains(t, text, "Found 14 breaking changes:")
-	assert.Contains(t, text, `"my-pkg:index:RemovedResource" missing`)
-	assert.Contains(t, text, `"my-pkg:index:removedFunction" missing`)
+	assert.Contains(t, text, "Found 6 breaking changes:")
+	assert.Contains(t, text, `#### Resources`)
+	assert.Contains(t, text, `- "my-pkg:index:RemovedResource":`)
+	assert.Contains(t, text, `- `+"`🔴`"+` missing`)
+	assert.Contains(t, text, `#### Functions`)
+	assert.Contains(t, text, `- "my-pkg:index:removedFunction":`)
 	assert.Contains(t, text, `type changed from "string" to "integer"`)
 	assert.Contains(t, text, `input has changed to Required`)
 	assert.Contains(t, text, `property is no longer Required`)
@@ -143,32 +216,29 @@ func TestCompareSchemasFixtureTextOutput(t *testing.T) {
 
 func TestRenderCompareOutputFixtureJSON(t *testing.T) {
 	oldSchema, newSchema := mustLoadCompareFixtureSchemas(t)
-	result := compare.Schemas(oldSchema, newSchema, compare.Options{
-		Provider:   "my-pkg",
-		MaxChanges: -1,
-	})
+	result := compare.Schemas(oldSchema, newSchema, compare.Options{Provider: "my-pkg"})
 
 	t.Run("full", func(t *testing.T) {
 		var out bytes.Buffer
-		err := renderCompareOutput(&out, result, true, false)
+		err := renderCompareOutput(&out, result, true, false, -1)
 		assert.NoError(t, err)
 
 		var payload struct {
 			Summary []struct {
-				Category string `json:"category"`
-				Count    int    `json:"count"`
-				Entries  []string
+				Category string   `json:"category"`
+				Count    int      `json:"count"`
+				Entries  []string `json:"entries"`
 			} `json:"summary"`
-			BreakingChanges []string `json:"breaking_changes"`
-			NewResources    []string `json:"new_resources"`
-			NewFunctions    []string `json:"new_functions"`
+			Changes      []compare.Change `json:"changes"`
+			Grouped      any              `json:"grouped"`
+			NewResources []string         `json:"new_resources"`
+			NewFunctions []string         `json:"new_functions"`
 		}
 		assert.NoError(t, json.Unmarshal(out.Bytes(), &payload))
 
 		gotCounts := map[string]int{}
 		for _, item := range payload.Summary {
 			gotCounts[item.Category] = item.Count
-			assert.Empty(t, item.Entries)
 		}
 		assert.True(t, reflect.DeepEqual(gotCounts, map[string]int{
 			"missing-function":     1,
@@ -177,14 +247,15 @@ func TestRenderCompareOutputFixtureJSON(t *testing.T) {
 			"required-to-optional": 2,
 			"type-changed":         1,
 		}))
-		assert.Equal(t, result.BreakingChanges, payload.BreakingChanges)
+		assert.NotEmpty(t, payload.Changes)
+		assert.NotNil(t, payload.Grouped)
 		assert.Empty(t, payload.NewResources)
 		assert.Empty(t, payload.NewFunctions)
 	})
 
 	t.Run("summary", func(t *testing.T) {
 		var out bytes.Buffer
-		err := renderCompareOutput(&out, result, true, true)
+		err := renderCompareOutput(&out, result, true, true, -1)
 		assert.NoError(t, err)
 
 		var payload struct {

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
+	internalcompare "github.com/pulumi/schema-tools/internal/compare"
 )
 
 func TestSchemasSortsNewResourcesAndFunctions(t *testing.T) {
@@ -34,10 +35,7 @@ func TestSchemasSortsNewResourcesAndFunctions(t *testing.T) {
 		},
 	}
 
-	result := Schemas(oldSchema, newSchema, Options{
-		Provider:   "my-pkg",
-		MaxChanges: -1,
-	})
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg"})
 
 	if len(result.Summary) != 0 {
 		t.Fatalf("expected no summary items, got %v", result.Summary)
@@ -52,7 +50,7 @@ func TestSchemasSortsNewResourcesAndFunctions(t *testing.T) {
 
 func TestSchemasBuildsSummaryWithEntriesAndPaths(t *testing.T) {
 	oldSchema, newSchema := mustLoadFixtureSchemas(t)
-	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1})
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg"})
 
 	wantCategories := []string{
 		"missing-function",
@@ -82,13 +80,289 @@ func TestSchemasBuildsSummaryWithEntriesAndPaths(t *testing.T) {
 	if !reflect.DeepEqual(gotEntries, expectedFixtureSummaryEntries()) {
 		t.Fatalf("summary entries mismatch:\n got: %v\nwant: %v", gotEntries, expectedFixtureSummaryEntries())
 	}
-	if len(result.BreakingChanges) == 0 {
-		t.Fatal("expected fixture to produce breaking changes")
+	if len(result.Changes) == 0 {
+		t.Fatal("expected fixture to produce canonical changes")
 	}
-	for i, line := range result.BreakingChanges {
-		if line == "" {
-			t.Fatalf("unexpected blank breaking change line at index %d", i)
+	for i, change := range result.Changes {
+		if change.Kind == "" {
+			t.Fatalf("change[%d] missing kind: %+v", i, change)
 		}
+		if change.Path == "" {
+			t.Fatalf("change[%d] missing path: %+v", i, change)
+		}
+		if change.Source != SourceEngine {
+			t.Fatalf("change[%d] unexpected source: %+v", i, change)
+		}
+		if change.Severity == "" {
+			t.Fatalf("change[%d] missing severity: %+v", i, change)
+		}
+	}
+}
+
+func TestClassifySeverityByKind(t *testing.T) {
+	tests := []struct {
+		kind     string
+		severity ChangeSeverity
+		breaking bool
+	}{
+		{kind: "missing-resource", severity: SeverityError, breaking: true},
+		{kind: "missing-function", severity: SeverityError, breaking: true},
+		{kind: "missing-type", severity: SeverityError, breaking: true},
+		{kind: "signature-changed", severity: SeverityError, breaking: true},
+		{kind: "optional-to-required", severity: SeverityError, breaking: true},
+		{kind: "type-changed", severity: SeverityWarn, breaking: true},
+		{kind: "missing-input", severity: SeverityWarn, breaking: true},
+		{kind: "missing-output", severity: SeverityWarn, breaking: true},
+		{kind: "missing-property", severity: SeverityWarn, breaking: true},
+		{kind: "max-items-one-changed", severity: SeverityError, breaking: true},
+		{kind: "renamed-resource", severity: SeverityError, breaking: true},
+		{kind: "renamed-function", severity: SeverityError, breaking: true},
+		{kind: "required-to-optional", severity: SeverityInfo, breaking: false},
+		{kind: "deprecated-resource-alias", severity: SeverityInfo, breaking: false},
+		{kind: "deprecated-function-alias", severity: SeverityInfo, breaking: false},
+		{kind: "unknown-kind", severity: SeverityWarn, breaking: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.kind, func(t *testing.T) {
+			gotSeverity, gotBreaking := classifySeverity(tt.kind)
+			if gotSeverity != tt.severity || gotBreaking != tt.breaking {
+				t.Fatalf("classifySeverity(%q) = (%q,%v), want (%q,%v)",
+					tt.kind, gotSeverity, gotBreaking, tt.severity, tt.breaking)
+			}
+		})
+	}
+}
+
+func TestSortChangesDeterministic(t *testing.T) {
+	changes := []Change{
+		{
+			Scope:    ScopeType,
+			Token:    "pkg:index:Type",
+			Location: "properties",
+			Path:     `Types: "pkg:index:Type": properties: "a"`,
+			Kind:     "missing-property",
+			Message:  "missing",
+			Source:   SourceEngine,
+		},
+		{
+			Scope:    ScopeResource,
+			Token:    "pkg:index:Res",
+			Location: "inputs",
+			Path:     `Resources: "pkg:index:Res": inputs: "name"`,
+			Kind:     "missing-input",
+			Message:  "missing",
+			Source:   SourceEngine,
+		},
+		{
+			Scope:    ScopeFunction,
+			Token:    "pkg:index:getThing",
+			Location: "signature",
+			Path:     `Functions: "pkg:index:getThing"`,
+			Kind:     "signature-changed",
+			Message:  "signature change",
+			Source:   SourceEngine,
+		},
+	}
+
+	got := sortChanges(changes)
+	wantScopes := []ChangeScope{ScopeResource, ScopeFunction, ScopeType}
+	if len(got) != len(wantScopes) {
+		t.Fatalf("unexpected sorted size: got %d want %d", len(got), len(wantScopes))
+	}
+	for i, want := range wantScopes {
+		if got[i].Scope != want {
+			t.Fatalf("sort order mismatch at %d: got %q want %q (changes=%+v)", i, got[i].Scope, want, got)
+		}
+	}
+}
+
+func TestChangesFromDiagnostics(t *testing.T) {
+	diagnostics := []internalcompare.Diagnostic{
+		{
+			Scope:       "Resources",
+			Token:       "pkg:index:Res",
+			Location:    "inputs",
+			Path:        `Resources: "pkg:index:Res": inputs: "name"`,
+			Description: "missing",
+		},
+		{
+			Scope:       "Functions",
+			Token:       "pkg:index:getThing",
+			Location:    "signature",
+			Path:        `Functions: "pkg:index:getThing"`,
+			Description: "signature change",
+		},
+	}
+
+	changes := changesFromDiagnostics(diagnostics)
+	if len(changes) != 2 {
+		t.Fatalf("expected 2 changes, got %d", len(changes))
+	}
+	if changes[0].Scope != ScopeResource || changes[0].Kind != "missing-input" {
+		t.Fatalf("unexpected resource conversion: %+v", changes[0])
+	}
+	if !changes[0].Breaking || changes[0].Severity != SeverityWarn {
+		t.Fatalf("unexpected breaking/severity conversion: %+v", changes[0])
+	}
+	if changes[1].Scope != ScopeFunction || changes[1].Kind != "signature-changed" {
+		t.Fatalf("unexpected function conversion: %+v", changes[1])
+	}
+	if !changes[1].Breaking || changes[1].Severity != SeverityError {
+		t.Fatalf("unexpected signature severity: %+v", changes[1])
+	}
+}
+
+func TestGroupChangesByScopeTokenLocation(t *testing.T) {
+	changes := sortChanges([]Change{
+		{
+			Scope:    ScopeFunction,
+			Token:    "pkg:index:getThing",
+			Location: "inputs",
+			Path:     `Functions: "pkg:index:getThing": inputs: "arg"`,
+			Kind:     "missing-input",
+			Severity: SeverityWarn,
+			Breaking: true,
+			Source:   SourceEngine,
+			Message:  "missing input",
+		},
+		{
+			Scope:    ScopeResource,
+			Token:    "pkg:index:Widget",
+			Location: "properties",
+			Path:     `Resources: "pkg:index:Widget": properties: "id"`,
+			Kind:     "missing-output",
+			Severity: SeverityWarn,
+			Breaking: true,
+			Source:   SourceEngine,
+			Message:  "missing output",
+		},
+		{
+			Scope:    ScopeType,
+			Token:    "pkg:index:SharedType",
+			Location: "properties",
+			Path:     `Types: "pkg:index:SharedType": properties: "value"`,
+			Kind:     "type-changed",
+			Severity: SeverityWarn,
+			Breaking: true,
+			Source:   SourceEngine,
+			Message:  "type changed",
+		},
+	})
+
+	grouped := groupChanges(changes)
+	if got := len(grouped.Resources["pkg:index:Widget"]["properties"]); got != 1 {
+		t.Fatalf("expected one grouped resource change, got %d", got)
+	}
+	if got := len(grouped.Functions["pkg:index:getThing"]["inputs"]); got != 1 {
+		t.Fatalf("expected one grouped function change, got %d", got)
+	}
+	if got := len(grouped.Types["pkg:index:SharedType"]["properties"]); got != 1 {
+		t.Fatalf("expected one grouped type change, got %d", got)
+	}
+}
+
+func TestSchemasAttachesTypeImpactMetadata(t *testing.T) {
+	typeToken := "my-pkg:index:SharedConfig"
+	oldSchema := schema.PackageSpec{
+		Name: "my-pkg",
+		Types: map[string]schema.ComplexTypeSpec{
+			typeToken: {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Type: "object",
+					Properties: map[string]schema.PropertySpec{
+						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+			"my-pkg:index:Wrapper": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Type: "object",
+					Properties: map[string]schema.PropertySpec{
+						"config": {TypeSpec: schema.TypeSpec{Ref: "#/types/" + typeToken}},
+					},
+				},
+			},
+		},
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:Widget": {
+				InputProperties: map[string]schema.PropertySpec{
+					"config": {TypeSpec: schema.TypeSpec{Ref: "#/types/" + typeToken}},
+				},
+			},
+		},
+		Functions: map[string]schema.FunctionSpec{
+			"my-pkg:index:getWidget": {
+				Inputs: &schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"config": {TypeSpec: schema.TypeSpec{Ref: "#/types/" + typeToken}},
+					},
+				},
+			},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Name: "my-pkg",
+		Types: map[string]schema.ComplexTypeSpec{
+			typeToken: {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Type: "object",
+					Properties: map[string]schema.PropertySpec{
+						"value": {TypeSpec: schema.TypeSpec{Type: "integer"}},
+					},
+				},
+			},
+			"my-pkg:index:Wrapper": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Type: "object",
+					Properties: map[string]schema.PropertySpec{
+						"config": {TypeSpec: schema.TypeSpec{Ref: "#/types/" + typeToken}},
+					},
+				},
+			},
+		},
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:Widget": {
+				InputProperties: map[string]schema.PropertySpec{
+					"config": {TypeSpec: schema.TypeSpec{Ref: "#/types/" + typeToken}},
+				},
+			},
+		},
+		Functions: map[string]schema.FunctionSpec{
+			"my-pkg:index:getWidget": {
+				Inputs: &schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"config": {TypeSpec: schema.TypeSpec{Ref: "#/types/" + typeToken}},
+					},
+				},
+			},
+		},
+	}
+
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg"})
+
+	var typeChange *Change
+	for i := range result.Changes {
+		change := &result.Changes[i]
+		if change.Scope == ScopeType && change.Token == typeToken && change.Kind == "type-changed" {
+			typeChange = change
+			break
+		}
+	}
+	if typeChange == nil {
+		t.Fatalf("expected type change for %q, got %+v", typeToken, result.Changes)
+	}
+
+	if typeChange.ImpactCount != 3 {
+		t.Fatalf("expected 3 direct impacts, got %d (%+v)", typeChange.ImpactCount, typeChange.ImpactedBy)
+	}
+	wantImpacts := []ImpactRef{
+		{Scope: ScopeResource, Token: "my-pkg:index:Widget", Location: "inputs", Path: "config"},
+		{Scope: ScopeFunction, Token: "my-pkg:index:getWidget", Location: "inputs", Path: "config"},
+		{Scope: ScopeType, Token: "my-pkg:index:Wrapper", Location: "properties", Path: "config"},
+	}
+	if !reflect.DeepEqual(typeChange.ImpactedBy, wantImpacts) {
+		t.Fatalf("impact metadata mismatch:\n got: %+v\nwant: %+v", typeChange.ImpactedBy, wantImpacts)
 	}
 }
 
@@ -266,7 +540,7 @@ func TestSchemasClassificationContractWithInternalDiagnostics(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := Schemas(tc.oldSchema, tc.newSchema, Options{Provider: "my-pkg", MaxChanges: -1})
+			result := Schemas(tc.oldSchema, tc.newSchema, Options{Provider: "my-pkg"})
 
 			gotCounts := map[string]int{}
 			for _, item := range result.Summary {

@@ -146,12 +146,16 @@ To emit machine-readable JSON output:
 ```shell
 $ schema-tools compare -p docker -o v3.0.0 -n v4.0.0 --json
 {
-  "summary": [ {"category": "...", "count": 1} ],
-  "breaking_changes": [...],
+  "summary": [ {"category": "...", "count": 1, "entries": ["..."]} ],
+  "changes": [ {"scope": "resource", "token": "...", "kind": "..."} ],
+  "grouped": { "resources": {}, "functions": {}, "types": {} },
   "new_resources": [...],
   "new_functions": [...]
 }
 ```
+
+`--max-changes` applies only to text rendering output. JSON `summary`, `changes`,
+and `grouped` are always based on the full uncapped change set.
 
 To emit summary-only output (category counts only):
 

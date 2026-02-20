@@ -1,0 +1,30 @@
+### Does the PR have any schema changes?
+
+Found 6 breaking changes:
+
+#### Resources
+- "aws:s3/bucket:Bucket":
+    - inputs:
+        - `🔴` "logging" maxItemsOne changed from "array" to "#/types/aws:s3/BucketLogging:BucketLogging"
+    - properties:
+        - `🔴` "logging" maxItemsOne changed from "array" to "#/types/aws:s3/BucketLogging:BucketLogging"
+- "aws:paymentcryptography/key:Key":
+    - inputs:
+        - `🔴` "keyAttributes" maxItemsOne changed from "array" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
+    - properties:
+        - `🔴` "keyAttributes" maxItemsOne changed from "array" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
+- "aws:s3/bucketAclV2:BucketAclV2":
+    - general:
+        - `🟢` Deprecated in favor of aws:s3/bucketAcl:BucketAcl
+
+#### Functions
+- "aws:lb/getListenerRule:getListenerRule":
+    - inputs:
+        - `🔴` "action[*].forward" maxItemsOne changed from "#/types/...Forward" to "array"
+
+#### Types
+- "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes":
+    - properties:
+        - `🟡` "keyModesOfUse" type changed from "string" to "array" (impacted by 1 token)
+
+No new resources/functions.

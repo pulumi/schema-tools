@@ -1,0 +1,60 @@
+{
+  "auto-aliasing": {
+    "resources": {
+      "aws_s3_bucket_main": {
+        "current": "aws:s3/bucketV2:BucketV2",
+        "majorVersion": 6,
+        "fields": {
+          "logging": {
+            "maxItemsOne": false
+          },
+          "versioning": {
+            "maxItemsOne": false
+          },
+          "website": {
+            "maxItemsOne": false
+          }
+        }
+      },
+      "aws_s3_bucket_legacy": {
+        "current": "aws:s3/bucket:Bucket",
+        "majorVersion": 6
+      },
+      "aws_s3_bucket_acl": {
+        "current": "aws:s3/bucketAclV2:BucketAclV2",
+        "majorVersion": 6
+      },
+      "aws_paymentcryptography_key": {
+        "current": "aws:paymentcryptography/key:Key",
+        "majorVersion": 6,
+        "fields": {
+          "key_attributes": {
+            "maxItemsOne": false
+          }
+        }
+      }
+    },
+    "datasources": {
+      "aws_lb_listener_rule": {
+        "current": "aws:lb/getListenerRule:getListenerRule",
+        "majorVersion": 6,
+        "fields": {
+          "action": {
+            "maxItemsOne": false,
+            "elem": {
+              "fields": {
+                "forward": {
+                  "fields": {
+                    "target_group": {
+                      "maxItemsOne": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

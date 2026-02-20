@@ -1,6 +1,9 @@
 package compare
 
 import (
+	"strconv"
+	"strings"
+
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 
 	"github.com/pulumi/schema-tools/internal/util/diagtree"
@@ -21,8 +24,10 @@ func Analyze(provider string, oldSchema, newSchema schema.PackageSpec) Report {
 		}
 	}
 
+	violations := BreakingChanges(oldSchema, newSchema)
 	return Report{
-		Violations:   BreakingChanges(oldSchema, newSchema),
+		Violations:   violations,
+		Diagnostics:  flattenDiagnostics(violations),
 		NewResources: newResources,
 		NewFunctions: newFunctions,
 	}
@@ -244,4 +249,40 @@ func validateTypes(old *schema.TypeSpec, new *schema.TypeSpec, msg *diagtree.Nod
 
 	validateTypes(old.Items, new.Items, msg.Label("items"))
 	validateTypes(old.AdditionalProperties, new.AdditionalProperties, msg.Label("additional properties"))
+}
+
+func flattenDiagnostics(root *diagtree.Node) []Diagnostic {
+	if root == nil {
+		return []Diagnostic{}
+	}
+	diagnostics := []Diagnostic{}
+	root.WalkDisplayed(func(node *diagtree.Node) {
+		if node == nil || node.Description == "" {
+			return
+		}
+		parts := node.PathTitles()
+		d := Diagnostic{
+			Path:        strings.Join(parts, ": "),
+			Description: node.Description,
+		}
+		if len(parts) > 0 {
+			d.Scope = parts[0]
+		}
+		if len(parts) > 1 {
+			d.Token = maybeUnquote(parts[1])
+		}
+		if len(parts) > 2 {
+			d.Location = parts[2]
+		}
+		diagnostics = append(diagnostics, d)
+	})
+	return diagnostics
+}
+
+func maybeUnquote(v string) string {
+	u, err := strconv.Unquote(v)
+	if err != nil {
+		return v
+	}
+	return u
 }
