@@ -3,15 +3,22 @@ package normalize
 import "errors"
 
 var (
-	ErrMetadataRequired           = errors.New("metadata required")
-	ErrMetadataInvalid            = errors.New("metadata invalid")
+	// ErrMetadataRequired indicates normalization metadata is missing.
+	ErrMetadataRequired = errors.New("metadata required")
+	// ErrMetadataInvalid indicates metadata payload shape/content is malformed.
+	ErrMetadataInvalid = errors.New("metadata invalid")
+	// ErrMetadataVersionUnsupported indicates a known-but-unsupported metadata version.
 	ErrMetadataVersionUnsupported = errors.New("metadata version unsupported")
 )
 
+// SupportedAutoAliasingVersion is the highest metadata auto-aliasing version
+// currently understood by this normalizer.
 const SupportedAutoAliasingVersion = 1
 
 const (
-	scopeResources   = "resources"
+	// scopeResources identifies resource token maps in normalization logic.
+	scopeResources = "resources"
+	// scopeDataSources identifies datasource/function token maps.
 	scopeDataSources = "datasources"
 )
 

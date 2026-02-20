@@ -13,6 +13,8 @@ type Result struct {
 	MaxItemsOne []MaxItemsOneChange
 }
 
+// Normalize applies strict metadata-first normalization to the new schema and
+// returns injected-difference evidence for compare output.
 func Normalize(
 	oldSchema, newSchema schema.PackageSpec,
 	oldMetadata, newMetadata *MetadataEnvelope,
@@ -76,6 +78,8 @@ func Normalize(
 	}, nil
 }
 
+// normalizeScopeTokens rewrites new-map token keys to old canonical keys when
+// metadata provides an unambiguous 1:1 rename mapping.
 func normalizeScopeTokens[T any](
 	scope string,
 	oldMap map[string]T,

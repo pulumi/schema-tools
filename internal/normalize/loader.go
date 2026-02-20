@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+// LoadMetadata reads metadata from disk and parses/validates it for normalize.
 func LoadMetadata(path string) (*MetadataEnvelope, error) {
 	if strings.TrimSpace(path) == "" {
 		return nil, fmt.Errorf("%w: empty path", ErrMetadataRequired)
@@ -23,6 +24,8 @@ func LoadMetadata(path string) (*MetadataEnvelope, error) {
 	return ParseMetadata(data)
 }
 
+// ParseMetadata decodes bridge metadata JSON and enforces a single JSON document
+// with normalize-required shape constraints.
 func ParseMetadata(data []byte) (*MetadataEnvelope, error) {
 	if len(bytes.TrimSpace(data)) == 0 {
 		return nil, fmt.Errorf("%w: empty payload", ErrMetadataRequired)
@@ -44,6 +47,8 @@ func ParseMetadata(data []byte) (*MetadataEnvelope, error) {
 	return &metadata, nil
 }
 
+// ValidateMetadata enforces normalize-required metadata invariants:
+// auto-aliasing presence, supported version, and valid token/field history nodes.
 func ValidateMetadata(metadata *MetadataEnvelope) error {
 	if metadata == nil || metadata.AutoAliasing == nil {
 		return fmt.Errorf("%w: missing auto-aliasing payload", ErrMetadataRequired)
@@ -64,6 +69,8 @@ func ValidateMetadata(metadata *MetadataEnvelope) error {
 	return nil
 }
 
+// validateTokenHistoryMap validates one scope map ("resources" or "datasources")
+// and returns typed metadata errors with field-level context.
 func validateTokenHistoryMap(kind string, m map[string]*TokenHistory) error {
 	for tfToken, history := range m {
 		if history == nil {
@@ -88,6 +95,7 @@ func validateTokenHistoryMap(kind string, m map[string]*TokenHistory) error {
 	return nil
 }
 
+// validateFieldHistoryMap validates nested field-history entries for one TF token.
 func validateFieldHistoryMap(kind, tfToken string, fields map[string]*FieldHistory) error {
 	for fieldName, history := range fields {
 		if history == nil {
@@ -101,6 +109,7 @@ func validateFieldHistoryMap(kind, tfToken string, fields map[string]*FieldHisto
 	return nil
 }
 
+// validateFieldHistoryNode recursively validates one field-history subtree.
 func validateFieldHistoryNode(history *FieldHistory, path string) error {
 	if history == nil {
 		return fmt.Errorf("%w: %s must not be null", ErrMetadataInvalid, path)

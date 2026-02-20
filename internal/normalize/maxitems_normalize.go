@@ -12,6 +12,8 @@ type fieldPathPart struct {
 	Elem bool
 }
 
+// applyMaxItemsOneNormalization rewrites new-schema field types to old equivalents
+// when metadata field evidence shows a true maxItemsOne transition.
 func applyMaxItemsOneNormalization(
 	oldSchema schema.PackageSpec,
 	normalizedNew *schema.PackageSpec,
@@ -127,6 +129,8 @@ func applyMaxItemsOneNormalization(
 	return changes
 }
 
+// normalizePropertyMapByFieldEvidence applies maxItemsOne rewrites for one
+// property map (resource inputs/properties or function inputs/outputs).
 func normalizePropertyMapByFieldEvidence(
 	oldSchema schema.PackageSpec,
 	normalizedNew *schema.PackageSpec,
@@ -181,6 +185,9 @@ func normalizePropertyMapByFieldEvidence(
 	return updated, changes
 }
 
+// canonicalTFTokenIndex resolves canonical identities back to TF token keys. When
+// multiple TF tokens claim the same canonical identity, the canonical is marked
+// ambiguous and omitted from normalization.
 func canonicalTFTokenIndex(
 	scope string,
 	remap TokenRemap,
@@ -224,6 +231,8 @@ func canonicalTFTokenIndex(
 	return index
 }
 
+// resolveCanonicalTFToken finds the TF token key for a schema token through
+// canonical remap identity.
 func resolveCanonicalTFToken(
 	scope, token string,
 	remap TokenRemap,
@@ -240,6 +249,8 @@ func resolveCanonicalTFToken(
 	return tfToken, ok
 }
 
+// parseFieldPath parses flattened field-history paths.
+// Example: "settings[*].name" => [{Name:"settings",Elem:true}, {Name:"name",Elem:false}]
 func parseFieldPath(path string) ([]fieldPathPart, bool) {
 	if strings.TrimSpace(path) == "" {
 		return nil, false
@@ -475,6 +486,8 @@ func clonePropertySpecMap(props map[string]schema.PropertySpec) map[string]schem
 }
 
 func buildLocalTypeRefUseCountIndex(pkg schema.PackageSpec) map[string]int {
+	// Count external uses of local #/types refs so nested rewrites can skip
+	// shared type definitions and avoid cross-token side effects.
 	refCountsByTypeToken := map[string]int{}
 
 	incrementLocalTypeRefsFromPropertyMap(pkg.Config.Variables, refCountsByTypeToken)

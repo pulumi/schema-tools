@@ -5,22 +5,28 @@ import "sort"
 type MaxItemsOneTransition string
 
 const (
-	MaxItemsOneTransitionChanged   MaxItemsOneTransition = "changed"
+	// MaxItemsOneTransitionChanged means old/new are both known and differ.
+	MaxItemsOneTransitionChanged MaxItemsOneTransition = "changed"
+	// MaxItemsOneTransitionUnchanged means old/new are both known and equal.
 	MaxItemsOneTransitionUnchanged MaxItemsOneTransition = "unchanged"
-	MaxItemsOneTransitionUnknown   MaxItemsOneTransition = "unknown"
+	// MaxItemsOneTransitionUnknown means one side is absent/unspecified.
+	MaxItemsOneTransitionUnknown MaxItemsOneTransition = "unknown"
 )
 
+// FieldPathEvidence holds old/new maxItemsOne values for one flattened field path.
 type FieldPathEvidence struct {
 	Old        *bool
 	New        *bool
 	Transition MaxItemsOneTransition
 }
 
+// FieldHistoryEvidence stores flattened maxItemsOne evidence by TF token.
 type FieldHistoryEvidence struct {
 	Resources   map[string]map[string]FieldPathEvidence
 	Datasources map[string]map[string]FieldPathEvidence
 }
 
+// BuildFieldHistoryEvidence flattens old/new field history for resources and datasources.
 func BuildFieldHistoryEvidence(oldMetadata, newMetadata *MetadataEnvelope) FieldHistoryEvidence {
 	return FieldHistoryEvidence{
 		Resources:   buildTokenFieldEvidence(readHistoryMap(oldMetadata, true), readHistoryMap(newMetadata, true)),
@@ -28,6 +34,8 @@ func BuildFieldHistoryEvidence(oldMetadata, newMetadata *MetadataEnvelope) Field
 	}
 }
 
+// FlattenFieldHistory flattens nested field/elem history into dot paths.
+// Example: fields.a.elem.b becomes "a[*].b".
 func FlattenFieldHistory(fields map[string]*FieldHistory) map[string]*bool {
 	if len(fields) == 0 {
 		return map[string]*bool{}
@@ -40,6 +48,7 @@ func FlattenFieldHistory(fields map[string]*FieldHistory) map[string]*bool {
 	return out
 }
 
+// ClassifyMaxItemsOneTransition compares old/new maxItemsOne values.
 func ClassifyMaxItemsOneTransition(oldValue, newValue *bool) MaxItemsOneTransition {
 	if oldValue == nil || newValue == nil {
 		return MaxItemsOneTransitionUnknown
@@ -50,6 +59,7 @@ func ClassifyMaxItemsOneTransition(oldValue, newValue *bool) MaxItemsOneTransiti
 	return MaxItemsOneTransitionChanged
 }
 
+// SortedEvidencePaths returns stable-ordered evidence keys.
 func SortedEvidencePaths(evidence map[string]FieldPathEvidence) []string {
 	if len(evidence) == 0 {
 		return nil

@@ -7,6 +7,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 )
 
+// TokenRemap maps old/new tokens to canonical identities per scope.
 type TokenRemap struct {
 	OldResourceTokenToCanonical   map[string]string
 	NewResourceTokenToCanonical   map[string]string
@@ -19,6 +20,8 @@ type TokenRemap struct {
 	newDataSourceCanonicalToTokens map[string][]string
 }
 
+// BuildTokenRemap builds scope-partitioned canonical token mappings using
+// current+past metadata history for old/new snapshots.
 func BuildTokenRemap(oldMetadata, newMetadata *MetadataEnvelope) TokenRemap {
 	remap := TokenRemap{
 		OldResourceTokenToCanonical:    map[string]string{},
@@ -38,23 +41,27 @@ func BuildTokenRemap(oldMetadata, newMetadata *MetadataEnvelope) TokenRemap {
 	return remap
 }
 
+// CanonicalForOld returns the canonical identity for an old-snapshot token.
 func (r TokenRemap) CanonicalForOld(scope, token string) (string, bool) {
 	byScope := r.oldByScope(scope)
 	canonical, ok := byScope[token]
 	return canonical, ok
 }
 
+// CanonicalForNew returns the canonical identity for a new-snapshot token.
 func (r TokenRemap) CanonicalForNew(scope, token string) (string, bool) {
 	byScope := r.newByScope(scope)
 	canonical, ok := byScope[token]
 	return canonical, ok
 }
 
+// OldTokensForCanonical lists old-snapshot tokens participating in one canonical.
 func (r TokenRemap) OldTokensForCanonical(scope, canonical string) []string {
 	byScope := r.oldCanonicalByScope(scope)
 	return cloneSlice(byScope[canonical])
 }
 
+// NewTokensForCanonical lists new-snapshot tokens participating in one canonical.
 func (r TokenRemap) NewTokensForCanonical(scope, canonical string) []string {
 	byScope := r.newCanonicalByScope(scope)
 	return cloneSlice(byScope[canonical])
@@ -120,6 +127,8 @@ func (b tokenRemapBuilder) buildKind(
 	newMap map[string]*TokenHistory,
 	parseToken func(string) error,
 ) {
+	// Union all current/past aliases into connected components, then choose one
+	// canonical token per component and map all participating old/new tokens to it.
 	entries := []tokenEntry{}
 	uf := newUnionFind()
 
@@ -263,6 +272,8 @@ func readHistoryMap(metadata *MetadataEnvelope, resources bool) map[string]*Toke
 	return metadata.AutoAliasing.Datasources
 }
 
+// selectCanonical prefers new-current when unique, then old-current when unique,
+// then falls back to lexical-first token for determinism.
 func selectCanonical(componentTokens []string, oldCurrents, newCurrents map[string]struct{}) string {
 	if len(newCurrents) == 1 {
 		return onlyKey(newCurrents)
@@ -288,6 +299,7 @@ type unionFind struct {
 	rank   map[string]int
 }
 
+// unionFind provides deterministic connected-component grouping for alias tokens.
 func newUnionFind() *unionFind {
 	return &unionFind{
 		parent: map[string]string{},
