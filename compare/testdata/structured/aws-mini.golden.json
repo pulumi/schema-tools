@@ -2,47 +2,15 @@
   "summary": [
     {
       "category": "deprecated-resource-alias",
-      "count": 1,
-      "entries": [
-        "Resources: \"aws:s3/bucketAclV2:BucketAclV2\" retained as deprecated alias; migrate to \"aws:s3/bucketAcl:BucketAcl\""
-      ]
+      "count": 1
     },
     {
-      "category": "missing-input",
-      "count": 3,
-      "entries": [
-        "Resources: \"aws:s3/bucket:Bucket\": inputs: \"loggings\" missing",
-        "Resources: \"aws:s3/bucket:Bucket\": inputs: \"versionings\" missing",
-        "Resources: \"aws:s3/bucket:Bucket\": inputs: \"websites\" missing"
-      ]
-    },
-    {
-      "category": "missing-output",
-      "count": 3,
-      "entries": [
-        "Resources: \"aws:s3/bucket:Bucket\": properties: \"loggings\" missing output \"loggings\"",
-        "Resources: \"aws:s3/bucket:Bucket\": properties: \"versionings\" missing output \"versionings\"",
-        "Resources: \"aws:s3/bucket:Bucket\": properties: \"websites\" missing output \"websites\""
-      ]
-    },
-    {
-      "category": "missing-property",
-      "count": 1,
-      "entries": [
-        "Types: \"aws:lb/GetListenerRuleAction:GetListenerRuleAction\": properties: \"forward\" missing"
-      ]
+      "category": "max-items-one-changed",
+      "count": 5
     },
     {
       "category": "type-changed",
-      "count": 6,
-      "entries": [
-        "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\"",
-        "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\": items had \u0026{Type: Ref:#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes AdditionalProperties:\u003cnil\u003e Items:\u003cnil\u003e OneOf:[] Discriminator:\u003cnil\u003e Plain:false} but now has no type",
-        "Resources: \"aws:paymentcryptography/key:Key\": properties: \"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\"",
-        "Resources: \"aws:paymentcryptography/key:Key\": properties: \"keyAttributes\": items had \u0026{Type: Ref:#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes AdditionalProperties:\u003cnil\u003e Items:\u003cnil\u003e OneOf:[] Discriminator:\u003cnil\u003e Plain:false} but now has no type",
-        "Types: \"aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\": properties: \"keyModesOfUse\" type changed from \"string\" to \"array\"",
-        "Types: \"aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\": properties: \"keyModesOfUse\": items had no type but now has \u0026{Type:string Ref: AdditionalProperties:\u003cnil\u003e Items:\u003cnil\u003e OneOf:[] Discriminator:\u003cnil\u003e Plain:false}"
-      ]
+      "count": 1
     }
   ],
   "changes": [
@@ -51,110 +19,44 @@
       "token": "aws:paymentcryptography/key:Key",
       "location": "inputs",
       "path": "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\"",
-      "kind": "type-changed",
-      "severity": "warn",
+      "kind": "max-items-one-changed",
+      "severity": "error",
       "breaking": true,
-      "source": "engine",
-      "message": "type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
-    },
-    {
-      "scope": "resource",
-      "token": "aws:paymentcryptography/key:Key",
-      "location": "inputs",
-      "path": "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\": items",
-      "kind": "type-changed",
-      "severity": "warn",
-      "breaking": true,
-      "source": "engine",
-      "message": "had \u0026{Type: Ref:#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes AdditionalProperties:\u003cnil\u003e Items:\u003cnil\u003e OneOf:[] Discriminator:\u003cnil\u003e Plain:false} but now has no type"
+      "source": "normalize",
+      "message": "\"keyAttributes\" maxItemsOne changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
     },
     {
       "scope": "resource",
       "token": "aws:paymentcryptography/key:Key",
       "location": "properties",
       "path": "Resources: \"aws:paymentcryptography/key:Key\": properties: \"keyAttributes\"",
-      "kind": "type-changed",
-      "severity": "warn",
+      "kind": "max-items-one-changed",
+      "severity": "error",
       "breaking": true,
-      "source": "engine",
-      "message": "type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
-    },
-    {
-      "scope": "resource",
-      "token": "aws:paymentcryptography/key:Key",
-      "location": "properties",
-      "path": "Resources: \"aws:paymentcryptography/key:Key\": properties: \"keyAttributes\": items",
-      "kind": "type-changed",
-      "severity": "warn",
-      "breaking": true,
-      "source": "engine",
-      "message": "had \u0026{Type: Ref:#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes AdditionalProperties:\u003cnil\u003e Items:\u003cnil\u003e OneOf:[] Discriminator:\u003cnil\u003e Plain:false} but now has no type"
+      "source": "normalize",
+      "message": "\"keyAttributes\" maxItemsOne changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
     },
     {
       "scope": "resource",
       "token": "aws:s3/bucket:Bucket",
       "location": "inputs",
-      "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"loggings\"",
-      "kind": "missing-input",
-      "severity": "warn",
+      "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"logging\"",
+      "kind": "max-items-one-changed",
+      "severity": "error",
       "breaking": true,
-      "source": "engine",
-      "message": "missing"
-    },
-    {
-      "scope": "resource",
-      "token": "aws:s3/bucket:Bucket",
-      "location": "inputs",
-      "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"versionings\"",
-      "kind": "missing-input",
-      "severity": "warn",
-      "breaking": true,
-      "source": "engine",
-      "message": "missing"
-    },
-    {
-      "scope": "resource",
-      "token": "aws:s3/bucket:Bucket",
-      "location": "inputs",
-      "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"websites\"",
-      "kind": "missing-input",
-      "severity": "warn",
-      "breaking": true,
-      "source": "engine",
-      "message": "missing"
+      "source": "normalize",
+      "message": "\"logging\" maxItemsOne changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
     },
     {
       "scope": "resource",
       "token": "aws:s3/bucket:Bucket",
       "location": "properties",
-      "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"loggings\"",
-      "kind": "missing-output",
-      "severity": "warn",
+      "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"logging\"",
+      "kind": "max-items-one-changed",
+      "severity": "error",
       "breaking": true,
-      "source": "engine",
-      "message": "missing output \"loggings\""
-    },
-    {
-      "scope": "resource",
-      "token": "aws:s3/bucket:Bucket",
-      "location": "properties",
-      "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"versionings\"",
-      "kind": "missing-output",
-      "severity": "warn",
-      "breaking": true,
-      "source": "engine",
-      "message": "missing output \"versionings\""
-    },
-    {
-      "scope": "resource",
-      "token": "aws:s3/bucket:Bucket",
-      "location": "properties",
-      "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"websites\"",
-      "kind": "missing-output",
-      "severity": "warn",
-      "breaking": true,
-      "source": "engine",
-      "message": "missing output \"websites\""
+      "source": "normalize",
+      "message": "\"logging\" maxItemsOne changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
     },
     {
       "scope": "resource",
@@ -164,27 +66,18 @@
       "severity": "info",
       "breaking": false,
       "source": "normalize",
-      "message": "retained as deprecated alias; migrate to \"aws:s3/bucketAcl:BucketAcl\""
+      "message": "Deprecated in favor of aws:s3/bucketAcl:BucketAcl"
     },
     {
-      "scope": "type",
-      "token": "aws:lb/GetListenerRuleAction:GetListenerRuleAction",
-      "location": "properties",
-      "path": "Types: \"aws:lb/GetListenerRuleAction:GetListenerRuleAction\": properties: \"forward\"",
-      "kind": "missing-property",
-      "severity": "warn",
+      "scope": "function",
+      "token": "aws:lb/getListenerRule:getListenerRule",
+      "location": "inputs",
+      "path": "Functions: \"aws:lb/getListenerRule:getListenerRule\": inputs: \"action[*].forward\"",
+      "kind": "max-items-one-changed",
+      "severity": "error",
       "breaking": true,
-      "source": "engine",
-      "message": "missing",
-      "impactedBy": [
-        {
-          "scope": "function",
-          "token": "aws:lb/getListenerRule:getListenerRule",
-          "location": "inputs",
-          "path": "action[*]"
-        }
-      ],
-      "impactCount": 1
+      "source": "normalize",
+      "message": "\"action[*].forward\" maxItemsOne changed from \"#/types/...Forward\" to \"array\""
     },
     {
       "scope": "type",
@@ -201,66 +94,10 @@
           "scope": "resource",
           "token": "aws:paymentcryptography/key:Key",
           "location": "inputs",
-          "path": "keyAttributes"
-        },
-        {
-          "scope": "resource",
-          "token": "aws:paymentcryptography/key:Key",
-          "location": "inputs",
-          "path": "keyAttributes[*]"
-        },
-        {
-          "scope": "resource",
-          "token": "aws:paymentcryptography/key:Key",
-          "location": "properties",
-          "path": "keyAttributes"
-        },
-        {
-          "scope": "resource",
-          "token": "aws:paymentcryptography/key:Key",
-          "location": "properties",
-          "path": "keyAttributes[*]"
+          "path": "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\""
         }
       ],
-      "impactCount": 4
-    },
-    {
-      "scope": "type",
-      "token": "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
-      "location": "properties",
-      "path": "Types: \"aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\": properties: \"keyModesOfUse\": items",
-      "kind": "type-changed",
-      "severity": "warn",
-      "breaking": true,
-      "source": "engine",
-      "message": "had no type but now has \u0026{Type:string Ref: AdditionalProperties:\u003cnil\u003e Items:\u003cnil\u003e OneOf:[] Discriminator:\u003cnil\u003e Plain:false}",
-      "impactedBy": [
-        {
-          "scope": "resource",
-          "token": "aws:paymentcryptography/key:Key",
-          "location": "inputs",
-          "path": "keyAttributes"
-        },
-        {
-          "scope": "resource",
-          "token": "aws:paymentcryptography/key:Key",
-          "location": "inputs",
-          "path": "keyAttributes[*]"
-        },
-        {
-          "scope": "resource",
-          "token": "aws:paymentcryptography/key:Key",
-          "location": "properties",
-          "path": "keyAttributes"
-        },
-        {
-          "scope": "resource",
-          "token": "aws:paymentcryptography/key:Key",
-          "location": "properties",
-          "path": "keyAttributes[*]"
-        }
-      ],
-      "impactCount": 4
+      "impactCount": 1
     }
   ],
   "grouped": {
@@ -272,22 +109,11 @@
             "token": "aws:paymentcryptography/key:Key",
             "location": "inputs",
             "path": "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\"",
-            "kind": "type-changed",
-            "severity": "warn",
+            "kind": "max-items-one-changed",
+            "severity": "error",
             "breaking": true,
-            "source": "engine",
-            "message": "type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
-          },
-          {
-            "scope": "resource",
-            "token": "aws:paymentcryptography/key:Key",
-            "location": "inputs",
-            "path": "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\": items",
-            "kind": "type-changed",
-            "severity": "warn",
-            "breaking": true,
-            "source": "engine",
-            "message": "had \u0026{Type: Ref:#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes AdditionalProperties:\u003cnil\u003e Items:\u003cnil\u003e OneOf:[] Discriminator:\u003cnil\u003e Plain:false} but now has no type"
+            "source": "normalize",
+            "message": "\"keyAttributes\" maxItemsOne changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
           }
         ],
         "properties": [
@@ -296,22 +122,11 @@
             "token": "aws:paymentcryptography/key:Key",
             "location": "properties",
             "path": "Resources: \"aws:paymentcryptography/key:Key\": properties: \"keyAttributes\"",
-            "kind": "type-changed",
-            "severity": "warn",
+            "kind": "max-items-one-changed",
+            "severity": "error",
             "breaking": true,
-            "source": "engine",
-            "message": "type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
-          },
-          {
-            "scope": "resource",
-            "token": "aws:paymentcryptography/key:Key",
-            "location": "properties",
-            "path": "Resources: \"aws:paymentcryptography/key:Key\": properties: \"keyAttributes\": items",
-            "kind": "type-changed",
-            "severity": "warn",
-            "breaking": true,
-            "source": "engine",
-            "message": "had \u0026{Type: Ref:#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes AdditionalProperties:\u003cnil\u003e Items:\u003cnil\u003e OneOf:[] Discriminator:\u003cnil\u003e Plain:false} but now has no type"
+            "source": "normalize",
+            "message": "\"keyAttributes\" maxItemsOne changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
           }
         ]
       },
@@ -321,34 +136,12 @@
             "scope": "resource",
             "token": "aws:s3/bucket:Bucket",
             "location": "inputs",
-            "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"loggings\"",
-            "kind": "missing-input",
-            "severity": "warn",
+            "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"logging\"",
+            "kind": "max-items-one-changed",
+            "severity": "error",
             "breaking": true,
-            "source": "engine",
-            "message": "missing"
-          },
-          {
-            "scope": "resource",
-            "token": "aws:s3/bucket:Bucket",
-            "location": "inputs",
-            "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"versionings\"",
-            "kind": "missing-input",
-            "severity": "warn",
-            "breaking": true,
-            "source": "engine",
-            "message": "missing"
-          },
-          {
-            "scope": "resource",
-            "token": "aws:s3/bucket:Bucket",
-            "location": "inputs",
-            "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"websites\"",
-            "kind": "missing-input",
-            "severity": "warn",
-            "breaking": true,
-            "source": "engine",
-            "message": "missing"
+            "source": "normalize",
+            "message": "\"logging\" maxItemsOne changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
           }
         ],
         "properties": [
@@ -356,34 +149,12 @@
             "scope": "resource",
             "token": "aws:s3/bucket:Bucket",
             "location": "properties",
-            "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"loggings\"",
-            "kind": "missing-output",
-            "severity": "warn",
+            "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"logging\"",
+            "kind": "max-items-one-changed",
+            "severity": "error",
             "breaking": true,
-            "source": "engine",
-            "message": "missing output \"loggings\""
-          },
-          {
-            "scope": "resource",
-            "token": "aws:s3/bucket:Bucket",
-            "location": "properties",
-            "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"versionings\"",
-            "kind": "missing-output",
-            "severity": "warn",
-            "breaking": true,
-            "source": "engine",
-            "message": "missing output \"versionings\""
-          },
-          {
-            "scope": "resource",
-            "token": "aws:s3/bucket:Bucket",
-            "location": "properties",
-            "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"websites\"",
-            "kind": "missing-output",
-            "severity": "warn",
-            "breaking": true,
-            "source": "engine",
-            "message": "missing output \"websites\""
+            "source": "normalize",
+            "message": "\"logging\" maxItemsOne changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
           }
         ]
       },
@@ -397,37 +168,29 @@
             "severity": "info",
             "breaking": false,
             "source": "normalize",
-            "message": "retained as deprecated alias; migrate to \"aws:s3/bucketAcl:BucketAcl\""
+            "message": "Deprecated in favor of aws:s3/bucketAcl:BucketAcl"
           }
         ]
       }
     },
-    "functions": {},
-    "types": {
-      "aws:lb/GetListenerRuleAction:GetListenerRuleAction": {
-        "properties": [
+    "functions": {
+      "aws:lb/getListenerRule:getListenerRule": {
+        "inputs": [
           {
-            "scope": "type",
-            "token": "aws:lb/GetListenerRuleAction:GetListenerRuleAction",
-            "location": "properties",
-            "path": "Types: \"aws:lb/GetListenerRuleAction:GetListenerRuleAction\": properties: \"forward\"",
-            "kind": "missing-property",
-            "severity": "warn",
+            "scope": "function",
+            "token": "aws:lb/getListenerRule:getListenerRule",
+            "location": "inputs",
+            "path": "Functions: \"aws:lb/getListenerRule:getListenerRule\": inputs: \"action[*].forward\"",
+            "kind": "max-items-one-changed",
+            "severity": "error",
             "breaking": true,
-            "source": "engine",
-            "message": "missing",
-            "impactedBy": [
-              {
-                "scope": "function",
-                "token": "aws:lb/getListenerRule:getListenerRule",
-                "location": "inputs",
-                "path": "action[*]"
-              }
-            ],
-            "impactCount": 1
+            "source": "normalize",
+            "message": "\"action[*].forward\" maxItemsOne changed from \"#/types/...Forward\" to \"array\""
           }
         ]
-      },
+      }
+    },
+    "types": {
       "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes": {
         "properties": [
           {
@@ -445,73 +208,17 @@
                 "scope": "resource",
                 "token": "aws:paymentcryptography/key:Key",
                 "location": "inputs",
-                "path": "keyAttributes"
-              },
-              {
-                "scope": "resource",
-                "token": "aws:paymentcryptography/key:Key",
-                "location": "inputs",
-                "path": "keyAttributes[*]"
-              },
-              {
-                "scope": "resource",
-                "token": "aws:paymentcryptography/key:Key",
-                "location": "properties",
-                "path": "keyAttributes"
-              },
-              {
-                "scope": "resource",
-                "token": "aws:paymentcryptography/key:Key",
-                "location": "properties",
-                "path": "keyAttributes[*]"
+                "path": "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\""
               }
             ],
-            "impactCount": 4
-          },
-          {
-            "scope": "type",
-            "token": "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
-            "location": "properties",
-            "path": "Types: \"aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\": properties: \"keyModesOfUse\": items",
-            "kind": "type-changed",
-            "severity": "warn",
-            "breaking": true,
-            "source": "engine",
-            "message": "had no type but now has \u0026{Type:string Ref: AdditionalProperties:\u003cnil\u003e Items:\u003cnil\u003e OneOf:[] Discriminator:\u003cnil\u003e Plain:false}",
-            "impactedBy": [
-              {
-                "scope": "resource",
-                "token": "aws:paymentcryptography/key:Key",
-                "location": "inputs",
-                "path": "keyAttributes"
-              },
-              {
-                "scope": "resource",
-                "token": "aws:paymentcryptography/key:Key",
-                "location": "inputs",
-                "path": "keyAttributes[*]"
-              },
-              {
-                "scope": "resource",
-                "token": "aws:paymentcryptography/key:Key",
-                "location": "properties",
-                "path": "keyAttributes"
-              },
-              {
-                "scope": "resource",
-                "token": "aws:paymentcryptography/key:Key",
-                "location": "properties",
-                "path": "keyAttributes[*]"
-              }
-            ],
-            "impactCount": 4
+            "impactCount": 1
           }
         ]
       }
     }
   },
   "new_resources": [
-    "s3/bucketAcl.BucketAcl"
+    "s3.bucketAcl.BucketAcl"
   ],
   "new_functions": []
 }

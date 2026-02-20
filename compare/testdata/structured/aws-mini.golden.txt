@@ -1,36 +1,27 @@
 ### Does the PR have any schema changes?
 
-Found 13 breaking changes:
+Found 9 breaking changes:
 
 #### Resources
 - "aws:paymentcryptography/key:Key":
     - inputs:
-        - `🟡` "keyAttributes" type changed from "array" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
-        - `🟡` "keyAttributes" had &{Type: Ref:#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes AdditionalProperties:<nil> Items:<nil> OneOf:[] Discriminator:<nil> Plain:false} but now has no type
+        - `🔴` "keyAttributes" type changed from "array" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
     - properties:
-        - `🟡` "keyAttributes" type changed from "array" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
-        - `🟡` "keyAttributes" had &{Type: Ref:#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes AdditionalProperties:<nil> Items:<nil> OneOf:[] Discriminator:<nil> Plain:false} but now has no type
+        - `🔴` "keyAttributes" type changed from "array" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
 - "aws:s3/bucket:Bucket":
     - inputs:
-        - `🟡` "loggings" missing
-        - `🟡` "versionings" missing
-        - `🟡` "websites" missing
+        - `🔴` "loggings" renamed to "logging" and type changed from "array" to "#/types/aws:s3/BucketLogging:BucketLogging"
+        - `🔴` "versionings" renamed to "versioning" and type changed from "array" to "#/types/aws:s3/BucketVersioning:BucketVersioning"
+        - `🔴` "websites" renamed to "website" and type changed from "array" to "#/types/aws:s3/BucketWebsite:BucketWebsite"
     - properties:
-        - `🟡` missing output "loggings"
-        - `🟡` missing output "versionings"
-        - `🟡` missing output "websites"
-- "aws:s3/bucketAclV2:BucketAclV2":
-    - general:
-        - `🟢` retained as deprecated alias; migrate to "aws:s3/bucketAcl:BucketAcl"
+        - `🔴` "loggings" renamed to "logging" and type changed from "array" to "#/types/aws:s3/BucketLogging:BucketLogging"
+        - `🔴` "versionings" renamed to "versioning" and type changed from "array" to "#/types/aws:s3/BucketVersioning:BucketVersioning"
+        - `🔴` "websites" renamed to "website" and type changed from "array" to "#/types/aws:s3/BucketWebsite:BucketWebsite"
 
-#### Types
-- "aws:lb/GetListenerRuleAction:GetListenerRuleAction":
-    - properties:
-        - `🟡` "forward" missing
-- "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes":
-    - properties:
-        - `🟡` "keyModesOfUse" type changed from "string" to "array"
-        - `🟡` "keyModesOfUse" had no type but now has &{Type:string Ref: AdditionalProperties:<nil> Items:<nil> OneOf:[] Discriminator:<nil> Plain:false}
+#### Functions
+- "aws:lb/getListenerRule:getListenerRule":
+    - inputs:
+        - `🔴` "action[*].forward" renamed to "action[*].forwards" and type changed from "#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward" to "array"
 
 #### New resources:
 
