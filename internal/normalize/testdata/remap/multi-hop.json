@@ -1,0 +1,85 @@
+{
+  "old": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget": {
+          "current": "pkg:index/widgetV2:Widget",
+          "past": [
+            {
+              "name": "pkg:index/widget:Widget",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        }
+      },
+      "datasources": {
+        "pkg_get_widget": {
+          "current": "pkg:index/getWidgetV2:getWidgetV2",
+          "past": [
+            {
+              "name": "pkg:index/getWidget:getWidget",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        }
+      }
+    }
+  },
+  "new": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget": {
+          "current": "pkg:index/widgetV3:Widget",
+          "past": [
+            {
+              "name": "pkg:index/widgetV2:Widget",
+              "inCodegen": true,
+              "majorVersion": 2
+            },
+            {
+              "name": "pkg:index/widget:Widget",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        }
+      },
+      "datasources": {
+        "pkg_get_widget": {
+          "current": "pkg:index/getWidgetV3:getWidgetV3",
+          "past": [
+            {
+              "name": "pkg:index/getWidgetV2:getWidgetV2",
+              "inCodegen": true,
+              "majorVersion": 2
+            },
+            {
+              "name": "pkg:index/getWidget:getWidget",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        }
+      }
+    }
+  },
+  "expected": {
+    "old": {
+      "pkg:index/widget:Widget": "pkg:index/widgetV3:Widget",
+      "pkg:index/widgetV2:Widget": "pkg:index/widgetV3:Widget",
+      "pkg:index/getWidget:getWidget": "pkg:index/getWidgetV3:getWidgetV3",
+      "pkg:index/getWidgetV2:getWidgetV2": "pkg:index/getWidgetV3:getWidgetV3"
+    },
+    "new": {
+      "pkg:index/widget:Widget": "pkg:index/widgetV3:Widget",
+      "pkg:index/widgetV2:Widget": "pkg:index/widgetV3:Widget",
+      "pkg:index/widgetV3:Widget": "pkg:index/widgetV3:Widget",
+      "pkg:index/getWidget:getWidget": "pkg:index/getWidgetV3:getWidgetV3",
+      "pkg:index/getWidgetV2:getWidgetV2": "pkg:index/getWidgetV3:getWidgetV3",
+      "pkg:index/getWidgetV3:getWidgetV3": "pkg:index/getWidgetV3:getWidgetV3"
+    },
+    "diagnosticKinds": []
+  }
+}
