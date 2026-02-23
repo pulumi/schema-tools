@@ -8,7 +8,7 @@ import (
 
 func TestRenderTextNoBreakingChanges(t *testing.T) {
 	var out bytes.Buffer
-	if err := RenderText(&out, Result{}); err != nil {
+	if err := RenderText(&out, Result{}, -1); err != nil {
 		t.Fatalf("RenderText failed: %v", err)
 	}
 
@@ -23,7 +23,7 @@ func TestRenderTextPreservesNewResourcesAndFunctionsOrder(t *testing.T) {
 	if err := RenderText(&out, Result{
 		NewResources: []string{"zeta.Resource", "alpha.Resource"},
 		NewFunctions: []string{"zeta.fn", "alpha.fn"},
-	}); err != nil {
+	}, -1); err != nil {
 		t.Fatalf("RenderText failed: %v", err)
 	}
 
@@ -38,7 +38,21 @@ func TestRenderTextPreservesNewResourcesAndFunctionsOrder(t *testing.T) {
 
 func TestRenderTextOneBreakingChange(t *testing.T) {
 	var out bytes.Buffer
-	if err := RenderText(&out, Result{BreakingChanges: []string{"`🔴` test violation"}}); err != nil {
+	if err := RenderText(&out, Result{
+		Changes: []Change{
+			{
+				Scope:    ScopeResource,
+				Token:    "pkg:index:Res",
+				Location: "inputs",
+				Path:     `Resources: "pkg:index:Res": inputs: "name"`,
+				Kind:     "missing-input",
+				Severity: SeverityWarn,
+				Breaking: true,
+				Source:   SourceEngine,
+				Message:  "missing",
+			},
+		},
+	}, -1); err != nil {
 		t.Fatalf("RenderText failed: %v", err)
 	}
 
@@ -46,14 +60,42 @@ func TestRenderTextOneBreakingChange(t *testing.T) {
 	if !strings.Contains(text, "Found 1 breaking change:\n") {
 		t.Fatalf("expected singular breaking-change header, got:\n%s", text)
 	}
-	if !strings.Contains(text, "`🔴` test violation") {
-		t.Fatalf("expected single breaking change line, got:\n%s", text)
+	if !strings.Contains(text, "#### Resources") || !strings.Contains(text, `- "pkg:index:Res":`) {
+		t.Fatalf("expected grouped resources section, got:\n%s", text)
+	}
+	if !strings.Contains(text, "`🟡` \"name\" missing") {
+		t.Fatalf("expected grouped change line, got:\n%s", text)
 	}
 }
 
 func TestRenderTextManyBreakingChanges(t *testing.T) {
 	var out bytes.Buffer
-	if err := RenderText(&out, Result{BreakingChanges: []string{"`🔴` first", "`🟡` second"}}); err != nil {
+	if err := RenderText(&out, Result{
+		Changes: []Change{
+			{
+				Scope:    ScopeResource,
+				Token:    "pkg:index:A",
+				Location: "inputs",
+				Path:     `Resources: "pkg:index:A": inputs: "name"`,
+				Kind:     "missing-input",
+				Severity: SeverityWarn,
+				Breaking: true,
+				Source:   SourceEngine,
+				Message:  "missing",
+			},
+			{
+				Scope:    ScopeFunction,
+				Token:    "pkg:index:getA",
+				Location: "signature",
+				Path:     `Functions: "pkg:index:getA"`,
+				Kind:     "signature-changed",
+				Severity: SeverityError,
+				Breaking: true,
+				Source:   SourceEngine,
+				Message:  "signature change",
+			},
+		},
+	}, -1); err != nil {
 		t.Fatalf("RenderText failed: %v", err)
 	}
 
@@ -61,13 +103,137 @@ func TestRenderTextManyBreakingChanges(t *testing.T) {
 	if !strings.Contains(text, "Found 2 breaking changes:\n") {
 		t.Fatalf("expected plural breaking-change header, got:\n%s", text)
 	}
-	if !strings.Contains(text, "`🔴` first\n`🟡` second") {
-		t.Fatalf("expected all breaking change lines, got:\n%s", text)
+	if !strings.Contains(text, "#### Resources") || !strings.Contains(text, "#### Functions") {
+		t.Fatalf("expected grouped sections, got:\n%s", text)
+	}
+	if !strings.Contains(text, "`🟡` \"name\" missing") || !strings.Contains(text, "`🔴` signature change") {
+		t.Fatalf("expected all grouped change lines, got:\n%s", text)
+	}
+}
+
+func TestRenderTextGeneralChangesAreSingleLine(t *testing.T) {
+	var out bytes.Buffer
+	if err := RenderText(&out, Result{
+		Changes: []Change{
+			{
+				Scope:    ScopeFunction,
+				Token:    "pkg:index:getThing",
+				Path:     `Functions: "pkg:index:getThing"`,
+				Kind:     "signature-changed",
+				Severity: SeverityError,
+				Breaking: true,
+				Source:   SourceEngine,
+				Message:  "signature change",
+			},
+		},
+	}, -1); err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
+
+	text := out.String()
+	if !strings.Contains(text, `- `+"`🔴`"+` "pkg:index:getThing" signature change`) {
+		t.Fatalf("expected flattened general line, got:\n%s", text)
+	}
+	if strings.Contains(text, "general:") {
+		t.Fatalf("expected general header to be omitted, got:\n%s", text)
+	}
+}
+
+func TestRenderTextOmitsNonBreakingChanges(t *testing.T) {
+	var out bytes.Buffer
+	err := RenderText(&out, Result{
+		Changes: []Change{
+			{
+				Scope:    ScopeResource,
+				Token:    "pkg:index:A",
+				Location: "inputs",
+				Path:     `Resources: "pkg:index:A": inputs: "name"`,
+				Kind:     "missing-input",
+				Severity: SeverityWarn,
+				Breaking: true,
+				Source:   SourceEngine,
+				Message:  "missing",
+			},
+			{
+				Scope:    ScopeResource,
+				Token:    "pkg:index:A",
+				Location: "general",
+				Path:     `Resources: "pkg:index:A"`,
+				Kind:     "deprecated-resource-alias",
+				Severity: SeverityInfo,
+				Breaking: false,
+				Source:   SourceNormalize,
+				Message:  "retained as deprecated alias",
+			},
+		},
+	}, -1)
+	if err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
+
+	text := out.String()
+	if !strings.Contains(text, "Found 1 breaking change:") {
+		t.Fatalf("expected only breaking changes to be counted, got:\n%s", text)
+	}
+	if strings.Contains(text, "deprecated alias") {
+		t.Fatalf("expected non-breaking change to be omitted from text, got:\n%s", text)
+	}
+}
+
+func TestRenderTextMaxChangesCapsDisplayedLinesOnly(t *testing.T) {
+	var out bytes.Buffer
+	err := RenderText(&out, Result{
+		Changes: []Change{
+			{
+				Scope:    ScopeResource,
+				Token:    "pkg:index:A",
+				Location: "inputs",
+				Path:     `Resources: "pkg:index:A": inputs: "name"`,
+				Kind:     "missing-input",
+				Severity: SeverityWarn,
+				Breaking: true,
+				Source:   SourceEngine,
+				Message:  "missing",
+			},
+			{
+				Scope:    ScopeFunction,
+				Token:    "pkg:index:getA",
+				Location: "outputs",
+				Path:     `Functions: "pkg:index:getA": outputs: "value"`,
+				Kind:     "missing-output",
+				Severity: SeverityWarn,
+				Breaking: true,
+				Source:   SourceEngine,
+				Message:  "missing output",
+			},
+		},
+	}, 1)
+	if err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "Found 1 breaking change:") {
+		t.Fatalf("expected capped breaking count, got:\n%s", text)
+	}
+	if strings.Contains(text, `Functions: "pkg:index:getA"`) {
+		t.Fatalf("expected second change to be capped from text output, got:\n%s", text)
 	}
 }
 
 func TestRenderTextWriteError(t *testing.T) {
-	err := RenderText(failingWriter{}, Result{BreakingChanges: []string{"boom"}})
+	err := RenderText(failingWriter{}, Result{
+		Changes: []Change{{
+			Scope:    ScopeResource,
+			Token:    "pkg:index:Res",
+			Location: "inputs",
+			Path:     `Resources: "pkg:index:Res": inputs: "name"`,
+			Kind:     "missing-input",
+			Severity: SeverityWarn,
+			Breaking: true,
+			Source:   SourceEngine,
+			Message:  "missing",
+		}},
+	}, -1)
 	if err == nil {
 		t.Fatal("expected write error")
 	}

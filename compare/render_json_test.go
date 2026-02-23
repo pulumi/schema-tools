@@ -21,9 +21,32 @@ func TestMarshalJSONDeterministicOrdering(t *testing.T) {
 				Entries:  []string{"b", "a"},
 			},
 		},
-		BreakingChanges: []string{"line-2", "line-1"},
-		NewResources:    []string{"zeta.Resource", "alpha.Resource"},
-		NewFunctions:    []string{"zeta.fn", "alpha.fn"},
+		Changes: []Change{
+			{
+				Scope:    ScopeType,
+				Token:    "pkg:index:Type",
+				Location: "properties",
+				Path:     `Types: "pkg:index:Type": properties: "z"`,
+				Kind:     "type-changed",
+				Severity: SeverityWarn,
+				Breaking: true,
+				Source:   SourceEngine,
+				Message:  "type changed",
+			},
+			{
+				Scope:    ScopeResource,
+				Token:    "pkg:index:Res",
+				Location: "inputs",
+				Path:     `Resources: "pkg:index:Res": inputs: "a"`,
+				Kind:     "missing-input",
+				Severity: SeverityWarn,
+				Breaking: true,
+				Source:   SourceEngine,
+				Message:  "missing input",
+			},
+		},
+		NewResources: []string{"zeta.Resource", "alpha.Resource"},
+		NewFunctions: []string{"zeta.fn", "alpha.fn"},
 	}
 
 	data, err := json.MarshalIndent(result, "", "  ")
@@ -31,49 +54,33 @@ func TestMarshalJSONDeterministicOrdering(t *testing.T) {
 		t.Fatalf("MarshalIndent failed: %v", err)
 	}
 
-	expected := `{
-  "summary": [
-    {
-      "category": "alpha-category",
-      "count": 2,
-      "entries": [
-        "a",
-        "b"
-      ]
-    },
-    {
-      "category": "zeta-category",
-      "count": 1,
-      "entries": [
-        "a",
-        "c"
-      ]
-    }
-  ],
-  "breaking_changes": [
-    "line-2",
-    "line-1"
-  ],
-  "new_resources": [
-    "zeta.Resource",
-    "alpha.Resource"
-  ],
-  "new_functions": [
-    "zeta.fn",
-    "alpha.fn"
-  ]
-}`
-	if string(data) != expected {
-		t.Fatalf("unexpected JSON output:\n%s", string(data))
+	var payload struct {
+		Summary []SummaryItem  `json:"summary"`
+		Changes []Change       `json:"changes"`
+		Grouped GroupedChanges `json:"grouped"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if len(payload.Summary) != 2 {
+		t.Fatalf("expected 2 summary rows, got %d", len(payload.Summary))
+	}
+	if payload.Summary[0].Category != "alpha-category" || payload.Summary[1].Category != "zeta-category" {
+		t.Fatalf("expected sorted summary categories, got %+v", payload.Summary)
+	}
+	if len(payload.Changes) != 2 || payload.Changes[0].Scope != ScopeResource || payload.Changes[1].Scope != ScopeType {
+		t.Fatalf("expected sorted changes by scope, got %+v", payload.Changes)
+	}
+	if _, ok := payload.Grouped.Resources["pkg:index:Res"]["inputs"]; !ok {
+		t.Fatalf("expected grouped resources.inputs to be populated, got %+v", payload.Grouped)
 	}
 }
 
 func TestNewSummaryJSONOutput(t *testing.T) {
 	result := Result{
-		Summary:         []SummaryItem{{Category: "missing-input", Count: 1, Entries: []string{"e1"}}},
-		BreakingChanges: []string{"line-1"},
-		NewResources:    []string{"r1"},
-		NewFunctions:    []string{"f1"},
+		Summary:      []SummaryItem{{Category: "missing-input", Count: 1, Entries: []string{"e1"}}},
+		NewResources: []string{"r1"},
+		NewFunctions: []string{"f1"},
 	}
 
 	data, err := json.Marshal(NewSummaryJSONOutput(result))
@@ -81,27 +88,34 @@ func TestNewSummaryJSONOutput(t *testing.T) {
 		t.Fatalf("Marshal failed: %v", err)
 	}
 
-	if bytes.Contains(data, []byte("line-1")) {
-		t.Fatalf("expected summary-only JSON to omit breaking_changes, got %s", string(data))
-	}
 	if bytes.Contains(data, []byte("r1")) || bytes.Contains(data, []byte("f1")) {
 		t.Fatalf("expected summary-only JSON to omit new resources/functions, got %s", string(data))
 	}
 	if !bytes.Contains(data, []byte("missing-input")) || !bytes.Contains(data, []byte("e1")) {
 		t.Fatalf("expected summary entries in summary-only output, got %s", string(data))
 	}
-	if bytes.Contains(data, []byte(`"breaking_changes"`)) {
-		t.Fatalf("expected summary-only JSON to omit breaking_changes key, got %s", string(data))
-	}
 	if bytes.Contains(data, []byte(`"new_resources"`)) || bytes.Contains(data, []byte(`"new_functions"`)) {
 		t.Fatalf("expected summary-only JSON to omit new_resources/new_functions keys, got %s", string(data))
 	}
 }
 
-func TestMarshalJSONAndFullJSONOutputUseDifferentSummaryShapes(t *testing.T) {
+func TestMarshalJSONAndFullJSONOutputUseStructuredContract(t *testing.T) {
 	result := Result{
 		Summary: []SummaryItem{
 			{Category: "missing-input", Count: 1, Entries: []string{"entry-1"}},
+		},
+		Changes: []Change{
+			{
+				Scope:    ScopeResource,
+				Token:    "pkg:index:Res",
+				Location: "inputs",
+				Path:     `Resources: "pkg:index:Res": inputs: "arg"`,
+				Kind:     "missing-input",
+				Severity: SeverityWarn,
+				Breaking: true,
+				Source:   SourceEngine,
+				Message:  "missing input",
+			},
 		},
 	}
 
@@ -117,34 +131,44 @@ func TestMarshalJSONAndFullJSONOutputUseDifferentSummaryShapes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal failed: %v", err)
 	}
-	if bytes.Contains(fullData, []byte(`"entries"`)) {
-		t.Fatalf("expected full JSON output to omit entries, got %s", string(fullData))
+	if !bytes.Contains(fullData, []byte(`"entries"`)) {
+		t.Fatalf("expected full JSON output to include entries, got %s", string(fullData))
+	}
+	if !bytes.Contains(fullData, []byte(`"changes"`)) || !bytes.Contains(fullData, []byte(`"grouped"`)) {
+		t.Fatalf("expected full JSON output to include changes/grouped, got %s", string(fullData))
 	}
 }
 
 func TestJSONOutputFixtureContent(t *testing.T) {
 	oldSchema, newSchema := mustLoadFixtureSchemas(t)
-	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1})
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg"})
 
 	t.Run("full", func(t *testing.T) {
 		payload := NewFullJSONOutput(result)
 
-		if got, want := payload.BreakingChanges, result.BreakingChanges; !reflect.DeepEqual(got, want) {
-			t.Fatalf("breaking changes mismatch: got %v want %v", got, want)
-		}
 		if len(payload.NewResources) != 0 || len(payload.NewFunctions) != 0 {
 			t.Fatalf("expected no new resources/functions, got resources=%v functions=%v", payload.NewResources, payload.NewFunctions)
+		}
+		if len(payload.Changes) == 0 {
+			t.Fatalf("expected full output to include changes, got %+v", payload)
+		}
+		if len(payload.Grouped.Resources) == 0 && len(payload.Grouped.Functions) == 0 && len(payload.Grouped.Types) == 0 {
+			t.Fatalf("expected full output to include grouped projection, got %+v", payload.Grouped)
 		}
 
 		gotSummaryCounts := map[string]int{}
 		for _, item := range payload.Summary {
-			if len(item.Entries) != 0 {
-				t.Fatalf("full JSON summary must omit entries, found %v in %q", item.Entries, item.Category)
-			}
 			gotSummaryCounts[item.Category] = item.Count
 		}
 		if !reflect.DeepEqual(gotSummaryCounts, expectedFixtureSummaryCounts()) {
 			t.Fatalf("summary count mismatch: got %v want %v", gotSummaryCounts, expectedFixtureSummaryCounts())
+		}
+		gotEntries := map[string][]string{}
+		for _, item := range payload.Summary {
+			gotEntries[item.Category] = item.Entries
+		}
+		if !reflect.DeepEqual(gotEntries, expectedFixtureSummaryEntries()) {
+			t.Fatalf("summary entries mismatch:\n got: %v\nwant: %v", gotEntries, expectedFixtureSummaryEntries())
 		}
 	})
 

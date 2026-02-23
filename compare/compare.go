@@ -1,6 +1,8 @@
 package compare
 
 import (
+	"cmp"
+	"fmt"
 	"slices"
 	"sort"
 	"strings"
@@ -8,7 +10,6 @@ import (
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 
 	internalcompare "github.com/pulumi/schema-tools/internal/compare"
-	"github.com/pulumi/schema-tools/internal/util/diagtree"
 )
 
 // Schemas computes a structured comparison result for two package specs.
@@ -16,40 +17,388 @@ func Schemas(oldSchema, newSchema schema.PackageSpec, opts Options) Result {
 	report := internalcompare.Analyze(opts.Provider, oldSchema, newSchema)
 	sort.Strings(report.NewResources)
 	sort.Strings(report.NewFunctions)
+	changes := sortChanges(changesFromDiagnostics(report.Diagnostics))
+	changes = attachTypeImpactMetadata(changes, oldSchema, newSchema)
 
 	result := Result{
-		Summary:         summarize(report),
-		BreakingChanges: splitViolations(report, opts.MaxChanges),
-		NewResources:    ensureSlice(slices.Clone(report.NewResources)),
-		NewFunctions:    ensureSlice(slices.Clone(report.NewFunctions)),
+		Summary:      summarize(changes),
+		Changes:      ensureChangeSlice(changes),
+		Grouped:      groupChanges(changes),
+		NewResources: ensureSlice(slices.Clone(report.NewResources)),
+		NewFunctions: ensureSlice(slices.Clone(report.NewFunctions)),
 	}
 	return result
 }
 
-func splitViolations(report internalcompare.Report, maxChanges int) []string {
-	// BreakingChanges currently stores rendered output lines from the internal
-	// diagnostic tree. This assumes each displayed violation item is single-line.
-	displayed := strings.TrimRight(displayViolations(report, maxChanges), "\n")
-	if displayed == "" {
-		return []string{}
+// MergeChanges appends additional change records and recomputes derived views.
+func MergeChanges(result Result, additional []Change) Result {
+	if len(additional) == 0 {
+		return result
 	}
-	lines := strings.Split(displayed, "\n")
-	filtered := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
+	merged := make([]Change, 0, len(result.Changes)+len(additional))
+	merged = append(merged, result.Changes...)
+	merged = append(merged, additional...)
+	merged = suppressTypeChangesExplainedByNormalization(merged)
+	merged = sortChanges(merged)
+	result.Changes = ensureChangeSlice(merged)
+	result.Grouped = groupChanges(merged)
+	result.Summary = summarize(merged)
+	return result
+}
+
+// suppressTypeChangesExplainedByNormalization removes engine "type-changed"
+// entries when a normalization-derived max-items-one rewrite already explains
+// the same resource/function field path.
+// Example: if normalize emits "resources.foo.properties.bar type changed
+// array->object", the corresponding impacted type-level change is suppressed.
+func suppressTypeChangesExplainedByNormalization(changes []Change) []Change {
+	if len(changes) == 0 {
+		return []Change{}
+	}
+
+	normalizationFields := map[string][]string{}
+	for _, change := range changes {
+		if change.Source != SourceNormalize || change.Kind != "max-items-one-changed" {
 			continue
 		}
-		filtered = append(filtered, line)
+		if change.Scope != ScopeResource && change.Scope != ScopeFunction {
+			continue
+		}
+		field := trailingQuotedValue(change.Path)
+		if strings.TrimSpace(field) == "" {
+			continue
+		}
+		key := impactLookupKey(change.Scope, change.Token, change.Location)
+		normalizationFields[key] = append(normalizationFields[key], field)
 	}
-	return filtered
+
+	out := make([]Change, 0, len(changes))
+	for _, change := range changes {
+		if isTypeChangeExplainedByNormalization(change, normalizationFields) {
+			continue
+		}
+		out = append(out, change)
+	}
+	return out
 }
 
-func displayViolations(report internalcompare.Report, maxChanges int) string {
-	out := &strings.Builder{}
-	report.Violations.Display(out, maxChanges)
-	return out.String()
+// isTypeChangeExplainedByNormalization reports whether a type-level diagnostic is
+// fully accounted for by normalization evidence attached to impacted fields.
+func isTypeChangeExplainedByNormalization(change Change, normalizationFields map[string][]string) bool {
+	if change.Scope != ScopeType || change.Kind != "type-changed" || change.Source != SourceEngine {
+		return false
+	}
+	if len(change.ImpactedBy) == 0 {
+		return false
+	}
+
+	hasResourceOrFunctionImpact := false
+	for _, impact := range change.ImpactedBy {
+		if impact.Scope != ScopeResource && impact.Scope != ScopeFunction {
+			continue
+		}
+		hasResourceOrFunctionImpact = true
+		fields := normalizationFields[impactLookupKey(impact.Scope, impact.Token, impact.Location)]
+		if len(fields) == 0 {
+			return false
+		}
+
+		matched := false
+		for _, field := range fields {
+			if impactPathMatchesField(impact.Path, field) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+
+	return hasResourceOrFunctionImpact
 }
 
+// impactLookupKey builds a stable lookup key for impacted-field indexes.
+func impactLookupKey(scope ChangeScope, token, location string) string {
+	return string(scope) + "|" + token + "|" + location
+}
+
+// impactPathMatchesField reports whether an impact path and field path describe
+// the same location, including nested array/object descendants.
+func impactPathMatchesField(path, field string) bool {
+	path = strings.TrimSpace(path)
+	field = strings.TrimSpace(field)
+	if path == "" || field == "" {
+		return false
+	}
+	if path == field {
+		return true
+	}
+	if strings.HasPrefix(path, field+"[*]") || strings.HasPrefix(path, field+".") || strings.HasPrefix(path, field+"{}") {
+		return true
+	}
+	return strings.HasPrefix(field, path+"[*]") || strings.HasPrefix(field, path+".") || strings.HasPrefix(field, path+"{}")
+}
+
+// attachTypeImpactMetadata enriches type changes with the resource/function/type
+// locations that reference each changed type token.
+func attachTypeImpactMetadata(changes []Change, oldSchema, newSchema schema.PackageSpec) []Change {
+	if len(changes) == 0 {
+		return []Change{}
+	}
+
+	impactIndex := buildTypeImpactIndex(oldSchema, newSchema)
+	if len(impactIndex) == 0 {
+		return changes
+	}
+
+	out := slices.Clone(changes)
+	for i := range out {
+		if out[i].Scope != ScopeType || out[i].Token == "" {
+			continue
+		}
+		impacts := filterTypeImpactsForChange(out[i].Token, impactIndex[out[i].Token])
+		if len(impacts) == 0 {
+			continue
+		}
+		out[i].ImpactedBy = impacts
+		out[i].ImpactCount = len(impacts)
+	}
+	return out
+}
+
+// filterTypeImpactsForChange drops self-references and returns deterministic
+// impact ordering for stable output.
+func filterTypeImpactsForChange(typeToken string, impacts []ImpactRef) []ImpactRef {
+	if len(impacts) == 0 {
+		return nil
+	}
+	out := make([]ImpactRef, 0, len(impacts))
+	for _, impact := range impacts {
+		if impact.Scope == ScopeType && impact.Token == typeToken {
+			// Self-references are not useful in impact metadata.
+			continue
+		}
+		out = append(out, impact)
+	}
+	slices.SortFunc(out, func(a, b ImpactRef) int {
+		if d := cmp.Compare(scopeSortOrder(a.Scope), scopeSortOrder(b.Scope)); d != 0 {
+			return d
+		}
+		if d := cmp.Compare(a.Token, b.Token); d != 0 {
+			return d
+		}
+		if d := cmp.Compare(a.Location, b.Location); d != 0 {
+			return d
+		}
+		return cmp.Compare(a.Path, b.Path)
+	})
+	return out
+}
+
+// buildTypeImpactIndex indexes local type-token references across both old and
+// new schema snapshots so impact metadata can be attached to type changes.
+func buildTypeImpactIndex(oldSchema, newSchema schema.PackageSpec) map[string][]ImpactRef {
+	index := map[string][]ImpactRef{}
+	seen := map[string]map[string]struct{}{}
+
+	collectTypeImpactRefs(oldSchema, index, seen)
+	collectTypeImpactRefs(newSchema, index, seen)
+
+	return index
+}
+
+// collectTypeImpactRefs traverses resources, functions, and types to capture
+// direct references to local "#/types/..." definitions.
+func collectTypeImpactRefs(
+	spec schema.PackageSpec,
+	index map[string][]ImpactRef,
+	seen map[string]map[string]struct{},
+) {
+	for _, token := range sortedMapKeys(spec.Resources) {
+		resource := spec.Resources[token]
+		collectTypeImpactRefsInPropertyMap(ScopeResource, token, "inputs", resource.InputProperties, index, seen)
+		collectTypeImpactRefsInPropertyMap(ScopeResource, token, "properties", resource.Properties, index, seen)
+	}
+
+	for _, token := range sortedMapKeys(spec.Functions) {
+		function := spec.Functions[token]
+		if function.Inputs != nil {
+			collectTypeImpactRefsInPropertyMap(ScopeFunction, token, "inputs", function.Inputs.Properties, index, seen)
+		}
+		if function.Outputs != nil {
+			collectTypeImpactRefsInPropertyMap(ScopeFunction, token, "outputs", function.Outputs.Properties, index, seen)
+		}
+	}
+
+	for _, token := range sortedMapKeys(spec.Types) {
+		typ := spec.Types[token]
+		collectTypeImpactRefsInPropertyMap(ScopeType, token, "properties", typ.Properties, index, seen)
+	}
+}
+
+// collectTypeImpactRefsInPropertyMap records local type references found in one
+// property map and forwards nested traversal to collectTypeImpactRefsInTypeSpec.
+func collectTypeImpactRefsInPropertyMap(
+	scope ChangeScope,
+	token string,
+	location string,
+	properties map[string]schema.PropertySpec,
+	index map[string][]ImpactRef,
+	seen map[string]map[string]struct{},
+) {
+	for _, propertyName := range sortedMapKeys(properties) {
+		property := properties[propertyName]
+		collectTypeImpactRefsInTypeSpec(
+			scope,
+			token,
+			location,
+			propertyName,
+			property.TypeSpec,
+			index,
+			seen,
+		)
+	}
+}
+
+// collectTypeImpactRefsInTypeSpec recursively visits one TypeSpec, recording
+// local type references and traversing array/map/oneOf branches.
+func collectTypeImpactRefsInTypeSpec(
+	scope ChangeScope,
+	token string,
+	location string,
+	path string,
+	typeSpec schema.TypeSpec,
+	index map[string][]ImpactRef,
+	seen map[string]map[string]struct{},
+) {
+	if referencedTypeToken, ok := extractLocalTypeToken(typeSpec.Ref); ok {
+		addTypeImpactRef(index, seen, referencedTypeToken, ImpactRef{
+			Scope:    scope,
+			Token:    token,
+			Location: location,
+			Path:     path,
+		})
+	}
+
+	if typeSpec.Items != nil {
+		collectTypeImpactRefsInTypeSpec(
+			scope,
+			token,
+			location,
+			path+"[*]",
+			*typeSpec.Items,
+			index,
+			seen,
+		)
+	}
+	if typeSpec.AdditionalProperties != nil {
+		collectTypeImpactRefsInTypeSpec(
+			scope,
+			token,
+			location,
+			path+"{}",
+			*typeSpec.AdditionalProperties,
+			index,
+			seen,
+		)
+	}
+	for i, oneOfType := range typeSpec.OneOf {
+		collectTypeImpactRefsInTypeSpec(
+			scope,
+			token,
+			location,
+			fmt.Sprintf("%s|oneOf[%d]", path, i),
+			oneOfType,
+			index,
+			seen,
+		)
+	}
+}
+
+// extractLocalTypeToken parses "#/types/<token>" refs and returns the type token.
+func extractLocalTypeToken(ref string) (string, bool) {
+	const marker = "#/types/"
+	idx := strings.Index(ref, marker)
+	if idx == -1 {
+		return "", false
+	}
+	token := strings.TrimSpace(ref[idx+len(marker):])
+	if token == "" {
+		return "", false
+	}
+	return token, true
+}
+
+// addTypeImpactRef appends a unique impact reference for a type token.
+func addTypeImpactRef(
+	index map[string][]ImpactRef,
+	seen map[string]map[string]struct{},
+	typeToken string,
+	impact ImpactRef,
+) {
+	if typeToken == "" || impact.Token == "" {
+		return
+	}
+	if seen[typeToken] == nil {
+		seen[typeToken] = map[string]struct{}{}
+	}
+	key := impactRefKey(impact)
+	if _, ok := seen[typeToken][key]; ok {
+		return
+	}
+	seen[typeToken][key] = struct{}{}
+	index[typeToken] = append(index[typeToken], impact)
+}
+
+// impactRefKey returns a dedupe key for ImpactRef values.
+func impactRefKey(impact ImpactRef) string {
+	return string(impact.Scope) + "|" + impact.Token + "|" + impact.Location + "|" + impact.Path
+}
+
+// sortedMapKeys returns map keys in lexical order.
+func sortedMapKeys[T any](m map[string]T) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+type classifier struct {
+	severity ChangeSeverity
+	breaking bool
+}
+
+var classifiers = map[string]classifier{
+	"missing-resource":          {severity: SeverityError, breaking: true},
+	"missing-function":          {severity: SeverityError, breaking: true},
+	"missing-type":              {severity: SeverityError, breaking: true},
+	"signature-changed":         {severity: SeverityError, breaking: true},
+	"optional-to-required":      {severity: SeverityError, breaking: true},
+	"type-changed":              {severity: SeverityWarn, breaking: true},
+	"missing-input":             {severity: SeverityWarn, breaking: true},
+	"missing-output":            {severity: SeverityWarn, breaking: true},
+	"missing-property":          {severity: SeverityWarn, breaking: true},
+	"max-items-one-changed":     {severity: SeverityError, breaking: true},
+	"renamed-resource":          {severity: SeverityError, breaking: true},
+	"renamed-function":          {severity: SeverityError, breaking: true},
+	"required-to-optional":      {severity: SeverityInfo, breaking: false},
+	"deprecated-resource-alias": {severity: SeverityInfo, breaking: false},
+	"deprecated-function-alias": {severity: SeverityInfo, breaking: false},
+}
+
+// classifySeverity maps a change category to severity/breaking defaults.
+func classifySeverity(kind string) (ChangeSeverity, bool) {
+	c, ok := classifiers[kind]
+	if ok {
+		return c.severity, c.breaking
+	}
+	return SeverityWarn, true
+}
+
+// ensureSlice normalizes nil string slices to empty slices for stable JSON.
 func ensureSlice(xs []string) []string {
 	if xs == nil {
 		return []string{}
@@ -57,25 +406,26 @@ func ensureSlice(xs []string) []string {
 	return xs
 }
 
-func summarize(report internalcompare.Report) []SummaryItem {
+// ensureChangeSlice normalizes nil change slices to empty slices for stable JSON.
+func ensureChangeSlice(changes []Change) []Change {
+	if changes == nil {
+		return []Change{}
+	}
+	return changes
+}
+
+// summarize aggregates category counts and category entry examples.
+func summarize(changes []Change) []SummaryItem {
 	counts := map[string]int{}
 	entries := map[string][]string{}
 
-	report.Violations.WalkDisplayed(func(node *diagtree.Node) {
-		// WalkDisplayed includes displayed branch nodes. Summary items only count
-		// concrete diagnostics, which always carry a description.
-		if node.Description == "" {
-			return
-		}
-		path := nodePath(node)
-		entry := nodeEntry(path, node.Description)
-		category := classify(path, node.Description)
-		counts[category]++
+	for _, change := range changes {
+		counts[change.Kind]++
+		entry := nodeEntry(change.Path, change.Message)
 		if entry != "" {
-			entries[category] = append(entries[category], entry)
+			entries[change.Kind] = append(entries[change.Kind], entry)
 		}
-	})
-
+	}
 	if len(counts) == 0 {
 		return []SummaryItem{}
 	}
@@ -98,6 +448,127 @@ func summarize(report internalcompare.Report) []SummaryItem {
 	return summary
 }
 
+// changesFromDiagnostics converts internal engine diagnostics into canonical
+// compare.Change records with normalized kind/severity metadata.
+func changesFromDiagnostics(diagnostics []internalcompare.Diagnostic) []Change {
+	if len(diagnostics) == 0 {
+		return []Change{}
+	}
+	changes := make([]Change, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		kind := classify(diagnostic.Path, diagnostic.Description)
+		severity, breaking := classifySeverity(kind)
+		changes = append(changes, Change{
+			Scope:    scopeFromDiagnostic(diagnostic.Scope),
+			Token:    diagnostic.Token,
+			Location: diagnostic.Location,
+			Path:     diagnostic.Path,
+			Kind:     kind,
+			Severity: severity,
+			Breaking: breaking,
+			Source:   SourceEngine,
+			Message:  diagnostic.Description,
+		})
+	}
+	return changes
+}
+
+// scopeFromDiagnostic maps internal diagnostic scope labels into ChangeScope.
+func scopeFromDiagnostic(scope string) ChangeScope {
+	switch scope {
+	case "Resources":
+		return ScopeResource
+	case "Functions":
+		return ScopeFunction
+	case "Types":
+		return ScopeType
+	default:
+		return ScopeUnknown
+	}
+}
+
+// sortChanges returns a deterministically ordered copy of changes.
+func sortChanges(changes []Change) []Change {
+	if len(changes) == 0 {
+		return []Change{}
+	}
+	out := slices.Clone(changes)
+	slices.SortFunc(out, func(a, b Change) int {
+		if d := cmp.Compare(scopeSortOrder(a.Scope), scopeSortOrder(b.Scope)); d != 0 {
+			return d
+		}
+		if d := cmp.Compare(a.Token, b.Token); d != 0 {
+			return d
+		}
+		if d := cmp.Compare(a.Location, b.Location); d != 0 {
+			return d
+		}
+		if d := cmp.Compare(a.Path, b.Path); d != 0 {
+			return d
+		}
+		if d := cmp.Compare(a.Kind, b.Kind); d != 0 {
+			return d
+		}
+		if d := cmp.Compare(a.Message, b.Message); d != 0 {
+			return d
+		}
+		return cmp.Compare(a.Source, b.Source)
+	})
+	return out
+}
+
+// scopeSortOrder defines stable resource/function/type ordering for output.
+func scopeSortOrder(scope ChangeScope) int {
+	switch scope {
+	case ScopeResource:
+		return 0
+	case ScopeFunction:
+		return 1
+	case ScopeType:
+		return 2
+	default:
+		return 3
+	}
+}
+
+// groupChanges indexes changes as token -> location -> []Change for renderers.
+func groupChanges(changes []Change) GroupedChanges {
+	grouped := GroupedChanges{
+		Resources: map[string]map[string][]Change{},
+		Functions: map[string]map[string][]Change{},
+		Types:     map[string]map[string][]Change{},
+	}
+	for _, change := range changes {
+		location := change.Location
+		if location == "" {
+			location = "general"
+		}
+		switch change.Scope {
+		case ScopeResource:
+			appendGrouped(grouped.Resources, change.Token, location, change)
+		case ScopeFunction:
+			appendGrouped(grouped.Functions, change.Token, location, change)
+		case ScopeType:
+			appendGrouped(grouped.Types, change.Token, location, change)
+		}
+	}
+	return grouped
+}
+
+// appendGrouped appends one change into a grouped token/location bucket.
+func appendGrouped(
+	group map[string]map[string][]Change,
+	token string,
+	location string,
+	change Change,
+) {
+	if group[token] == nil {
+		group[token] = map[string][]Change{}
+	}
+	group[token][location] = append(group[token][location], change)
+}
+
+// classify maps engine diagnostic text to a stable structured change category.
 func classify(path string, description string) string {
 	// NOTE: category matching is intentionally coupled to internal compare
 	// diagnostics text (for example "missing input", "has changed to Required").
@@ -132,13 +603,7 @@ func classify(path string, description string) string {
 	}
 }
 
-func nodePath(node *diagtree.Node) string {
-	if node == nil {
-		return ""
-	}
-	return strings.Join(node.PathTitles(), ": ")
-}
-
+// nodeEntry combines diagnostic path and description for summary entries.
 func nodeEntry(path string, description string) string {
 	if description == "" {
 		return path
@@ -149,6 +614,7 @@ func nodeEntry(path string, description string) string {
 	return path + " " + description
 }
 
+// sortAndUnique returns sorted values with duplicates removed.
 func sortAndUnique(values []string) []string {
 	if len(values) == 0 {
 		return []string{}
