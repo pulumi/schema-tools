@@ -67,6 +67,7 @@ func (r TokenRemap) NewTokensForCanonical(scope, canonical string) []string {
 	return cloneSlice(byScope[canonical])
 }
 
+// oldByScope returns the old token->canonical map for one metadata scope.
 func (r TokenRemap) oldByScope(scope string) map[string]string {
 	switch scope {
 	case scopeResources:
@@ -78,6 +79,7 @@ func (r TokenRemap) oldByScope(scope string) map[string]string {
 	}
 }
 
+// newByScope returns the new token->canonical map for one metadata scope.
 func (r TokenRemap) newByScope(scope string) map[string]string {
 	switch scope {
 	case scopeResources:
@@ -89,6 +91,7 @@ func (r TokenRemap) newByScope(scope string) map[string]string {
 	}
 }
 
+// oldCanonicalByScope returns canonical->old tokens for one scope.
 func (r TokenRemap) oldCanonicalByScope(scope string) map[string][]string {
 	switch scope {
 	case scopeResources:
@@ -100,6 +103,7 @@ func (r TokenRemap) oldCanonicalByScope(scope string) map[string][]string {
 	}
 }
 
+// newCanonicalByScope returns canonical->new tokens for one scope.
 func (r TokenRemap) newCanonicalByScope(scope string) map[string][]string {
 	switch scope {
 	case scopeResources:
@@ -121,6 +125,7 @@ type tokenEntry struct {
 	tokens   []string
 }
 
+// buildKind constructs remap tables for one scope (resources or datasources).
 func (b tokenRemapBuilder) buildKind(
 	scope string,
 	oldMap map[string]*TokenHistory,
@@ -198,6 +203,8 @@ func (b tokenRemapBuilder) buildKind(
 	b.rebuildReverseLookupMaps()
 }
 
+// buildSnapshotEntries extracts valid current/past tokens for one metadata
+// snapshot and unions aliases that belong to the same TF token history.
 func (b tokenRemapBuilder) buildSnapshotEntries(
 	snapshot string,
 	history map[string]*TokenHistory,
@@ -245,6 +252,7 @@ func (b tokenRemapBuilder) buildSnapshotEntries(
 	return entries
 }
 
+// rebuildReverseLookupMaps refreshes canonical->tokens indexes after updates.
 func (b tokenRemapBuilder) rebuildReverseLookupMaps() {
 	b.out.oldResourceCanonicalToTokens = invertCanonicalMap(b.out.OldResourceTokenToCanonical)
 	b.out.newResourceCanonicalToTokens = invertCanonicalMap(b.out.NewResourceTokenToCanonical)
@@ -252,16 +260,19 @@ func (b tokenRemapBuilder) rebuildReverseLookupMaps() {
 	b.out.newDataSourceCanonicalToTokens = invertCanonicalMap(b.out.NewDataSourceTokenToCanonical)
 }
 
+// parseResourceToken validates Pulumi resource token syntax.
 func parseResourceToken(s string) error {
 	_, err := tokens.ParseTypeToken(s)
 	return err
 }
 
+// parseDataSourceToken validates Pulumi data source token syntax.
 func parseDataSourceToken(s string) error {
 	_, err := tokens.ParseModuleMember(s)
 	return err
 }
 
+// readHistoryMap returns resource or datasource token history map from metadata.
 func readHistoryMap(metadata *MetadataEnvelope, resources bool) map[string]*TokenHistory {
 	if metadata == nil || metadata.AutoAliasing == nil {
 		return nil
@@ -287,6 +298,7 @@ func selectCanonical(componentTokens []string, oldCurrents, newCurrents map[stri
 	return componentTokens[0]
 }
 
+// onlyKey returns the single key in a one-entry map.
 func onlyKey(m map[string]struct{}) string {
 	for k := range m {
 		return k
@@ -307,6 +319,7 @@ func newUnionFind() *unionFind {
 	}
 }
 
+// add inserts a token into the disjoint-set if it is not already present.
 func (u *unionFind) add(x string) {
 	if _, ok := u.parent[x]; ok {
 		return
@@ -315,6 +328,7 @@ func (u *unionFind) add(x string) {
 	u.rank[x] = 0
 }
 
+// find returns the canonical representative for a token, with path compression.
 func (u *unionFind) find(x string) string {
 	if x == "" {
 		return ""
@@ -330,6 +344,7 @@ func (u *unionFind) find(x string) string {
 	return u.parent[x]
 }
 
+// union merges two token components by rank.
 func (u *unionFind) union(a, b string) {
 	ra := u.find(a)
 	rb := u.find(b)
@@ -348,10 +363,12 @@ func (u *unionFind) union(a, b string) {
 	u.rank[ra]++
 }
 
+// tokens returns all tracked tokens in deterministic order.
 func (u *unionFind) tokens() []string {
 	return sortedKeys(u.parent)
 }
 
+// invertCanonicalMap builds canonical->tokens from token->canonical.
 func invertCanonicalMap(m map[string]string) map[string][]string {
 	out := map[string][]string{}
 	for token, canonical := range m {
@@ -363,6 +380,7 @@ func invertCanonicalMap(m map[string]string) map[string][]string {
 	return out
 }
 
+// uniqueSorted removes blanks, deduplicates, and sorts values.
 func uniqueSorted(values []string) []string {
 	if len(values) == 0 {
 		return nil
@@ -377,6 +395,7 @@ func uniqueSorted(values []string) []string {
 	return sortedKeys(set)
 }
 
+// sortedKeys returns deterministic map-key ordering.
 func sortedKeys[T any](m map[string]T) []string {
 	if len(m) == 0 {
 		return nil
@@ -389,6 +408,7 @@ func sortedKeys[T any](m map[string]T) []string {
 	return keys
 }
 
+// cloneSlice returns a copy of values, preserving nil/empty semantics.
 func cloneSlice(values []string) []string {
 	if len(values) == 0 {
 		return nil

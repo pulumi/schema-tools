@@ -46,6 +46,11 @@ func MergeChanges(result Result, additional []Change) Result {
 	return result
 }
 
+// suppressTypeChangesExplainedByNormalization removes engine "type-changed"
+// entries when a normalization-derived max-items-one rewrite already explains
+// the same resource/function field path.
+// Example: if normalize emits "resources.foo.properties.bar type changed
+// array->object", the corresponding impacted type-level change is suppressed.
 func suppressTypeChangesExplainedByNormalization(changes []Change) []Change {
 	if len(changes) == 0 {
 		return []Change{}
@@ -77,6 +82,8 @@ func suppressTypeChangesExplainedByNormalization(changes []Change) []Change {
 	return out
 }
 
+// isTypeChangeExplainedByNormalization reports whether a type-level diagnostic is
+// fully accounted for by normalization evidence attached to impacted fields.
 func isTypeChangeExplainedByNormalization(change Change, normalizationFields map[string][]string) bool {
 	if change.Scope != ScopeType || change.Kind != "type-changed" || change.Source != SourceEngine {
 		return false
@@ -111,10 +118,13 @@ func isTypeChangeExplainedByNormalization(change Change, normalizationFields map
 	return hasResourceOrFunctionImpact
 }
 
+// impactLookupKey builds a stable lookup key for impacted-field indexes.
 func impactLookupKey(scope ChangeScope, token, location string) string {
 	return string(scope) + "|" + token + "|" + location
 }
 
+// impactPathMatchesField reports whether an impact path and field path describe
+// the same location, including nested array/object descendants.
 func impactPathMatchesField(path, field string) bool {
 	path = strings.TrimSpace(path)
 	field = strings.TrimSpace(field)
@@ -130,6 +140,8 @@ func impactPathMatchesField(path, field string) bool {
 	return strings.HasPrefix(field, path+"[*]") || strings.HasPrefix(field, path+".") || strings.HasPrefix(field, path+"{}")
 }
 
+// attachTypeImpactMetadata enriches type changes with the resource/function/type
+// locations that reference each changed type token.
 func attachTypeImpactMetadata(changes []Change, oldSchema, newSchema schema.PackageSpec) []Change {
 	if len(changes) == 0 {
 		return []Change{}
@@ -155,6 +167,8 @@ func attachTypeImpactMetadata(changes []Change, oldSchema, newSchema schema.Pack
 	return out
 }
 
+// filterTypeImpactsForChange drops self-references and returns deterministic
+// impact ordering for stable output.
 func filterTypeImpactsForChange(typeToken string, impacts []ImpactRef) []ImpactRef {
 	if len(impacts) == 0 {
 		return nil
@@ -182,6 +196,8 @@ func filterTypeImpactsForChange(typeToken string, impacts []ImpactRef) []ImpactR
 	return out
 }
 
+// buildTypeImpactIndex indexes local type-token references across both old and
+// new schema snapshots so impact metadata can be attached to type changes.
 func buildTypeImpactIndex(oldSchema, newSchema schema.PackageSpec) map[string][]ImpactRef {
 	index := map[string][]ImpactRef{}
 	seen := map[string]map[string]struct{}{}
@@ -192,6 +208,8 @@ func buildTypeImpactIndex(oldSchema, newSchema schema.PackageSpec) map[string][]
 	return index
 }
 
+// collectTypeImpactRefs traverses resources, functions, and types to capture
+// direct references to local "#/types/..." definitions.
 func collectTypeImpactRefs(
 	spec schema.PackageSpec,
 	index map[string][]ImpactRef,
@@ -219,6 +237,8 @@ func collectTypeImpactRefs(
 	}
 }
 
+// collectTypeImpactRefsInPropertyMap records local type references found in one
+// property map and forwards nested traversal to collectTypeImpactRefsInTypeSpec.
 func collectTypeImpactRefsInPropertyMap(
 	scope ChangeScope,
 	token string,
@@ -241,6 +261,8 @@ func collectTypeImpactRefsInPropertyMap(
 	}
 }
 
+// collectTypeImpactRefsInTypeSpec recursively visits one TypeSpec, recording
+// local type references and traversing array/map/oneOf branches.
 func collectTypeImpactRefsInTypeSpec(
 	scope ChangeScope,
 	token string,
@@ -294,6 +316,7 @@ func collectTypeImpactRefsInTypeSpec(
 	}
 }
 
+// extractLocalTypeToken parses "#/types/<token>" refs and returns the type token.
 func extractLocalTypeToken(ref string) (string, bool) {
 	const marker = "#/types/"
 	idx := strings.Index(ref, marker)
@@ -307,6 +330,7 @@ func extractLocalTypeToken(ref string) (string, bool) {
 	return token, true
 }
 
+// addTypeImpactRef appends a unique impact reference for a type token.
 func addTypeImpactRef(
 	index map[string][]ImpactRef,
 	seen map[string]map[string]struct{},
@@ -327,10 +351,12 @@ func addTypeImpactRef(
 	index[typeToken] = append(index[typeToken], impact)
 }
 
+// impactRefKey returns a dedupe key for ImpactRef values.
 func impactRefKey(impact ImpactRef) string {
 	return string(impact.Scope) + "|" + impact.Token + "|" + impact.Location + "|" + impact.Path
 }
 
+// sortedMapKeys returns map keys in lexical order.
 func sortedMapKeys[T any](m map[string]T) []string {
 	keys := make([]string, 0, len(m))
 	for key := range m {
@@ -363,6 +389,7 @@ var classifiers = map[string]classifier{
 	"deprecated-function-alias": {severity: SeverityInfo, breaking: false},
 }
 
+// classifySeverity maps a change category to severity/breaking defaults.
 func classifySeverity(kind string) (ChangeSeverity, bool) {
 	c, ok := classifiers[kind]
 	if ok {
@@ -371,6 +398,7 @@ func classifySeverity(kind string) (ChangeSeverity, bool) {
 	return SeverityWarn, true
 }
 
+// ensureSlice normalizes nil string slices to empty slices for stable JSON.
 func ensureSlice(xs []string) []string {
 	if xs == nil {
 		return []string{}
@@ -378,6 +406,7 @@ func ensureSlice(xs []string) []string {
 	return xs
 }
 
+// ensureChangeSlice normalizes nil change slices to empty slices for stable JSON.
 func ensureChangeSlice(changes []Change) []Change {
 	if changes == nil {
 		return []Change{}
@@ -385,6 +414,7 @@ func ensureChangeSlice(changes []Change) []Change {
 	return changes
 }
 
+// summarize aggregates category counts and category entry examples.
 func summarize(changes []Change) []SummaryItem {
 	counts := map[string]int{}
 	entries := map[string][]string{}
@@ -418,6 +448,8 @@ func summarize(changes []Change) []SummaryItem {
 	return summary
 }
 
+// changesFromDiagnostics converts internal engine diagnostics into canonical
+// compare.Change records with normalized kind/severity metadata.
 func changesFromDiagnostics(diagnostics []internalcompare.Diagnostic) []Change {
 	if len(diagnostics) == 0 {
 		return []Change{}
@@ -441,6 +473,7 @@ func changesFromDiagnostics(diagnostics []internalcompare.Diagnostic) []Change {
 	return changes
 }
 
+// scopeFromDiagnostic maps internal diagnostic scope labels into ChangeScope.
 func scopeFromDiagnostic(scope string) ChangeScope {
 	switch scope {
 	case "Resources":
@@ -454,6 +487,7 @@ func scopeFromDiagnostic(scope string) ChangeScope {
 	}
 }
 
+// sortChanges returns a deterministically ordered copy of changes.
 func sortChanges(changes []Change) []Change {
 	if len(changes) == 0 {
 		return []Change{}
@@ -483,6 +517,7 @@ func sortChanges(changes []Change) []Change {
 	return out
 }
 
+// scopeSortOrder defines stable resource/function/type ordering for output.
 func scopeSortOrder(scope ChangeScope) int {
 	switch scope {
 	case ScopeResource:
@@ -496,6 +531,7 @@ func scopeSortOrder(scope ChangeScope) int {
 	}
 }
 
+// groupChanges indexes changes as token -> location -> []Change for renderers.
 func groupChanges(changes []Change) GroupedChanges {
 	grouped := GroupedChanges{
 		Resources: map[string]map[string][]Change{},
@@ -519,6 +555,7 @@ func groupChanges(changes []Change) GroupedChanges {
 	return grouped
 }
 
+// appendGrouped appends one change into a grouped token/location bucket.
 func appendGrouped(
 	group map[string]map[string][]Change,
 	token string,
@@ -531,6 +568,7 @@ func appendGrouped(
 	group[token][location] = append(group[token][location], change)
 }
 
+// classify maps engine diagnostic text to a stable structured change category.
 func classify(path string, description string) string {
 	// NOTE: category matching is intentionally coupled to internal compare
 	// diagnostics text (for example "missing input", "has changed to Required").
@@ -565,6 +603,7 @@ func classify(path string, description string) string {
 	}
 }
 
+// nodeEntry combines diagnostic path and description for summary entries.
 func nodeEntry(path string, description string) string {
 	if description == "" {
 		return path
@@ -575,6 +614,7 @@ func nodeEntry(path string, description string) string {
 	return path + " " + description
 }
 
+// sortAndUnique returns sorted values with duplicates removed.
 func sortAndUnique(values []string) []string {
 	if len(values) == 0 {
 		return []string{}

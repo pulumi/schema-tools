@@ -91,6 +91,7 @@ func RenderText(out io.Writer, result Result, maxChanges int) error {
 	return nil
 }
 
+// selectTextChanges filters to breaking-only changes and applies maxChanges.
 func selectTextChanges(changes []Change, maxChanges int) []Change {
 	if len(changes) == 0 {
 		return []Change{}
@@ -114,6 +115,7 @@ func selectTextChanges(changes []Change, maxChanges int) []Change {
 	return breakingOnly[:maxChanges]
 }
 
+// writeGroupedSections renders resource/function/type sections in fixed order.
 func writeGroupedSections(
 	write func(string, ...any) error,
 	writeln func(...any) error,
@@ -132,6 +134,8 @@ func writeGroupedSections(
 	return nil
 }
 
+// writeGroupedSection renders one token-grouped section and collapses pure
+// "general" entries into single-line output for readability.
 func writeGroupedSection(
 	write func(string, ...any) error,
 	writeln func(...any) error,
@@ -181,6 +185,7 @@ func writeGroupedSection(
 	return nil
 }
 
+// sortedTextLocations returns location buckets in output-preferred order.
 func sortedTextLocations(byLocation map[string][]Change) []string {
 	locations := make([]string, 0, len(byLocation))
 	for location := range byLocation {
@@ -195,6 +200,7 @@ func sortedTextLocations(byLocation map[string][]Change) []string {
 	return locations
 }
 
+// locationSortOrder controls text section ordering for known locations.
 func locationSortOrder(location string) int {
 	switch location {
 	case "inputs":
@@ -216,6 +222,8 @@ func locationSortOrder(location string) int {
 	}
 }
 
+// textChangeMessage formats a user-facing message for one change, prefixing a
+// quoted field label when location-scoped context is useful.
 func textChangeMessage(change Change) string {
 	message := strings.TrimSpace(change.Message)
 	if message == "" {
@@ -232,6 +240,7 @@ func textChangeMessage(change Change) string {
 	return fmt.Sprintf("%q %s", label, message)
 }
 
+// trailingQuotedValue returns the last quoted segment in a diagnostic path.
 func trailingQuotedValue(path string) string {
 	if path == "" {
 		return ""
@@ -247,6 +256,7 @@ func trailingQuotedValue(path string) string {
 	return path[start+1 : lastQuote]
 }
 
+// severityIcon maps severity labels to markdown emoji markers.
 func severityIcon(severity ChangeSeverity) string {
 	switch severity {
 	case SeverityError:

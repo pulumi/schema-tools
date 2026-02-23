@@ -21,6 +21,7 @@ import (
 	"github.com/pulumi/schema-tools/internal/pkg"
 )
 
+// compareDeps holds injectable command dependencies for deterministic tests.
 type compareDeps struct {
 	currentUser          func() (*user.User, error)
 	downloadSchema       func(context.Context, string, string, string) (schema.PackageSpec, error)
@@ -30,6 +31,7 @@ type compareDeps struct {
 	normalizeSchemas     func(schema.PackageSpec, schema.PackageSpec, *normalize.MetadataEnvelope, *normalize.MetadataEnvelope) (normalize.Result, error)
 }
 
+// compareInput captures normalized compare flag values.
 type compareInput struct {
 	provider    string
 	repository  string
@@ -42,6 +44,8 @@ type compareInput struct {
 	summaryMode bool
 }
 
+// defaultCompareDeps returns production implementations for compare command
+// dependencies. Tests can replace any field through compareDeps.
 func defaultCompareDeps() compareDeps {
 	return compareDeps{
 		currentUser:          user.Current,
@@ -53,8 +57,12 @@ func defaultCompareDeps() compareDeps {
 	}
 }
 
+// ErrCompareMetadataRequired identifies strict mode failures when required
+// bridge metadata cannot be loaded for one compare side.
 var ErrCompareMetadataRequired = errors.New("compare metadata required")
 
+// compareMetadataRequiredError carries metadata source context for strict
+// compare failures.
 type compareMetadataRequiredError struct {
 	Side   string
 	Source string
@@ -63,18 +71,22 @@ type compareMetadataRequiredError struct {
 	Err    error
 }
 
+// Error returns a stable message used for strict metadata failures.
 func (e *compareMetadataRequiredError) Error() string {
 	return fmt.Sprintf("compare %s metadata required: %s@%s:%s", e.Side, e.Source, e.Commit, e.Path)
 }
 
+// Unwrap exposes the underlying metadata load/parse failure.
 func (e *compareMetadataRequiredError) Unwrap() error {
 	return e.Err
 }
 
+// Is supports errors.Is(err, ErrCompareMetadataRequired).
 func (e *compareMetadataRequiredError) Is(target error) bool {
 	return target == ErrCompareMetadataRequired
 }
 
+// compareCmd constructs the "compare" CLI command and binds all flags.
 func compareCmd() *cobra.Command {
 	var provider, repository, oldCommit, newCommit string
 	var oldPath, newPath string
@@ -133,10 +145,13 @@ func compareCmd() *cobra.Command {
 	return command
 }
 
+// runCompareCmd executes compare with default production dependencies.
 func runCompareCmd(input compareInput) error {
 	return runCompareCmdWithDeps(input, defaultCompareDeps())
 }
 
+// runCompareCmdWithDeps executes compare using injectable dependencies. It
+// handles schema loading, optional metadata normalization, then output rendering.
 func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 	deps = applyCompareDepsDefaults(deps)
 	if strings.TrimSpace(input.provider) == "" {
@@ -356,6 +371,8 @@ func renderCompareOutput(out io.Writer, result compare.Result, jsonMode bool, su
 	return compare.RenderText(out, result, maxChanges)
 }
 
+// buildNormalizationChanges converts normalization evidence into compare.Change
+// records and returns them in deterministic deduplicated order.
 func buildNormalizationChanges(
 	renames []normalize.TokenRename,
 	maxItemsOne []normalize.MaxItemsOneChange,
@@ -397,6 +414,8 @@ func buildNormalizationChanges(
 	return out
 }
 
+// buildNormalizationRenameChanges turns token-rename evidence into user-facing
+// compare changes, including in-codegen alias migration annotations.
 func buildNormalizationRenameChanges(renames []normalize.TokenRename) []compare.Change {
 	changes := []compare.Change{}
 	for _, rename := range renames {
@@ -437,6 +456,8 @@ func buildNormalizationRenameChanges(renames []normalize.TokenRename) []compare.
 	return changes
 }
 
+// buildNormalizationMaxItemsOneChanges converts maxItemsOne normalization
+// rewrites into explicit compare changes for report visibility.
 func buildNormalizationMaxItemsOneChanges(changes []normalize.MaxItemsOneChange) []compare.Change {
 	out := []compare.Change{}
 	for _, change := range changes {
@@ -473,6 +494,8 @@ func buildNormalizationMaxItemsOneChanges(changes []normalize.MaxItemsOneChange)
 	return out
 }
 
+// normalizationScope maps normalization metadata scope labels into compare scope
+// enums and display labels used in formatted paths.
 func normalizationScope(scope string) (compare.ChangeScope, string) {
 	switch scope {
 	case "resources":

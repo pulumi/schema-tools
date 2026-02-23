@@ -7,6 +7,7 @@ import (
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
+// Result contains normalized schemas and emitted normalization evidence.
 type Result struct {
 	OldSchema   schema.PackageSpec
 	NewSchema   schema.PackageSpec
@@ -84,6 +85,8 @@ func Normalize(
 	}, nil
 }
 
+// detectInCodegenAliasTransitions identifies aliases that remain in metadata as
+// in-codegen compat entries and emits informational rename evidence.
 func detectInCodegenAliasTransitions(
 	scope string,
 	oldMetadata, newMetadata *MetadataEnvelope,
@@ -144,6 +147,7 @@ func detectInCodegenAliasTransitions(
 	return renames
 }
 
+// historyTokenSet returns current + past token names for one TF token history.
 func historyTokenSet(history *TokenHistory) map[string]struct{} {
 	tokens := map[string]struct{}{}
 	if history == nil {

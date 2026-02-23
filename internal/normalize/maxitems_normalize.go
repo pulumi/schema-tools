@@ -9,6 +9,7 @@ import (
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
+// fieldPathPart represents one segment of a flattened field-history path.
 type fieldPathPart struct {
 	Name string
 	Elem bool
@@ -216,6 +217,8 @@ func normalizePropertyMapByFieldEvidence(
 	return updated, changes
 }
 
+// shouldNormalizeByFieldEvidence gates rewrites to paths where metadata indicates
+// a maxItemsOne transition (or an unknown one-sided legacy entry).
 func shouldNormalizeByFieldEvidence(pathEvidence FieldPathEvidence) bool {
 	if pathEvidence.Transition == MaxItemsOneTransitionChanged {
 		return true
@@ -403,6 +406,7 @@ func parseFieldPath(path string) ([]fieldPathPart, bool) {
 	return parts, true
 }
 
+// cloneFieldPathParts returns a copy of parsed path segments.
 func cloneFieldPathParts(parts []fieldPathPart) []fieldPathPart {
 	if len(parts) == 0 {
 		return nil
@@ -412,6 +416,7 @@ func cloneFieldPathParts(parts []fieldPathPart) []fieldPathPart {
 	return out
 }
 
+// leafPathName returns the terminal field name from a parsed path.
 func leafPathName(parts []fieldPathPart) string {
 	if len(parts) == 0 {
 		return ""
@@ -419,6 +424,7 @@ func leafPathName(parts []fieldPathPart) string {
 	return parts[len(parts)-1].Name
 }
 
+// fieldPathString renders parsed path segments back into flattened form.
 func fieldPathString(parts []fieldPathPart) string {
 	if len(parts) == 0 {
 		return ""
@@ -434,6 +440,8 @@ func fieldPathString(parts []fieldPathPart) string {
 	return strings.Join(segments, ".")
 }
 
+// resolveTypeSpecAtPath resolves a flattened field path through a property map
+// and returns both resolved Pulumi property names and the final TypeSpec.
 func resolveTypeSpecAtPath(
 	pkg schema.PackageSpec,
 	props map[string]schema.PropertySpec,
@@ -476,6 +484,7 @@ func resolveTypeSpecAtPath(
 	return nil, schema.TypeSpec{}, false
 }
 
+// lookupTypeSpecAtPath resolves and returns only the terminal TypeSpec.
 func lookupTypeSpecAtPath(
 	pkg schema.PackageSpec,
 	props map[string]schema.PropertySpec,
@@ -485,6 +494,8 @@ func lookupTypeSpecAtPath(
 	return ts, ok
 }
 
+// lookupTypeSpecFromProperty resolves nested path segments starting from one
+// property's TypeSpec.
 func lookupTypeSpecFromProperty(
 	pkg schema.PackageSpec,
 	prop schema.PropertySpec,
@@ -509,6 +520,7 @@ func lookupTypeSpecFromProperty(
 	return lookupTypeSpecAtPath(pkg, properties, remaining)
 }
 
+// objectPropertiesForTypeSpec resolves local object type refs to their property map.
 func objectPropertiesForTypeSpec(pkg schema.PackageSpec, ts schema.TypeSpec) (map[string]schema.PropertySpec, bool) {
 	typeToken, ok := localTypeToken(ts.Ref)
 	if !ok {
@@ -521,6 +533,7 @@ func objectPropertiesForTypeSpec(pkg schema.PackageSpec, ts schema.TypeSpec) (ma
 	return typeSpec.Properties, true
 }
 
+// setTypeSpecAtPath replaces the terminal TypeSpec at a resolved field path.
 func setTypeSpecAtPath(
 	pkg *schema.PackageSpec,
 	props map[string]schema.PropertySpec,
@@ -549,6 +562,8 @@ func setTypeSpecAtPath(
 	return out, true
 }
 
+// renameResolvedLeafProperty renames the terminal field key when old/new paths
+// differ only by leaf name.
 func renameResolvedLeafProperty(
 	pkg *schema.PackageSpec,
 	props map[string]schema.PropertySpec,
@@ -573,6 +588,8 @@ func renameResolvedLeafProperty(
 	return renameResolvedPropertyKeyAtPath(pkg, props, fromPath[:len(fromPath)-1], fromKey, toKey, localTypeRefUseIndex)
 }
 
+// renameResolvedPropertyKeyAtPath renames a property key at root or within nested
+// local type refs when doing so is safe (not shared across multiple tokens).
 func renameResolvedPropertyKeyAtPath(
 	pkg *schema.PackageSpec,
 	props map[string]schema.PropertySpec,
@@ -637,6 +654,8 @@ func renameResolvedPropertyKeyAtPath(
 	return props, true
 }
 
+// setTypeSpecFromProperty applies replacement to a property type, including
+// element rewrites for array paths.
 func setTypeSpecFromProperty(
 	pkg *schema.PackageSpec,
 	prop schema.PropertySpec,
@@ -679,6 +698,8 @@ func setTypeSpecFromProperty(
 	return prop, true
 }
 
+// setTypeSpecFromNestedType rewrites nested local type definitions when the
+// referenced type is not externally shared.
 func setTypeSpecFromNestedType(
 	pkg *schema.PackageSpec,
 	ts schema.TypeSpec,
@@ -708,6 +729,7 @@ func setTypeSpecFromNestedType(
 	return ts, true
 }
 
+// localTypeToken parses "#/types/<token>" refs.
 func localTypeToken(ref string) (string, bool) {
 	const prefix = "#/types/"
 	if !strings.HasPrefix(ref, prefix) {
@@ -720,6 +742,8 @@ func localTypeToken(ref string) (string, bool) {
 	return typeToken, true
 }
 
+// isMaxItemsOneTypeChange reports array<->single transitions with equivalent
+// element/object inner type.
 func isMaxItemsOneTypeChange(oldType, newType *schema.TypeSpec) bool {
 	if oldType == nil || newType == nil {
 		return false
@@ -733,6 +757,7 @@ func isMaxItemsOneTypeChange(oldType, newType *schema.TypeSpec) bool {
 	return false
 }
 
+// typeIdentifier returns a display identifier for TypeSpec values.
 func typeIdentifier(ts *schema.TypeSpec) string {
 	if ts == nil {
 		return ""
@@ -743,10 +768,12 @@ func typeIdentifier(ts *schema.TypeSpec) string {
 	return ts.Type
 }
 
+// isArrayType reports whether a TypeSpec pointer is an array type.
 func isArrayType(ts *schema.TypeSpec) bool {
 	return ts != nil && ts.Type == "array"
 }
 
+// sameTypeSpec performs structural equality for two non-nil TypeSpecs.
 func sameTypeSpec(a, b *schema.TypeSpec) bool {
 	if a == nil || b == nil {
 		return false
@@ -754,11 +781,13 @@ func sameTypeSpec(a, b *schema.TypeSpec) bool {
 	return reflect.DeepEqual(*a, *b)
 }
 
+// cloneTypeSpecPtr returns a pointer to a copied TypeSpec value.
 func cloneTypeSpecPtr(ts schema.TypeSpec) *schema.TypeSpec {
 	clone := ts
 	return &clone
 }
 
+// clonePropertySpecMap copies a property map.
 func clonePropertySpecMap(props map[string]schema.PropertySpec) map[string]schema.PropertySpec {
 	if props == nil {
 		return nil
@@ -770,6 +799,7 @@ func clonePropertySpecMap(props map[string]schema.PropertySpec) map[string]schem
 	return out
 }
 
+// resolvePropertyName maps metadata field names to actual Pulumi schema keys.
 func resolvePropertyName(props map[string]schema.PropertySpec, metadataFieldName string) (string, bool) {
 	if len(props) == 0 || strings.TrimSpace(metadataFieldName) == "" {
 		return "", false
@@ -782,6 +812,8 @@ func resolvePropertyName(props map[string]schema.PropertySpec, metadataFieldName
 	return "", false
 }
 
+// metadataFieldNameCandidates generates candidate Pulumi field names from a
+// metadata field token (exact, terraform->pulumi, plural/singular forms).
 func metadataFieldNameCandidates(name string) []string {
 	seen := map[string]struct{}{}
 	candidates := []string{}
@@ -808,6 +840,8 @@ func metadataFieldNameCandidates(name string) []string {
 	return candidates
 }
 
+// buildLocalTypeRefUseCountIndex counts external references to each local type
+// so nested rewrites can skip shared definitions.
 func buildLocalTypeRefUseCountIndex(pkg schema.PackageSpec) map[string]int {
 	// Count external uses of local #/types refs so nested rewrites can skip
 	// shared type definitions and avoid cross-token side effects.
@@ -861,12 +895,14 @@ func buildLocalTypeRefUseCountIndex(pkg schema.PackageSpec) map[string]int {
 	return refCountsByTypeToken
 }
 
+// incrementLocalTypeRefsFromPropertyMap adds local ref counts from one property map.
 func incrementLocalTypeRefsFromPropertyMap(props map[string]schema.PropertySpec, refCountsByTypeToken map[string]int) {
 	for _, prop := range props {
 		incrementLocalTypeRefsFromTypeSpec(prop.TypeSpec, refCountsByTypeToken)
 	}
 }
 
+// incrementLocalTypeRefsFromTypeSpec recursively counts local type refs in one TypeSpec.
 func incrementLocalTypeRefsFromTypeSpec(ts schema.TypeSpec, refCountsByTypeToken map[string]int) {
 	if typeToken, ok := localTypeToken(ts.Ref); ok {
 		refCountsByTypeToken[typeToken]++
@@ -882,10 +918,12 @@ func incrementLocalTypeRefsFromTypeSpec(ts schema.TypeSpec, refCountsByTypeToken
 	}
 }
 
+// localTypeExternalRefUseCount returns external use count for one local type token.
 func localTypeExternalRefUseCount(refCountsByTypeToken map[string]int, typeToken string) int {
 	return refCountsByTypeToken[typeToken]
 }
 
+// propertyMapRefCount counts references to targetRef in a property map.
 func propertyMapRefCount(props map[string]schema.PropertySpec, targetRef string) int {
 	count := 0
 	for _, prop := range props {
@@ -894,6 +932,7 @@ func propertyMapRefCount(props map[string]schema.PropertySpec, targetRef string)
 	return count
 }
 
+// typeSpecRefCount counts recursive references to targetRef within one TypeSpec.
 func typeSpecRefCount(ts schema.TypeSpec, targetRef string) int {
 	count := 0
 	if ts.Ref == targetRef {

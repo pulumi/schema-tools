@@ -47,6 +47,8 @@ func NewFullJSONOutput(result Result) FullJSONOutput {
 	}
 }
 
+// normalizeForJSON enforces deterministic ordering and non-nil slices/maps for
+// all structured JSON payload fields.
 func normalizeForJSON(result Result) Result {
 	normalizedChanges := sortChanges(result.Changes)
 	grouped := result.Grouped
@@ -63,10 +65,12 @@ func normalizeForJSON(result Result) Result {
 	return normalized
 }
 
+// isGroupedEmpty reports whether grouped sections were not precomputed.
 func isGroupedEmpty(grouped GroupedChanges) bool {
 	return len(grouped.Resources) == 0 && len(grouped.Functions) == 0 && len(grouped.Types) == 0
 }
 
+// normalizeGrouped normalizes all grouped scopes for stable JSON output.
 func normalizeGrouped(grouped GroupedChanges) GroupedChanges {
 	return GroupedChanges{
 		Resources: normalizeGroupedScope(grouped.Resources),
@@ -75,6 +79,7 @@ func normalizeGrouped(grouped GroupedChanges) GroupedChanges {
 	}
 }
 
+// normalizeGroupedScope copies and sorts one grouped scope map.
 func normalizeGroupedScope(grouped map[string]map[string][]Change) map[string]map[string][]Change {
 	if len(grouped) == 0 {
 		return map[string]map[string][]Change{}
@@ -94,6 +99,7 @@ func normalizeGroupedScope(grouped map[string]map[string][]Change) map[string]ma
 	return out
 }
 
+// normalizeSummary sorts summary items and their entry lists deterministically.
 func normalizeSummary(items []SummaryItem) []SummaryItem {
 	if len(items) == 0 {
 		return []SummaryItem{}
