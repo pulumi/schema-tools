@@ -146,11 +146,28 @@ func writeGroupedSection(
 	}
 
 	for _, token := range sortedMapKeys(group) {
+		locations := sortedTextLocations(group[token])
+		// Compact single-location general entries to one line for readability.
+		if len(locations) == 1 && locations[0] == "general" {
+			for _, change := range sortChanges(group[token]["general"]) {
+				if err := write("- %s %q %s\n", severityIcon(change.Severity), token, textChangeMessage(change)); err != nil {
+					return err
+				}
+			}
+			continue
+		}
 		if err := write("- %q:\n", token); err != nil {
 			return err
 		}
-		locations := sortedTextLocations(group[token])
 		for _, location := range locations {
+			if location == "general" {
+				for _, change := range sortChanges(group[token][location]) {
+					if err := write("    - %s %s\n", severityIcon(change.Severity), textChangeMessage(change)); err != nil {
+						return err
+					}
+				}
+				continue
+			}
 			if err := write("    - %s:\n", location); err != nil {
 				return err
 			}

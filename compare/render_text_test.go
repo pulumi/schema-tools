@@ -111,6 +111,34 @@ func TestRenderTextManyBreakingChanges(t *testing.T) {
 	}
 }
 
+func TestRenderTextGeneralChangesAreSingleLine(t *testing.T) {
+	var out bytes.Buffer
+	if err := RenderText(&out, Result{
+		Changes: []Change{
+			{
+				Scope:    ScopeFunction,
+				Token:    "pkg:index:getThing",
+				Path:     `Functions: "pkg:index:getThing"`,
+				Kind:     "signature-changed",
+				Severity: SeverityError,
+				Breaking: true,
+				Source:   SourceEngine,
+				Message:  "signature change",
+			},
+		},
+	}, -1); err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
+
+	text := out.String()
+	if !strings.Contains(text, `- `+"`🔴`"+` "pkg:index:getThing" signature change`) {
+		t.Fatalf("expected flattened general line, got:\n%s", text)
+	}
+	if strings.Contains(text, "general:") {
+		t.Fatalf("expected general header to be omitted, got:\n%s", text)
+	}
+}
+
 func TestRenderTextOmitsNonBreakingChanges(t *testing.T) {
 	var out bytes.Buffer
 	err := RenderText(&out, Result{

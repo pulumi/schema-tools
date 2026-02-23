@@ -15,11 +15,13 @@ func TestStructuredAWSMiniFixturesLoad(t *testing.T) {
 	mustReadAWSMiniMetadata(t, "metadata-v6.83.0.json")
 	mustReadAWSMiniMetadata(t, "metadata-v7.0.0.json")
 
-	requiredResources := []string{
+	requiredResourcesBoth := []string{
 		"aws:s3/bucket:Bucket",
 		"aws:paymentcryptography/key:Key",
+		"aws:cur/reportDefinition:ReportDefinition",
+		"aws:eks/cluster:Cluster",
 	}
-	for _, token := range requiredResources {
+	for _, token := range requiredResourcesBoth {
 		if _, ok := oldSchema.Resources[token]; !ok {
 			t.Fatalf("old schema missing resource token %q", token)
 		}
@@ -27,8 +29,22 @@ func TestStructuredAWSMiniFixturesLoad(t *testing.T) {
 			t.Fatalf("new schema missing resource token %q", token)
 		}
 	}
+	requiredResourcesOldOnly := []string{
+		"aws:chime/voiceConnectorOrganization:VoiceConnectorOrganization",
+	}
+	for _, token := range requiredResourcesOldOnly {
+		if _, ok := oldSchema.Resources[token]; !ok {
+			t.Fatalf("old schema missing resource token %q", token)
+		}
+		if _, ok := newSchema.Resources[token]; ok {
+			t.Fatalf("new schema should not contain old-only resource token %q", token)
+		}
+	}
 
-	requiredFunctions := []string{"aws:lb/getListenerRule:getListenerRule"}
+	requiredFunctions := []string{
+		"aws:lb/getListenerRule:getListenerRule",
+		"aws:bedrock/getInferenceProfiles:getInferenceProfiles",
+	}
 	for _, token := range requiredFunctions {
 		if _, ok := oldSchema.Functions[token]; !ok {
 			t.Fatalf("old schema missing function token %q", token)
@@ -38,7 +54,11 @@ func TestStructuredAWSMiniFixturesLoad(t *testing.T) {
 		}
 	}
 
-	requiredTypes := []string{"aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"}
+	requiredTypes := []string{
+		"aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
+		"aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority",
+		"aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption",
+	}
 	for _, token := range requiredTypes {
 		if _, ok := oldSchema.Types[token]; !ok {
 			t.Fatalf("old schema missing type token %q", token)

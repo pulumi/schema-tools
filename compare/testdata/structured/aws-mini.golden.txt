@@ -1,8 +1,19 @@
 ### Does the PR have any schema changes?
 
-Found 9 breaking changes:
+Found 17 breaking changes:
 
 #### Resources
+- `🔴` "aws:chime/voiceConnectorOrganization:VoiceConnectorOrganization" missing
+- "aws:cur/reportDefinition:ReportDefinition":
+    - required inputs:
+        - `🔴` "s3Prefix" input has changed to Required
+- "aws:eks/cluster:Cluster":
+    - inputs:
+        - `🟡` "defaultAddonsToRemoves" missing
+    - properties:
+        - `🔴` "certificateAuthorities" renamed to "certificateAuthority" and type changed from "array" to "#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority"
+        - `🟡` missing output "certificateAuthority"
+        - `🟡` missing output "defaultAddonsToRemoves"
 - "aws:paymentcryptography/key:Key":
     - inputs:
         - `🔴` "keyAttributes" type changed from "array" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
@@ -19,9 +30,15 @@ Found 9 breaking changes:
         - `🔴` "websites" renamed to "website" and type changed from "array" to "#/types/aws:s3/BucketWebsite:BucketWebsite"
 
 #### Functions
+- `🔴` "aws:bedrock/getInferenceProfiles:getInferenceProfiles" signature change (pulumi.InvokeOptions)->T => (Args, pulumi.InvokeOptions)->T
 - "aws:lb/getListenerRule:getListenerRule":
     - inputs:
         - `🔴` "action[*].forward" renamed to "action[*].forwards" and type changed from "#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward" to "array"
+
+#### Types
+- "aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption":
+    - required:
+        - `🔴` "signInOptions" property has changed to Required
 
 #### New resources:
 

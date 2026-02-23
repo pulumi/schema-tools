@@ -93,6 +93,36 @@
           "$ref": "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
         }
       }
+    },
+    "aws:cur/reportDefinition:ReportDefinition": {
+      "inputProperties": {
+        "reportName": {
+          "type": "string"
+        },
+        "s3Prefix": {
+          "type": "string"
+        }
+      },
+      "requiredInputs": [
+        "reportName",
+        "s3Prefix"
+      ],
+      "properties": {
+        "reportName": {
+          "type": "string"
+        },
+        "s3Prefix": {
+          "type": "string"
+        }
+      }
+    },
+    "aws:eks/cluster:Cluster": {
+      "inputProperties": {},
+      "properties": {
+        "certificateAuthority": {
+          "$ref": "#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority"
+        }
+      }
     }
   },
   "functions": {
@@ -106,6 +136,43 @@
             }
           }
         }
+      }
+    },
+    "aws:bedrock/getInferenceProfiles:getInferenceProfiles": {
+      "inputs": {
+        "description": "A collection of arguments for invoking getInferenceProfiles.\n",
+        "properties": {
+          "region": {
+            "type": "string",
+            "description": "Region where this resource will be [managed](https://docs.aws.amazon.com/general/latest/gr/rande.html#regional-endpoints). Defaults to the Region set in the provider configuration.\n"
+          }
+        },
+        "type": "object"
+      },
+      "outputs": {
+        "description": "A collection of values returned by getInferenceProfiles.\n",
+        "properties": {
+          "id": {
+            "description": "The provider-assigned unique ID for this managed resource.\n",
+            "type": "string"
+          },
+          "inferenceProfileSummaries": {
+            "description": "List of inference profile summary objects. See `inference_profile_summaries`.\n",
+            "items": {
+              "$ref": "#/types/aws:bedrock/getInferenceProfilesInferenceProfileSummary:getInferenceProfilesInferenceProfileSummary"
+            },
+            "type": "array"
+          },
+          "region": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "inferenceProfileSummaries",
+          "region",
+          "id"
+        ],
+        "type": "object"
       }
     }
   },
@@ -188,6 +255,114 @@
           }
         }
       }
+    },
+    "aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "string"
+        }
+      }
+    },
+    "aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption": {
+      "type": "object",
+      "properties": {
+        "signInOptions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:ssoadmin/getApplicationPortalOptionSignInOption:getApplicationPortalOptionSignInOption"
+          }
+        },
+        "visibility": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "signInOptions",
+        "visibility"
+      ]
+    },
+    "aws:bedrock/getInferenceProfilesInferenceProfileSummary:getInferenceProfilesInferenceProfileSummary": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string",
+          "description": "The time at which the inference profile was created.\n"
+        },
+        "description": {
+          "type": "string",
+          "description": "The description of the inference profile.\n"
+        },
+        "inferenceProfileArn": {
+          "type": "string",
+          "description": "The Amazon Resource Name (ARN) of the inference profile.\n"
+        },
+        "inferenceProfileId": {
+          "type": "string",
+          "description": "The unique identifier of the inference profile.\n"
+        },
+        "inferenceProfileName": {
+          "type": "string",
+          "description": "The name of the inference profile.\n"
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:bedrock/getInferenceProfilesInferenceProfileSummaryModel:getInferenceProfilesInferenceProfileSummaryModel"
+          },
+          "description": "A list of information about each model in the inference profile. See `models`.\n"
+        },
+        "status": {
+          "type": "string",
+          "description": "The status of the inference profile. `ACTIVE` means that the inference profile is available to use.\n"
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of the inference profile. `SYSTEM_DEFINED` means that the inference profile is defined by Amazon Bedrock.\n"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "The time at which the inference profile was last updated.\n"
+        }
+      },
+      "required": [
+        "createdAt",
+        "description",
+        "inferenceProfileArn",
+        "inferenceProfileId",
+        "inferenceProfileName",
+        "models",
+        "status",
+        "type",
+        "updatedAt"
+      ]
+    },
+    "aws:bedrock/getInferenceProfilesInferenceProfileSummaryModel:getInferenceProfilesInferenceProfileSummaryModel": {
+      "type": "object",
+      "properties": {
+        "modelArn": {
+          "type": "string",
+          "description": "The Amazon Resource Name (ARN) of the model.\n"
+        }
+      },
+      "required": [
+        "modelArn"
+      ]
+    },
+    "aws:ssoadmin/getApplicationPortalOptionSignInOption:getApplicationPortalOptionSignInOption": {
+      "type": "object",
+      "properties": {
+        "applicationUrl": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "applicationUrl",
+        "origin"
+      ]
     }
   }
 }

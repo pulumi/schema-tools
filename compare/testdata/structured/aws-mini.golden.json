@@ -9,9 +9,10 @@
     },
     {
       "category": "max-items-one-changed",
-      "count": 9,
+      "count": 10,
       "entries": [
         "Functions: \"aws:lb/getListenerRule:getListenerRule\": inputs: \"action[*].forward\" \"action[*].forward\" renamed to \"action[*].forwards\" and type changed from \"#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward\" to \"array\"",
+        "Resources: \"aws:eks/cluster:Cluster\": properties: \"certificateAuthorities\" \"certificateAuthorities\" renamed to \"certificateAuthority\" and type changed from \"array\" to \"#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\"",
         "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\" \"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\"",
         "Resources: \"aws:paymentcryptography/key:Key\": properties: \"keyAttributes\" \"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\"",
         "Resources: \"aws:s3/bucket:Bucket\": inputs: \"loggings\" \"loggings\" renamed to \"logging\" and type changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\"",
@@ -21,9 +22,111 @@
         "Resources: \"aws:s3/bucket:Bucket\": properties: \"versionings\" \"versionings\" renamed to \"versioning\" and type changed from \"array\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\"",
         "Resources: \"aws:s3/bucket:Bucket\": properties: \"websites\" \"websites\" renamed to \"website\" and type changed from \"array\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
       ]
+    },
+    {
+      "category": "missing-input",
+      "count": 1,
+      "entries": [
+        "Resources: \"aws:eks/cluster:Cluster\": inputs: \"defaultAddonsToRemoves\" missing"
+      ]
+    },
+    {
+      "category": "missing-output",
+      "count": 2,
+      "entries": [
+        "Resources: \"aws:eks/cluster:Cluster\": properties: \"certificateAuthority\" missing output \"certificateAuthority\"",
+        "Resources: \"aws:eks/cluster:Cluster\": properties: \"defaultAddonsToRemoves\" missing output \"defaultAddonsToRemoves\""
+      ]
+    },
+    {
+      "category": "missing-resource",
+      "count": 1,
+      "entries": [
+        "Resources: \"aws:chime/voiceConnectorOrganization:VoiceConnectorOrganization\" missing"
+      ]
+    },
+    {
+      "category": "optional-to-required",
+      "count": 2,
+      "entries": [
+        "Resources: \"aws:cur/reportDefinition:ReportDefinition\": required inputs: \"s3Prefix\" input has changed to Required",
+        "Types: \"aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption\": required: \"signInOptions\" property has changed to Required"
+      ]
+    },
+    {
+      "category": "signature-changed",
+      "count": 1,
+      "entries": [
+        "Functions: \"aws:bedrock/getInferenceProfiles:getInferenceProfiles\" signature change (pulumi.InvokeOptions)-\u003eT =\u003e (Args, pulumi.InvokeOptions)-\u003eT"
+      ]
     }
   ],
   "changes": [
+    {
+      "scope": "resource",
+      "token": "aws:chime/voiceConnectorOrganization:VoiceConnectorOrganization",
+      "path": "Resources: \"aws:chime/voiceConnectorOrganization:VoiceConnectorOrganization\"",
+      "kind": "missing-resource",
+      "severity": "error",
+      "breaking": true,
+      "source": "engine",
+      "message": "missing"
+    },
+    {
+      "scope": "resource",
+      "token": "aws:cur/reportDefinition:ReportDefinition",
+      "location": "required inputs",
+      "path": "Resources: \"aws:cur/reportDefinition:ReportDefinition\": required inputs: \"s3Prefix\"",
+      "kind": "optional-to-required",
+      "severity": "error",
+      "breaking": true,
+      "source": "engine",
+      "message": "input has changed to Required"
+    },
+    {
+      "scope": "resource",
+      "token": "aws:eks/cluster:Cluster",
+      "location": "inputs",
+      "path": "Resources: \"aws:eks/cluster:Cluster\": inputs: \"defaultAddonsToRemoves\"",
+      "kind": "missing-input",
+      "severity": "warn",
+      "breaking": true,
+      "source": "engine",
+      "message": "missing"
+    },
+    {
+      "scope": "resource",
+      "token": "aws:eks/cluster:Cluster",
+      "location": "properties",
+      "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"certificateAuthorities\"",
+      "kind": "max-items-one-changed",
+      "severity": "error",
+      "breaking": true,
+      "source": "normalize",
+      "message": "\"certificateAuthorities\" renamed to \"certificateAuthority\" and type changed from \"array\" to \"#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\""
+    },
+    {
+      "scope": "resource",
+      "token": "aws:eks/cluster:Cluster",
+      "location": "properties",
+      "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"certificateAuthority\"",
+      "kind": "missing-output",
+      "severity": "warn",
+      "breaking": true,
+      "source": "engine",
+      "message": "missing output \"certificateAuthority\""
+    },
+    {
+      "scope": "resource",
+      "token": "aws:eks/cluster:Cluster",
+      "location": "properties",
+      "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"defaultAddonsToRemoves\"",
+      "kind": "missing-output",
+      "severity": "warn",
+      "breaking": true,
+      "source": "engine",
+      "message": "missing output \"defaultAddonsToRemoves\""
+    },
     {
       "scope": "resource",
       "token": "aws:paymentcryptography/key:Key",
@@ -124,6 +227,16 @@
     },
     {
       "scope": "function",
+      "token": "aws:bedrock/getInferenceProfiles:getInferenceProfiles",
+      "path": "Functions: \"aws:bedrock/getInferenceProfiles:getInferenceProfiles\"",
+      "kind": "signature-changed",
+      "severity": "error",
+      "breaking": true,
+      "source": "engine",
+      "message": "signature change (pulumi.InvokeOptions)-\u003eT =\u003e (Args, pulumi.InvokeOptions)-\u003eT"
+    },
+    {
+      "scope": "function",
       "token": "aws:lb/getListenerRule:getListenerRule",
       "location": "inputs",
       "path": "Functions: \"aws:lb/getListenerRule:getListenerRule\": inputs: \"action[*].forward\"",
@@ -132,10 +245,100 @@
       "breaking": true,
       "source": "normalize",
       "message": "\"action[*].forward\" renamed to \"action[*].forwards\" and type changed from \"#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward\" to \"array\""
+    },
+    {
+      "scope": "type",
+      "token": "aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption",
+      "location": "required",
+      "path": "Types: \"aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption\": required: \"signInOptions\"",
+      "kind": "optional-to-required",
+      "severity": "error",
+      "breaking": true,
+      "source": "engine",
+      "message": "property has changed to Required"
     }
   ],
   "grouped": {
     "resources": {
+      "aws:chime/voiceConnectorOrganization:VoiceConnectorOrganization": {
+        "general": [
+          {
+            "scope": "resource",
+            "token": "aws:chime/voiceConnectorOrganization:VoiceConnectorOrganization",
+            "path": "Resources: \"aws:chime/voiceConnectorOrganization:VoiceConnectorOrganization\"",
+            "kind": "missing-resource",
+            "severity": "error",
+            "breaking": true,
+            "source": "engine",
+            "message": "missing"
+          }
+        ]
+      },
+      "aws:cur/reportDefinition:ReportDefinition": {
+        "required inputs": [
+          {
+            "scope": "resource",
+            "token": "aws:cur/reportDefinition:ReportDefinition",
+            "location": "required inputs",
+            "path": "Resources: \"aws:cur/reportDefinition:ReportDefinition\": required inputs: \"s3Prefix\"",
+            "kind": "optional-to-required",
+            "severity": "error",
+            "breaking": true,
+            "source": "engine",
+            "message": "input has changed to Required"
+          }
+        ]
+      },
+      "aws:eks/cluster:Cluster": {
+        "inputs": [
+          {
+            "scope": "resource",
+            "token": "aws:eks/cluster:Cluster",
+            "location": "inputs",
+            "path": "Resources: \"aws:eks/cluster:Cluster\": inputs: \"defaultAddonsToRemoves\"",
+            "kind": "missing-input",
+            "severity": "warn",
+            "breaking": true,
+            "source": "engine",
+            "message": "missing"
+          }
+        ],
+        "properties": [
+          {
+            "scope": "resource",
+            "token": "aws:eks/cluster:Cluster",
+            "location": "properties",
+            "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"certificateAuthorities\"",
+            "kind": "max-items-one-changed",
+            "severity": "error",
+            "breaking": true,
+            "source": "normalize",
+            "message": "\"certificateAuthorities\" renamed to \"certificateAuthority\" and type changed from \"array\" to \"#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\""
+          },
+          {
+            "scope": "resource",
+            "token": "aws:eks/cluster:Cluster",
+            "location": "properties",
+            "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"certificateAuthority\"",
+            "kind": "missing-output",
+            "severity": "warn",
+            "breaking": true,
+            "source": "engine",
+            "message": "missing output \"certificateAuthority\""
+          },
+          {
+            "scope": "resource",
+            "token": "aws:eks/cluster:Cluster",
+            "location": "properties",
+            "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"defaultAddonsToRemoves\"",
+            "kind": "missing-output",
+            "severity": "warn",
+            "breaking": true,
+            "source": "engine",
+            "message": "missing output \"defaultAddonsToRemoves\""
+          }
+        ]
+      },
       "aws:paymentcryptography/key:Key": {
         "inputs": [
           {
@@ -252,6 +455,20 @@
       }
     },
     "functions": {
+      "aws:bedrock/getInferenceProfiles:getInferenceProfiles": {
+        "general": [
+          {
+            "scope": "function",
+            "token": "aws:bedrock/getInferenceProfiles:getInferenceProfiles",
+            "path": "Functions: \"aws:bedrock/getInferenceProfiles:getInferenceProfiles\"",
+            "kind": "signature-changed",
+            "severity": "error",
+            "breaking": true,
+            "source": "engine",
+            "message": "signature change (pulumi.InvokeOptions)-\u003eT =\u003e (Args, pulumi.InvokeOptions)-\u003eT"
+          }
+        ]
+      },
       "aws:lb/getListenerRule:getListenerRule": {
         "inputs": [
           {
@@ -268,7 +485,23 @@
         ]
       }
     },
-    "types": {}
+    "types": {
+      "aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption": {
+        "required": [
+          {
+            "scope": "type",
+            "token": "aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption",
+            "location": "required",
+            "path": "Types: \"aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption\": required: \"signInOptions\"",
+            "kind": "optional-to-required",
+            "severity": "error",
+            "breaking": true,
+            "source": "engine",
+            "message": "property has changed to Required"
+          }
+        ]
+      }
+    }
   },
   "new_resources": [
     "s3/bucketAcl.BucketAcl"

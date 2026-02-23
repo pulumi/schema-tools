@@ -32,6 +32,18 @@
             "maxItemsOne": false
           }
         }
+      },
+      "aws_eks_cluster": {
+        "current": "aws:eks/cluster:Cluster",
+        "majorVersion": 6,
+        "fields": {
+          "certificate_authorities": {
+            "maxItemsOne": false
+          },
+          "certificate_authority": {
+            "maxItemsOne": true
+          }
+        }
       }
     },
     "datasources": {
