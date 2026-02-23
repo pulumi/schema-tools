@@ -60,4 +60,54 @@ func TestAnalyzeListsOnlyNewResourcesAndFunctions(t *testing.T) {
 			t.Fatalf("unexpected new function %q (all: %v)", function, report.NewFunctions)
 		}
 	}
+	if len(report.Diagnostics) != 0 {
+		t.Fatalf("expected no diagnostics, got %v", report.Diagnostics)
+	}
+}
+
+func TestAnalyzeFlattensDiagnostics(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:Res": {
+				InputProperties: map[string]schema.PropertySpec{
+					"name": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"name": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:Res": {
+				InputProperties: map[string]schema.PropertySpec{},
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"name": {TypeSpec: schema.TypeSpec{Type: "string"}},
+					},
+				},
+			},
+		},
+	}
+
+	report := Analyze("my-pkg", oldSchema, newSchema)
+	if len(report.Diagnostics) == 0 {
+		t.Fatal("expected diagnostics to be emitted")
+	}
+	first := report.Diagnostics[0]
+	if first.Scope != "Resources" {
+		t.Fatalf("unexpected diagnostic scope: %+v", first)
+	}
+	if first.Token != "my-pkg:index:Res" {
+		t.Fatalf("unexpected diagnostic token: %+v", first)
+	}
+	if first.Location != "inputs" {
+		t.Fatalf("unexpected diagnostic location: %+v", first)
+	}
+	if first.Path == "" || first.Description == "" {
+		t.Fatalf("diagnostic path/description must be set: %+v", first)
+	}
 }
