@@ -112,7 +112,7 @@ func TestAliasHistory(t *testing.T) {
 func TestTokenRemapScopeCollision(t *testing.T) {
 	t.Parallel()
 
-	old := mustParseMetadataJSONRemap(t, `{
+	old := mustParseMetadataJSON(t, `{
 		"auto-aliasing": {
 			"resources": {
 				"pkg_widget": {
@@ -126,7 +126,7 @@ func TestTokenRemapScopeCollision(t *testing.T) {
 			}
 		}
 	}`)
-	new := mustParseMetadataJSONRemap(t, `{
+	new := mustParseMetadataJSON(t, `{
 		"auto-aliasing": {
 			"resources": {
 				"pkg_widget": {
@@ -226,11 +226,4 @@ func expectedByScope(fixture *remapFixture, old bool) (map[string]string, map[st
 	convert(fixture.New.AutoAliasing.Resources, fixture.Expected.New, resources)
 	convert(fixture.New.AutoAliasing.Datasources, fixture.Expected.New, datasources)
 	return resources, datasources
-}
-
-func mustParseMetadataJSONRemap(t *testing.T, raw string) *MetadataEnvelope {
-	t.Helper()
-	metadata, err := ParseMetadata([]byte(raw))
-	require.NoError(t, err)
-	return metadata
 }
