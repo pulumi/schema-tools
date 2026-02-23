@@ -1,0 +1,400 @@
+{
+  "name": "aws",
+  "version": "6.83.0",
+  "resources": {
+    "aws:s3/bucket:Bucket": {
+      "inputProperties": {
+        "loggings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:s3/BucketLogging:BucketLogging"
+          }
+        },
+        "versionings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:s3/BucketVersioning:BucketVersioning"
+          }
+        },
+        "websites": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:s3/BucketWebsite:BucketWebsite"
+          }
+        }
+      },
+      "properties": {
+        "loggings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:s3/BucketLogging:BucketLogging"
+          }
+        },
+        "versionings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:s3/BucketVersioning:BucketVersioning"
+          }
+        },
+        "websites": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:s3/BucketWebsite:BucketWebsite"
+          }
+        }
+      }
+    },
+    "aws:s3/bucketV2:BucketV2": {
+      "inputProperties": {
+        "loggings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:s3/BucketLogging:BucketLogging"
+          }
+        }
+      },
+      "properties": {
+        "loggings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:s3/BucketLogging:BucketLogging"
+          }
+        }
+      }
+    },
+    "aws:s3/bucketAclV2:BucketAclV2": {
+      "inputProperties": {
+        "acl": {
+          "type": "string"
+        }
+      },
+      "requiredInputs": [
+        "acl"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "aws:paymentcryptography/key:Key": {
+      "inputProperties": {
+        "keyAttributes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
+          }
+        }
+      },
+      "properties": {
+        "keyAttributes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
+          }
+        }
+      }
+    },
+    "aws:chime/voiceConnectorOrganization:VoiceConnectorOrganization": {
+      "inputProperties": {
+        "disabled": {
+          "type": "boolean",
+          "description": "When origination settings are disabled, inbound calls are not enabled for your Amazon Chime Voice Connector.\n"
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:chime/VoiceConnectorOrganizationRoute:VoiceConnectorOrganizationRoute"
+          },
+          "description": "Set of call distribution properties defined for your SIP hosts. See route below for more details. Minimum of 1. Maximum of 20.\n"
+        },
+        "voiceConnectorId": {
+          "type": "string",
+          "description": "The Amazon Chime Voice Connector ID.\n",
+          "willReplaceOnChanges": true
+        }
+      },
+      "requiredInputs": [
+        "routes",
+        "voiceConnectorId"
+      ],
+      "properties": {
+        "disabled": {
+          "type": "boolean",
+          "description": "When origination settings are disabled, inbound calls are not enabled for your Amazon Chime Voice Connector.\n"
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:chime/VoiceConnectorOrganizationRoute:VoiceConnectorOrganizationRoute"
+          },
+          "description": "Set of call distribution properties defined for your SIP hosts. See route below for more details. Minimum of 1. Maximum of 20.\n"
+        },
+        "voiceConnectorId": {
+          "type": "string",
+          "description": "The Amazon Chime Voice Connector ID.\n"
+        }
+      },
+      "required": [
+        "routes",
+        "voiceConnectorId"
+      ]
+    },
+    "aws:cur/reportDefinition:ReportDefinition": {
+      "inputProperties": {
+        "reportName": {
+          "type": "string"
+        },
+        "s3Prefix": {
+          "type": "string"
+        }
+      },
+      "requiredInputs": [
+        "reportName"
+      ],
+      "properties": {
+        "reportName": {
+          "type": "string"
+        },
+        "s3Prefix": {
+          "type": "string"
+        }
+      }
+    },
+    "aws:eks/cluster:Cluster": {
+      "inputProperties": {
+        "defaultAddonsToRemoves": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "properties": {
+        "certificateAuthorities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority"
+          }
+        },
+        "certificateAuthority": {
+          "$ref": "#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority"
+        },
+        "defaultAddonsToRemoves": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "functions": {
+    "aws:lb/getListenerRule:getListenerRule": {
+      "inputs": {
+        "properties": {
+          "action": {
+            "type": "array",
+            "items": {
+              "$ref": "#/types/aws:lb/GetListenerRuleAction:GetListenerRuleAction"
+            }
+          }
+        }
+      }
+    },
+    "aws:bedrock/getInferenceProfiles:getInferenceProfiles": {
+      "outputs": {
+        "description": "A collection of values returned by getInferenceProfiles.\n",
+        "properties": {
+          "id": {
+            "description": "The provider-assigned unique ID for this managed resource.\n",
+            "type": "string"
+          },
+          "inferenceProfileSummaries": {
+            "description": "List of inference profile summary objects. See `inference_profile_summaries`.\n",
+            "items": {
+              "$ref": "#/types/aws:bedrock/getInferenceProfilesInferenceProfileSummary:getInferenceProfilesInferenceProfileSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "inferenceProfileSummaries",
+          "id"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "types": {
+    "aws:s3/BucketLogging:BucketLogging": {
+      "type": "object",
+      "properties": {
+        "targetBucket": {
+          "type": "string"
+        }
+      }
+    },
+    "aws:s3/BucketVersioning:BucketVersioning": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "aws:s3/BucketWebsite:BucketWebsite": {
+      "type": "object",
+      "properties": {
+        "indexDocument": {
+          "type": "string"
+        }
+      }
+    },
+    "aws:lb/GetListenerRuleAction:GetListenerRuleAction": {
+      "type": "object",
+      "properties": {
+        "forward": {
+          "$ref": "#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward"
+        }
+      }
+    },
+    "aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward": {
+      "type": "object",
+      "properties": {
+        "targetGroups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:lb/GetListenerRuleActionForwardTargetGroup:GetListenerRuleActionForwardTargetGroup"
+          }
+        }
+      }
+    },
+    "aws:lb/GetListenerRuleActionForwardTargetGroup:GetListenerRuleActionForwardTargetGroup": {
+      "type": "object",
+      "properties": {
+        "arn": {
+          "type": "string"
+        }
+      }
+    },
+    "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes": {
+      "type": "object",
+      "properties": {
+        "keyModesOfUse": {
+          "type": "string"
+        }
+      }
+    },
+    "aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "string"
+        }
+      }
+    },
+    "aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption": {
+      "type": "object",
+      "properties": {
+        "signInOptions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:ssoadmin/getApplicationPortalOptionSignInOption:getApplicationPortalOptionSignInOption"
+          }
+        },
+        "visibility": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "visibility"
+      ]
+    },
+    "aws:bedrock/getInferenceProfilesInferenceProfileSummary:getInferenceProfilesInferenceProfileSummary": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string",
+          "description": "The time at which the inference profile was created.\n"
+        },
+        "description": {
+          "type": "string",
+          "description": "The description of the inference profile.\n"
+        },
+        "inferenceProfileArn": {
+          "type": "string",
+          "description": "The Amazon Resource Name (ARN) of the inference profile.\n"
+        },
+        "inferenceProfileId": {
+          "type": "string",
+          "description": "The unique identifier of the inference profile.\n"
+        },
+        "inferenceProfileName": {
+          "type": "string",
+          "description": "The name of the inference profile.\n"
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:bedrock/getInferenceProfilesInferenceProfileSummaryModel:getInferenceProfilesInferenceProfileSummaryModel"
+          },
+          "description": "A list of information about each model in the inference profile. See `models`.\n"
+        },
+        "status": {
+          "type": "string",
+          "description": "The status of the inference profile. `ACTIVE` means that the inference profile is available to use.\n"
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of the inference profile. `SYSTEM_DEFINED` means that the inference profile is defined by Amazon Bedrock.\n"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "The time at which the inference profile was last updated.\n"
+        }
+      },
+      "required": [
+        "createdAt",
+        "description",
+        "inferenceProfileArn",
+        "inferenceProfileId",
+        "inferenceProfileName",
+        "models",
+        "status",
+        "type",
+        "updatedAt"
+      ]
+    },
+    "aws:bedrock/getInferenceProfilesInferenceProfileSummaryModel:getInferenceProfilesInferenceProfileSummaryModel": {
+      "type": "object",
+      "properties": {
+        "modelArn": {
+          "type": "string",
+          "description": "The Amazon Resource Name (ARN) of the model.\n"
+        }
+      },
+      "required": [
+        "modelArn"
+      ]
+    },
+    "aws:ssoadmin/getApplicationPortalOptionSignInOption:getApplicationPortalOptionSignInOption": {
+      "type": "object",
+      "properties": {
+        "applicationUrl": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "applicationUrl",
+        "origin"
+      ]
+    }
+  }
+}
