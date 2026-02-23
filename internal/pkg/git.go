@@ -24,6 +24,11 @@ type GitSource interface {
 	Download(
 		ctx context.Context, commit string,
 		getHTTPResponse func(*http.Request) (io.ReadCloser, int64, error)) (io.ReadCloser, int64, error)
+
+	// DownloadFile fetches an io.ReadCloser for an arbitrary repository file path at commit.
+	DownloadFile(
+		ctx context.Context, commit, repositoryPath string,
+		getHTTPResponse func(*http.Request) (io.ReadCloser, int64, error)) (io.ReadCloser, int64, error)
 }
 
 // gitlabSource can download a plugin from gitlab releases.
@@ -94,7 +99,14 @@ func (source *gitlabSource) Download(
 	ctx context.Context, commit string,
 	getHTTPResponse func(*http.Request) (io.ReadCloser, int64, error),
 ) (io.ReadCloser, int64, error) {
-	assetName := url.QueryEscape(StandardSchemaPath(source.name))
+	return source.DownloadFile(ctx, commit, StandardSchemaPath(source.name), getHTTPResponse)
+}
+
+func (source *gitlabSource) DownloadFile(
+	ctx context.Context, commit, repositoryPath string,
+	getHTTPResponse func(*http.Request) (io.ReadCloser, int64, error),
+) (io.ReadCloser, int64, error) {
+	assetName := encodeGitLabRepositoryPath(repositoryPath)
 	project := url.QueryEscape(fmt.Sprintf("%s/%s", source.owner, source.project))
 
 	// Gitlab Files API: https://docs.gitlab.com/ee/api/repository_files.html
@@ -108,6 +120,14 @@ func (source *gitlabSource) Download(
 		return nil, -1, err
 	}
 	return getHTTPResponse(req)
+}
+
+func encodeGitLabRepositoryPath(path string) string {
+	parts := strings.Split(path, "/")
+	for i := range parts {
+		parts[i] = url.PathEscape(parts[i])
+	}
+	return strings.Join(parts, "%2F")
 }
 
 // githubSource can download a plugin from github releases
@@ -213,16 +233,34 @@ func (source *githubSource) Download(
 	ctx context.Context, commit string,
 	getHTTPResponse func(*http.Request) (io.ReadCloser, int64, error),
 ) (io.ReadCloser, int64, error) {
-	schemaURL := fmt.Sprintf(
-		"https://%s/repos/%s/%s/contents/%s?ref=%s",
-		source.host, source.organization, source.repository, StandardSchemaPath(source.name), commit)
-	logging.V(9).Infof("plugin GitHub schema url: %s", schemaURL)
+	return source.DownloadFile(ctx, commit, StandardSchemaPath(source.name), getHTTPResponse)
+}
 
-	req, err := source.newHTTPRequest(ctx, schemaURL, "application/vnd.github.v4.raw")
+func (source *githubSource) DownloadFile(
+	ctx context.Context, commit, repositoryPath string,
+	getHTTPResponse func(*http.Request) (io.ReadCloser, int64, error),
+) (io.ReadCloser, int64, error) {
+	encodedPath := encodePathSegments(repositoryPath)
+	query := url.Values{}
+	query.Set("ref", commit)
+	fileURL := fmt.Sprintf(
+		"https://%s/repos/%s/%s/contents/%s?%s",
+		source.host, source.organization, source.repository, encodedPath, query.Encode())
+	logging.V(9).Infof("plugin GitHub file url: %s", fileURL)
+
+	req, err := source.newHTTPRequest(ctx, fileURL, "application/vnd.github.v4.raw")
 	if err != nil {
 		return nil, -1, err
 	}
 	return source.getHTTPResponse(getHTTPResponse, req)
+}
+
+func encodePathSegments(path string) string {
+	parts := strings.Split(path, "/")
+	for i := range parts {
+		parts[i] = url.PathEscape(parts[i])
+	}
+	return strings.Join(parts, "/")
 }
 
 func buildHTTPRequest(ctx context.Context, pluginEndpoint string, authorization string) (*http.Request, error) {
@@ -325,4 +363,9 @@ func newDownloadError(statusCode int, url *url.URL, header http.Header) error {
 // StandardSchemaPath returns the standard name for the asset that contains the given plugin.
 func StandardSchemaPath(provider string) string {
 	return fmt.Sprintf("provider/cmd/pulumi-resource-%s/schema.json", provider)
+}
+
+// StandardMetadataPath returns the standard bridge metadata path for the given provider.
+func StandardMetadataPath(provider string) string {
+	return fmt.Sprintf("provider/cmd/pulumi-resource-%s/bridge-metadata.json", provider)
 }
