@@ -15,13 +15,6 @@ var (
 // currently understood by this normalizer.
 const SupportedAutoAliasingVersion = 1
 
-const (
-	// scopeResources identifies resource token maps in normalization logic.
-	scopeResources = "resources"
-	// scopeDataSources identifies datasource/function token maps.
-	scopeDataSources = "datasources"
-)
-
 // MetadataEnvelope models bridge-metadata.json fields needed by normalization.
 type MetadataEnvelope struct {
 	AutoAliasing *AutoAliasing `json:"auto-aliasing,omitempty"`
