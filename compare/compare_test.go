@@ -1,9 +1,6 @@
 package compare
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"sort"
@@ -12,6 +9,7 @@ import (
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	internalcompare "github.com/pulumi/schema-tools/internal/compare"
+	"github.com/pulumi/schema-tools/internal/testhelpers"
 )
 
 func TestSchemasSortsNewResourcesAndFunctions(t *testing.T) {
@@ -651,31 +649,11 @@ func TestSchemasClassificationContractWithInternalDiagnostics(t *testing.T) {
 
 func mustLoadFixtureSchemas(t testing.TB) (schema.PackageSpec, schema.PackageSpec) {
 	t.Helper()
-	// Keep in sync with internal/cmd/compare_test.go helpers by design:
-	// tests in these two packages cannot share *_test.go helpers directly.
-	oldSchema := mustReadFixtureSchema(t, "schema-old.json")
-	newSchema := mustReadFixtureSchema(t, "schema-new.json")
-	return oldSchema, newSchema
-}
-
-func mustReadFixtureSchema(t testing.TB, name string) schema.PackageSpec {
-	t.Helper()
-	data := mustReadTestdataFile(t, name)
-	var spec schema.PackageSpec
-	if err := json.Unmarshal(data, &spec); err != nil {
-		t.Fatalf("failed to unmarshal fixture %q: %v", name, err)
-	}
-	return spec
-}
-
-func mustReadTestdataFile(t testing.TB, name string) []byte {
-	t.Helper()
-	path := filepath.Join("..", "testdata", "compare", name)
-	data, err := os.ReadFile(path)
+	oldSchema, newSchema, err := testhelpers.LoadCompareFixtureSchemas()
 	if err != nil {
-		t.Fatalf("failed to read %s: %v", path, err)
+		t.Fatalf("failed to load compare fixtures: %v", err)
 	}
-	return data
+	return oldSchema, newSchema
 }
 
 func expectedFixtureSummaryCounts() map[string]int {

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
 	"os/user"
 	"reflect"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/pulumi/schema-tools/compare"
 	"github.com/pulumi/schema-tools/internal/normalize"
 	"github.com/pulumi/schema-tools/internal/pkg"
+	"github.com/pulumi/schema-tools/internal/testhelpers"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -233,7 +233,8 @@ func (errorWriter) Write(p []byte) (int, error) {
 }
 
 func TestCompareSchemasFixtureTextOutput(t *testing.T) {
-	oldSchema, newSchema := mustLoadCompareFixtureSchemas(t)
+	oldSchema, newSchema, err := testhelpers.LoadCompareFixtureSchemas()
+	assert.NoError(t, err)
 
 	var out bytes.Buffer
 	result := compare.Schemas(oldSchema, newSchema, compare.Options{Provider: "my-pkg"})
@@ -251,7 +252,8 @@ func TestCompareSchemasFixtureTextOutput(t *testing.T) {
 }
 
 func TestRenderCompareOutputFixtureJSON(t *testing.T) {
-	oldSchema, newSchema := mustLoadCompareFixtureSchemas(t)
+	oldSchema, newSchema, err := testhelpers.LoadCompareFixtureSchemas()
+	assert.NoError(t, err)
 	result := compare.Schemas(oldSchema, newSchema, compare.Options{Provider: "my-pkg"})
 
 	t.Run("full", func(t *testing.T) {
@@ -313,25 +315,4 @@ func TestRenderCompareOutputFixtureJSON(t *testing.T) {
 			`Types: "my-pkg:index:MyType": required: "count" property has changed to Required`,
 		}, entriesByCategory["optional-to-required"])
 	})
-}
-
-func mustLoadCompareFixtureSchemas(t testing.TB) (schema.PackageSpec, schema.PackageSpec) {
-	t.Helper()
-	// Keep in sync with compare/compare_test.go fixture loaders by design:
-	// package boundaries prevent sharing local *_test.go helpers directly.
-	return mustLoadCompareFixtureSchema(t, "schema-old.json"),
-		mustLoadCompareFixtureSchema(t, "schema-new.json")
-}
-
-func mustLoadCompareFixtureSchema(t testing.TB, name string) schema.PackageSpec {
-	t.Helper()
-	data, err := os.ReadFile("../../testdata/compare/" + name)
-	if err != nil {
-		t.Fatalf("failed to read fixture %s: %v", name, err)
-	}
-	var spec schema.PackageSpec
-	if err := json.Unmarshal(data, &spec); err != nil {
-		t.Fatalf("failed to unmarshal fixture %q: %v", name, err)
-	}
-	return spec
 }
