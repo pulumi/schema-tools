@@ -7,6 +7,13 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 )
 
+const (
+	// scopeResources identifies resource token maps in normalization logic.
+	scopeResources = "resources"
+	// scopeDataSources identifies datasource/function token maps.
+	scopeDataSources = "datasources"
+)
+
 // TokenRemap maps old/new tokens to canonical identities per scope.
 type TokenRemap struct {
 	OldResourceTokenToCanonical   map[string]string
