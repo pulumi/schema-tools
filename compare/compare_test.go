@@ -178,6 +178,29 @@ func TestSortChangesDeterministic(t *testing.T) {
 	}
 }
 
+func TestExtractLocalTypeToken(t *testing.T) {
+	tests := []struct {
+		name   string
+		ref    string
+		want   string
+		wantOK bool
+	}{
+		{name: "local type ref", ref: "#/types/pkg:index:Widget", want: "pkg:index:Widget", wantOK: true},
+		{name: "leading whitespace in token", ref: "#/types/ pkg:index:Widget ", want: "pkg:index:Widget", wantOK: true},
+		{name: "external ref containing marker", ref: "/pkg/schema.json#/types/pkg:index:Widget", want: "", wantOK: false},
+		{name: "missing token", ref: "#/types/", want: "", wantOK: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := extractLocalTypeToken(tt.ref)
+			if got != tt.want || ok != tt.wantOK {
+				t.Fatalf("extractLocalTypeToken(%q) = (%q,%v), want (%q,%v)", tt.ref, got, ok, tt.want, tt.wantOK)
+			}
+		})
+	}
+}
+
 func TestChangesFromDiagnostics(t *testing.T) {
 	diagnostics := []internalcompare.Diagnostic{
 		{

@@ -319,11 +319,10 @@ func collectTypeImpactRefsInTypeSpec(
 // extractLocalTypeToken parses "#/types/<token>" refs and returns the type token.
 func extractLocalTypeToken(ref string) (string, bool) {
 	const marker = "#/types/"
-	idx := strings.Index(ref, marker)
-	if idx == -1 {
+	if !strings.HasPrefix(ref, marker) {
 		return "", false
 	}
-	token := strings.TrimSpace(ref[idx+len(marker):])
+	token := strings.TrimSpace(strings.TrimPrefix(ref, marker))
 	if token == "" {
 		return "", false
 	}
