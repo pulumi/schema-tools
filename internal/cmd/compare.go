@@ -61,31 +61,6 @@ func defaultCompareDeps() compareDeps {
 // bridge metadata cannot be loaded for one compare side.
 var ErrCompareMetadataRequired = errors.New("compare metadata required")
 
-// compareMetadataRequiredError carries metadata source context for strict
-// compare failures.
-type compareMetadataRequiredError struct {
-	Side   string
-	Source string
-	Path   string
-	Commit string
-	Err    error
-}
-
-// Error returns a stable message used for strict metadata failures.
-func (e *compareMetadataRequiredError) Error() string {
-	return fmt.Sprintf("compare %s metadata required: %s@%s:%s", e.Side, e.Source, e.Commit, e.Path)
-}
-
-// Unwrap exposes the underlying metadata load/parse failure.
-func (e *compareMetadataRequiredError) Unwrap() error {
-	return e.Err
-}
-
-// Is supports errors.Is(err, ErrCompareMetadataRequired).
-func (e *compareMetadataRequiredError) Is(target error) bool {
-	return target == ErrCompareMetadataRequired
-}
-
 // compareCmd constructs the "compare" CLI command and binds all flags.
 func compareCmd() *cobra.Command {
 	var provider, repository, oldCommit, newCommit string
@@ -315,13 +290,7 @@ func resolveCompareMetadataSource(
 	payload, err := deps.downloadRepoFile(ctx, repository, provider, commit, metadataRepoPath)
 	if err != nil {
 		if errors.Is(err, pkg.ErrRepoFileNotFound) {
-			return nil, &compareMetadataRequiredError{
-				Side:   side,
-				Source: repository,
-				Path:   metadataRepoPath,
-				Commit: commit,
-				Err:    err,
-			}
+			return nil, compareMetadataRequired(side, repository, commit, metadataRepoPath, err)
 		}
 		return nil, fmt.Errorf("download %s metadata: %w", side, err)
 	}
@@ -329,17 +298,18 @@ func resolveCompareMetadataSource(
 	metadata, err := deps.parseMetadata(payload)
 	if err != nil {
 		if errors.Is(err, normalize.ErrMetadataRequired) {
-			return nil, &compareMetadataRequiredError{
-				Side:   side,
-				Source: repository,
-				Path:   metadataRepoPath,
-				Commit: commit,
-				Err:    err,
-			}
+			return nil, compareMetadataRequired(side, repository, commit, metadataRepoPath, err)
 		}
 		return nil, fmt.Errorf("parse %s metadata: %w", side, err)
 	}
 	return metadata, nil
+}
+
+func compareMetadataRequired(side, repository, commit, metadataRepoPath string, err error) error {
+	return fmt.Errorf(
+		"compare %s metadata required: %s@%s:%s: %w",
+		side, repository, commit, metadataRepoPath, errors.Join(ErrCompareMetadataRequired, err),
+	)
 }
 
 // isFileRepositoryURL reports whether --repository uses the file: scheme.

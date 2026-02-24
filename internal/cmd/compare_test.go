@@ -15,6 +15,7 @@ import (
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/pulumi/schema-tools/compare"
 	"github.com/pulumi/schema-tools/internal/normalize"
+	"github.com/pulumi/schema-tools/internal/pkg"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -189,6 +190,40 @@ func TestBuildNormalizationChangesProducesTypedChanges(t *testing.T) {
 	if !strings.Contains(maxItems.Message, `"filter" renamed to "filters" and type changed from "string" to "array"`) {
 		t.Fatalf("unexpected max-items-one message: %+v", maxItems)
 	}
+}
+
+func TestResolveCompareMetadataSourceMissingFileReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	deps := compareDeps{
+		downloadRepoFile: func(context.Context, string, string, string, string) ([]byte, error) {
+			return nil, pkg.ErrRepoFileNotFound
+		},
+		parseMetadata: normalize.ParseMetadata,
+	}
+
+	_, err := resolveCompareMetadataSource(context.Background(), deps, "old", "aws", "github://api.github.com/pulumi", "v1.0.0")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrCompareMetadataRequired)
+	assert.ErrorIs(t, err, pkg.ErrRepoFileNotFound)
+	assert.Contains(t, err.Error(), "compare old metadata required")
+}
+
+func TestResolveCompareMetadataSourceMissingPayloadReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	deps := compareDeps{
+		downloadRepoFile: func(context.Context, string, string, string, string) ([]byte, error) {
+			return []byte{}, nil
+		},
+		parseMetadata: normalize.ParseMetadata,
+	}
+
+	_, err := resolveCompareMetadataSource(context.Background(), deps, "new", "aws", "github://api.github.com/pulumi", "v2.0.0")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrCompareMetadataRequired)
+	assert.ErrorIs(t, err, normalize.ErrMetadataRequired)
+	assert.Contains(t, err.Error(), "compare new metadata required")
 }
 
 type errorWriter struct{}
