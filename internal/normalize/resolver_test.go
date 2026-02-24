@@ -25,11 +25,7 @@ func TestNewNormalizationContextStrictMetadataRequired(t *testing.T) {
 		_, err := NewNormalizationContext(metadata, nil)
 		require.Error(t, err)
 		require.True(t, errors.Is(err, ErrResolverStrictMetadataRequired))
-
-		var strictErr *StrictMetadataRequiredError
-		require.ErrorAs(t, err, &strictErr)
-		require.False(t, strictErr.MissingOld)
-		require.True(t, strictErr.MissingNew)
+		require.ErrorContains(t, err, "missing new metadata")
 	})
 
 	t.Run("missing both metadata", func(t *testing.T) {
@@ -37,12 +33,31 @@ func TestNewNormalizationContextStrictMetadataRequired(t *testing.T) {
 		_, err := NewNormalizationContext(nil, nil)
 		require.Error(t, err)
 		require.True(t, errors.Is(err, ErrResolverStrictMetadataRequired))
-
-		var strictErr *StrictMetadataRequiredError
-		require.ErrorAs(t, err, &strictErr)
-		require.True(t, strictErr.MissingOld)
-		require.True(t, strictErr.MissingNew)
+		require.ErrorContains(t, err, "missing old and new metadata")
 	})
+}
+
+func TestNewNormalizationContextValidatesMetadata(t *testing.T) {
+	t.Parallel()
+
+	valid := mustParseMetadataJSON(t, `{
+		"auto-aliasing": {
+			"resources": {},
+			"datasources": {}
+		}
+	}`)
+
+	invalid := &MetadataEnvelope{}
+
+	_, err := NewNormalizationContext(invalid, valid)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrMetadataRequired))
+	require.ErrorContains(t, err, "old metadata")
+
+	_, err = NewNormalizationContext(valid, invalid)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrMetadataRequired))
+	require.ErrorContains(t, err, "new metadata")
 }
 
 func TestNewNormalizationContextBuildsRemapAndFieldEvidence(t *testing.T) {

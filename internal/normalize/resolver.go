@@ -2,6 +2,7 @@ package normalize
 
 import (
 	"errors"
+	"fmt"
 )
 
 var (
@@ -9,29 +10,6 @@ var (
 	// proceed without both old and new metadata payloads.
 	ErrResolverStrictMetadataRequired = errors.New("resolver strict mode metadata required")
 )
-
-// StrictMetadataRequiredError reports which side is missing metadata in strict mode.
-type StrictMetadataRequiredError struct {
-	MissingOld bool
-	MissingNew bool
-}
-
-func (e *StrictMetadataRequiredError) Error() string {
-	switch {
-	case e.MissingOld && e.MissingNew:
-		return "resolver strict mode metadata required: missing old and new metadata"
-	case e.MissingOld:
-		return "resolver strict mode metadata required: missing old metadata"
-	case e.MissingNew:
-		return "resolver strict mode metadata required: missing new metadata"
-	default:
-		return "resolver strict mode metadata required"
-	}
-}
-
-func (e *StrictMetadataRequiredError) Unwrap() error {
-	return ErrResolverStrictMetadataRequired
-}
 
 // NormalizationContext bundles precomputed remap + field evidence used during
 // schema normalization.
@@ -44,14 +22,30 @@ type NormalizationContext struct {
 // must provide metadata.
 func NewNormalizationContext(oldMetadata, newMetadata *MetadataEnvelope) (*NormalizationContext, error) {
 	if oldMetadata == nil || newMetadata == nil {
-		return nil, &StrictMetadataRequiredError{
-			MissingOld: oldMetadata == nil,
-			MissingNew: newMetadata == nil,
-		}
+		return nil, fmt.Errorf("%w: %s", ErrResolverStrictMetadataRequired, missingMetadataLabel(oldMetadata == nil, newMetadata == nil))
+	}
+	if err := ValidateMetadata(oldMetadata); err != nil {
+		return nil, fmt.Errorf("old metadata: %w", err)
+	}
+	if err := ValidateMetadata(newMetadata); err != nil {
+		return nil, fmt.Errorf("new metadata: %w", err)
 	}
 
 	return &NormalizationContext{
 		tokenRemap:    BuildTokenRemap(oldMetadata, newMetadata),
 		fieldEvidence: BuildFieldHistoryEvidence(oldMetadata, newMetadata),
 	}, nil
+}
+
+func missingMetadataLabel(missingOld, missingNew bool) string {
+	switch {
+	case missingOld && missingNew:
+		return "missing old and new metadata"
+	case missingOld:
+		return "missing old metadata"
+	case missingNew:
+		return "missing new metadata"
+	default:
+		return "metadata required"
+	}
 }
