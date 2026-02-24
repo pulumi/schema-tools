@@ -32,120 +32,199 @@ func applyMaxItemsOneNormalization(
 	resourceIndex := canonicalTFTokenIndex(scopeResources, context.tokenRemap, oldMetadata, newMetadata)
 	functionIndex := canonicalTFTokenIndex(scopeDataSources, context.tokenRemap, oldMetadata, newMetadata)
 
-	for token, newResource := range normalizedNew.Resources {
-		oldResource, ok := oldSchema.Resources[token]
-		if !ok {
-			continue
-		}
-		tfToken, ok := resolveSchemaTokenTFToken(
-			scopeResources, token, context.tokenRemap, resourceIndex, oldMetadata, newMetadata,
-		)
-		if !ok {
-			continue
-		}
-		evidence := context.fieldEvidence.Resources[tfToken]
-		if len(evidence) == 0 {
-			continue
-		}
-
-		var resourceChanges []MaxItemsOneChange
-		newResource.InputProperties, resourceChanges = normalizePropertyMapByFieldEvidence(
+	for token := range normalizedNew.Resources {
+		changes = append(changes, applyMaxItemsOneResource(
 			oldSchema,
 			normalizedNew,
 			localTypeRefUseIndex,
-			scopeResources,
+			context,
+			resourceIndex,
+			oldMetadata,
+			newMetadata,
 			token,
-			"inputs",
-			oldResource.InputProperties,
-			newResource.InputProperties,
-			evidence,
-		)
-		if currentResource, ok := normalizedNew.Resources[token]; ok {
-			newResource.RequiredInputs = currentResource.RequiredInputs
-		}
-		changes = append(changes, resourceChanges...)
-
-		newResource.Properties, resourceChanges = normalizePropertyMapByFieldEvidence(
-			oldSchema,
-			normalizedNew,
-			localTypeRefUseIndex,
-			scopeResources,
-			token,
-			"properties",
-			oldResource.Properties,
-			newResource.Properties,
-			evidence,
-		)
-		if currentResource, ok := normalizedNew.Resources[token]; ok {
-			newResource.Required = currentResource.Required
-		}
-		changes = append(changes, resourceChanges...)
-
-		normalizedNew.Resources[token] = newResource
+		)...)
 	}
 
-	for token, newFunction := range normalizedNew.Functions {
-		oldFunction, ok := oldSchema.Functions[token]
-		if !ok {
-			continue
-		}
-		tfToken, ok := resolveSchemaTokenTFToken(
-			scopeDataSources, token, context.tokenRemap, functionIndex, oldMetadata, newMetadata,
-		)
-		if !ok {
-			continue
-		}
-		evidence := context.fieldEvidence.Datasources[tfToken]
-		if len(evidence) == 0 {
-			continue
-		}
-
-		if oldFunction.Inputs != nil && newFunction.Inputs != nil {
-			updated, functionChanges := normalizePropertyMapByFieldEvidence(
-				oldSchema,
-				normalizedNew,
-				localTypeRefUseIndex,
-				scopeDataSources,
-				token,
-				"inputs",
-				oldFunction.Inputs.Properties,
-				newFunction.Inputs.Properties,
-				evidence,
-			)
-			inputs := *newFunction.Inputs
-			inputs.Properties = updated
-			if currentFunction, ok := normalizedNew.Functions[token]; ok && currentFunction.Inputs != nil {
-				inputs.Required = currentFunction.Inputs.Required
-			}
-			newFunction.Inputs = &inputs
-			changes = append(changes, functionChanges...)
-		}
-
-		if oldFunction.Outputs != nil && newFunction.Outputs != nil {
-			updated, functionChanges := normalizePropertyMapByFieldEvidence(
-				oldSchema,
-				normalizedNew,
-				localTypeRefUseIndex,
-				scopeDataSources,
-				token,
-				"outputs",
-				oldFunction.Outputs.Properties,
-				newFunction.Outputs.Properties,
-				evidence,
-			)
-			outputs := *newFunction.Outputs
-			outputs.Properties = updated
-			if currentFunction, ok := normalizedNew.Functions[token]; ok && currentFunction.Outputs != nil {
-				outputs.Required = currentFunction.Outputs.Required
-			}
-			newFunction.Outputs = &outputs
-			changes = append(changes, functionChanges...)
-		}
-
-		normalizedNew.Functions[token] = newFunction
+	for token := range normalizedNew.Functions {
+		changes = append(changes, applyMaxItemsOneFunction(
+			oldSchema,
+			normalizedNew,
+			localTypeRefUseIndex,
+			context,
+			functionIndex,
+			oldMetadata,
+			newMetadata,
+			token,
+		)...)
 	}
 
 	return changes
+}
+
+func applyMaxItemsOneResource(
+	oldSchema schema.PackageSpec,
+	normalizedNew *schema.PackageSpec,
+	localTypeRefUseIndex map[string]int,
+	context *NormalizationContext,
+	resourceIndex map[string]string,
+	oldMetadata, newMetadata *MetadataEnvelope,
+	token string,
+) []MaxItemsOneChange {
+	oldResource, ok := oldSchema.Resources[token]
+	if !ok {
+		return nil
+	}
+	newResource, ok := normalizedNew.Resources[token]
+	if !ok {
+		return nil
+	}
+
+	tfToken, ok := resolveSchemaTokenTFToken(
+		scopeResources, token, context.tokenRemap, resourceIndex, oldMetadata, newMetadata,
+	)
+	if !ok {
+		return nil
+	}
+	evidence := context.fieldEvidence.Resources[tfToken]
+	if len(evidence) == 0 {
+		return nil
+	}
+
+	changes := []MaxItemsOneChange{}
+	newResource.InputProperties, changes = normalizePropertyMapByFieldEvidence(
+		oldSchema,
+		normalizedNew,
+		localTypeRefUseIndex,
+		scopeResources,
+		token,
+		"inputs",
+		oldResource.InputProperties,
+		newResource.InputProperties,
+		evidence,
+	)
+	if currentResource, ok := normalizedNew.Resources[token]; ok {
+		newResource.RequiredInputs = currentResource.RequiredInputs
+	}
+
+	var propertyChanges []MaxItemsOneChange
+	newResource.Properties, propertyChanges = normalizePropertyMapByFieldEvidence(
+		oldSchema,
+		normalizedNew,
+		localTypeRefUseIndex,
+		scopeResources,
+		token,
+		"properties",
+		oldResource.Properties,
+		newResource.Properties,
+		evidence,
+	)
+	if currentResource, ok := normalizedNew.Resources[token]; ok {
+		newResource.Required = currentResource.Required
+	}
+	changes = append(changes, propertyChanges...)
+
+	normalizedNew.Resources[token] = newResource
+	return changes
+}
+
+func applyMaxItemsOneFunction(
+	oldSchema schema.PackageSpec,
+	normalizedNew *schema.PackageSpec,
+	localTypeRefUseIndex map[string]int,
+	context *NormalizationContext,
+	functionIndex map[string]string,
+	oldMetadata, newMetadata *MetadataEnvelope,
+	token string,
+) []MaxItemsOneChange {
+	oldFunction, ok := oldSchema.Functions[token]
+	if !ok {
+		return nil
+	}
+	newFunction, ok := normalizedNew.Functions[token]
+	if !ok {
+		return nil
+	}
+
+	tfToken, ok := resolveSchemaTokenTFToken(
+		scopeDataSources, token, context.tokenRemap, functionIndex, oldMetadata, newMetadata,
+	)
+	if !ok {
+		return nil
+	}
+	evidence := context.fieldEvidence.Datasources[tfToken]
+	if len(evidence) == 0 {
+		return nil
+	}
+
+	changes := []MaxItemsOneChange{}
+	if oldFunction.Inputs != nil && newFunction.Inputs != nil {
+		updatedInputs, inputChanges := normalizeFunctionObjectProperties(
+			oldSchema,
+			normalizedNew,
+			localTypeRefUseIndex,
+			token,
+			"inputs",
+			oldFunction.Inputs,
+			newFunction.Inputs,
+			evidence,
+		)
+		newFunction.Inputs = updatedInputs
+		changes = append(changes, inputChanges...)
+	}
+	if oldFunction.Outputs != nil && newFunction.Outputs != nil {
+		updatedOutputs, outputChanges := normalizeFunctionObjectProperties(
+			oldSchema,
+			normalizedNew,
+			localTypeRefUseIndex,
+			token,
+			"outputs",
+			oldFunction.Outputs,
+			newFunction.Outputs,
+			evidence,
+		)
+		newFunction.Outputs = updatedOutputs
+		changes = append(changes, outputChanges...)
+	}
+
+	normalizedNew.Functions[token] = newFunction
+	return changes
+}
+
+func normalizeFunctionObjectProperties(
+	oldSchema schema.PackageSpec,
+	normalizedNew *schema.PackageSpec,
+	localTypeRefUseIndex map[string]int,
+	token, location string,
+	oldObject, newObject *schema.ObjectTypeSpec,
+	evidence map[string]FieldPathEvidence,
+) (*schema.ObjectTypeSpec, []MaxItemsOneChange) {
+	updatedProperties, changes := normalizePropertyMapByFieldEvidence(
+		oldSchema,
+		normalizedNew,
+		localTypeRefUseIndex,
+		scopeDataSources,
+		token,
+		location,
+		oldObject.Properties,
+		newObject.Properties,
+		evidence,
+	)
+
+	updatedObject := *newObject
+	updatedObject.Properties = updatedProperties
+	if currentFunction, ok := normalizedNew.Functions[token]; ok {
+		switch location {
+		case "inputs":
+			if currentFunction.Inputs != nil {
+				updatedObject.Required = currentFunction.Inputs.Required
+			}
+		case "outputs":
+			if currentFunction.Outputs != nil {
+				updatedObject.Required = currentFunction.Outputs.Required
+			}
+		}
+	}
+	return &updatedObject, changes
 }
 
 // normalizePropertyMapByFieldEvidence applies maxItemsOne rewrites for one
