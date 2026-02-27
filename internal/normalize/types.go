@@ -76,15 +76,15 @@ type FieldHistory struct {
 	Elem        *FieldHistory            `json:"elem,omitempty"`
 }
 
-// TokenLookupOutcome describes token lookup result state.
+// TokenLookupOutcome describes token/field/type lookup result state.
 type TokenLookupOutcome string
 
 const (
 	// TokenLookupOutcomeNone indicates there is no metadata evidence for a resolution.
 	TokenLookupOutcomeNone TokenLookupOutcome = "none"
-	// TokenLookupOutcomeResolved indicates one deterministic token was resolved.
+	// TokenLookupOutcomeResolved indicates one deterministic resolution was found.
 	TokenLookupOutcomeResolved TokenLookupOutcome = "resolved"
-	// TokenLookupOutcomeAmbiguous indicates multiple candidate tokens were found.
+	// TokenLookupOutcomeAmbiguous indicates candidates were not uniquely resolvable.
 	TokenLookupOutcomeAmbiguous TokenLookupOutcome = "ambiguous"
 )
 
@@ -92,6 +92,28 @@ const (
 type TokenLookupResult struct {
 	Outcome TokenLookupOutcome
 	Token   string
+	// Candidates is sorted for deterministic ambiguity handling.
+	Candidates []string
+}
+
+// FieldLookupResult is the result of a field-path lookup request.
+type FieldLookupResult struct {
+	Outcome TokenLookupOutcome
+	Field   string
+	// Transition is set for resolved exact-path matches.
+	Transition MaxItemsOneTransition
+	// Candidates is sorted for deterministic ambiguity handling.
+	Candidates []string
+}
+
+// EquivalentTypeChangeResult reports field lookup classification plus
+// maxItems-like array/single type equivalence.
+type EquivalentTypeChangeResult struct {
+	Outcome TokenLookupOutcome
+	// Equivalent is true only for resolved lookups with array<->single changes
+	// over the same base type.
+	Equivalent bool
+	Field      string
 	// Candidates is sorted for deterministic ambiguity handling.
 	Candidates []string
 }

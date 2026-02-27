@@ -1,0 +1,50 @@
+{
+  "old": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget": {
+          "current": "pkg:index/widget:Widget",
+          "fields": {
+            "filter": {
+              "maxItemsOne": true
+            }
+          }
+        }
+      }
+    }
+  },
+  "new": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget": {
+          "current": "pkg:index/widget:Widget",
+          "fields": {
+            "filter": {
+              "maxItemsOne": true
+            },
+            "filters": {
+              "maxItemsOne": false
+            }
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "resources": {
+      "pkg_widget": {
+        "filter": {
+          "old": true,
+          "new": true,
+          "transition": "unchanged"
+        },
+        "filters": {
+          "old": null,
+          "new": false,
+          "transition": "unknown"
+        }
+      }
+    },
+    "datasources": {}
+  }
+}
