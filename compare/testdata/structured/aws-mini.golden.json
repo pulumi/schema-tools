@@ -1,64 +1,32 @@
 {
   "summary": [
     {
-      "category": "deprecated-resource-alias",
-      "count": 1,
-      "entries": [
-        "Resources: \"aws:s3/bucketAclV2:BucketAclV2\" retained as deprecated alias; migrate to \"aws:s3/bucketAcl:BucketAcl\""
-      ]
-    },
-    {
-      "category": "max-items-one-changed",
-      "count": 10,
-      "entries": [
-        "Functions: \"aws:lb/getListenerRule:getListenerRule\": inputs: \"action[*].forward\" \"action[*].forward\" renamed to \"action[*].forwards\" and type changed from \"#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward\" to \"array\"",
-        "Resources: \"aws:eks/cluster:Cluster\": properties: \"certificateAuthorities\" \"certificateAuthorities\" renamed to \"certificateAuthority\" and type changed from \"array\" to \"#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\"",
-        "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\" \"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\"",
-        "Resources: \"aws:paymentcryptography/key:Key\": properties: \"keyAttributes\" \"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\"",
-        "Resources: \"aws:s3/bucket:Bucket\": inputs: \"loggings\" \"loggings\" renamed to \"logging\" and type changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\"",
-        "Resources: \"aws:s3/bucket:Bucket\": inputs: \"versionings\" \"versionings\" renamed to \"versioning\" and type changed from \"array\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\"",
-        "Resources: \"aws:s3/bucket:Bucket\": inputs: \"websites\" \"websites\" renamed to \"website\" and type changed from \"array\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\"",
-        "Resources: \"aws:s3/bucket:Bucket\": properties: \"loggings\" \"loggings\" renamed to \"logging\" and type changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\"",
-        "Resources: \"aws:s3/bucket:Bucket\": properties: \"versionings\" \"versionings\" renamed to \"versioning\" and type changed from \"array\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\"",
-        "Resources: \"aws:s3/bucket:Bucket\": properties: \"websites\" \"websites\" renamed to \"website\" and type changed from \"array\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
-      ]
-    },
-    {
       "category": "missing-input",
-      "count": 1,
-      "entries": [
-        "Resources: \"aws:eks/cluster:Cluster\": inputs: \"defaultAddonsToRemoves\" missing"
-      ]
+      "count": 1
     },
     {
       "category": "missing-output",
-      "count": 2,
-      "entries": [
-        "Resources: \"aws:eks/cluster:Cluster\": properties: \"certificateAuthority\" missing output \"certificateAuthority\"",
-        "Resources: \"aws:eks/cluster:Cluster\": properties: \"defaultAddonsToRemoves\" missing output \"defaultAddonsToRemoves\""
-      ]
+      "count": 1
     },
     {
       "category": "missing-resource",
-      "count": 1,
-      "entries": [
-        "Resources: \"aws:chime/voiceConnectorOrganization:VoiceConnectorOrganization\" missing"
-      ]
+      "count": 1
     },
     {
       "category": "optional-to-required",
-      "count": 2,
-      "entries": [
-        "Resources: \"aws:cur/reportDefinition:ReportDefinition\": required inputs: \"s3Prefix\" input has changed to Required",
-        "Types: \"aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption\": required: \"signInOptions\" property has changed to Required"
-      ]
+      "count": 2
     },
     {
       "category": "signature-changed",
-      "count": 1,
-      "entries": [
-        "Functions: \"aws:bedrock/getInferenceProfiles:getInferenceProfiles\" signature change (pulumi.InvokeOptions)-\u003eT =\u003e (Args, pulumi.InvokeOptions)-\u003eT"
-      ]
+      "count": 1
+    },
+    {
+      "category": "token-remapped",
+      "count": 1
+    },
+    {
+      "category": "type-changed",
+      "count": 12
     }
   ],
   "changes": [
@@ -69,7 +37,6 @@
       "kind": "missing-resource",
       "severity": "error",
       "breaking": true,
-      "source": "engine",
       "message": "missing"
     },
     {
@@ -80,7 +47,6 @@
       "kind": "optional-to-required",
       "severity": "error",
       "breaking": true,
-      "source": "engine",
       "message": "input has changed to Required"
     },
     {
@@ -91,7 +57,6 @@
       "kind": "missing-input",
       "severity": "warn",
       "breaking": true,
-      "source": "engine",
       "message": "missing"
     },
     {
@@ -99,22 +64,10 @@
       "token": "aws:eks/cluster:Cluster",
       "location": "properties",
       "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"certificateAuthorities\"",
-      "kind": "max-items-one-changed",
-      "severity": "error",
-      "breaking": true,
-      "source": "normalize",
-      "message": "\"certificateAuthorities\" renamed to \"certificateAuthority\" and type changed from \"array\" to \"#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\""
-    },
-    {
-      "scope": "resource",
-      "token": "aws:eks/cluster:Cluster",
-      "location": "properties",
-      "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"certificateAuthority\"",
-      "kind": "missing-output",
+      "kind": "type-changed",
       "severity": "warn",
       "breaking": true,
-      "source": "engine",
-      "message": "missing output \"certificateAuthority\""
+      "message": "renamed to \"certificateAuthority\" and type changed from \"array\u003c#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\u003e\" to \"#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\""
     },
     {
       "scope": "resource",
@@ -124,7 +77,6 @@
       "kind": "missing-output",
       "severity": "warn",
       "breaking": true,
-      "source": "engine",
       "message": "missing output \"defaultAddonsToRemoves\""
     },
     {
@@ -132,98 +84,89 @@
       "token": "aws:paymentcryptography/key:Key",
       "location": "inputs",
       "path": "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\"",
-      "kind": "max-items-one-changed",
-      "severity": "error",
+      "kind": "type-changed",
+      "severity": "warn",
       "breaking": true,
-      "source": "normalize",
-      "message": "\"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
+      "message": "type changed from \"array\u003c#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\u003e\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
     },
     {
       "scope": "resource",
       "token": "aws:paymentcryptography/key:Key",
       "location": "properties",
       "path": "Resources: \"aws:paymentcryptography/key:Key\": properties: \"keyAttributes\"",
-      "kind": "max-items-one-changed",
-      "severity": "error",
+      "kind": "type-changed",
+      "severity": "warn",
       "breaking": true,
-      "source": "normalize",
-      "message": "\"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
+      "message": "type changed from \"array\u003c#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\u003e\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
     },
     {
       "scope": "resource",
       "token": "aws:s3/bucket:Bucket",
       "location": "inputs",
       "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"loggings\"",
-      "kind": "max-items-one-changed",
-      "severity": "error",
+      "kind": "type-changed",
+      "severity": "warn",
       "breaking": true,
-      "source": "normalize",
-      "message": "\"loggings\" renamed to \"logging\" and type changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
+      "message": "renamed to \"logging\" and type changed from \"array\u003c#/types/aws:s3/BucketLogging:BucketLogging\u003e\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
     },
     {
       "scope": "resource",
       "token": "aws:s3/bucket:Bucket",
       "location": "inputs",
       "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"versionings\"",
-      "kind": "max-items-one-changed",
-      "severity": "error",
+      "kind": "type-changed",
+      "severity": "warn",
       "breaking": true,
-      "source": "normalize",
-      "message": "\"versionings\" renamed to \"versioning\" and type changed from \"array\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\""
+      "message": "renamed to \"versioning\" and type changed from \"array\u003c#/types/aws:s3/BucketVersioning:BucketVersioning\u003e\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\""
     },
     {
       "scope": "resource",
       "token": "aws:s3/bucket:Bucket",
       "location": "inputs",
       "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"websites\"",
-      "kind": "max-items-one-changed",
-      "severity": "error",
+      "kind": "type-changed",
+      "severity": "warn",
       "breaking": true,
-      "source": "normalize",
-      "message": "\"websites\" renamed to \"website\" and type changed from \"array\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
+      "message": "renamed to \"website\" and type changed from \"array\u003c#/types/aws:s3/BucketWebsite:BucketWebsite\u003e\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
     },
     {
       "scope": "resource",
       "token": "aws:s3/bucket:Bucket",
       "location": "properties",
       "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"loggings\"",
-      "kind": "max-items-one-changed",
-      "severity": "error",
+      "kind": "type-changed",
+      "severity": "warn",
       "breaking": true,
-      "source": "normalize",
-      "message": "\"loggings\" renamed to \"logging\" and type changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
+      "message": "renamed to \"logging\" and type changed from \"array\u003c#/types/aws:s3/BucketLogging:BucketLogging\u003e\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
     },
     {
       "scope": "resource",
       "token": "aws:s3/bucket:Bucket",
       "location": "properties",
       "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"versionings\"",
-      "kind": "max-items-one-changed",
-      "severity": "error",
+      "kind": "type-changed",
+      "severity": "warn",
       "breaking": true,
-      "source": "normalize",
-      "message": "\"versionings\" renamed to \"versioning\" and type changed from \"array\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\""
+      "message": "renamed to \"versioning\" and type changed from \"array\u003c#/types/aws:s3/BucketVersioning:BucketVersioning\u003e\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\""
     },
     {
       "scope": "resource",
       "token": "aws:s3/bucket:Bucket",
       "location": "properties",
       "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"websites\"",
-      "kind": "max-items-one-changed",
-      "severity": "error",
+      "kind": "type-changed",
+      "severity": "warn",
       "breaking": true,
-      "source": "normalize",
-      "message": "\"websites\" renamed to \"website\" and type changed from \"array\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
+      "message": "renamed to \"website\" and type changed from \"array\u003c#/types/aws:s3/BucketWebsite:BucketWebsite\u003e\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
     },
     {
       "scope": "resource",
       "token": "aws:s3/bucketAclV2:BucketAclV2",
       "path": "Resources: \"aws:s3/bucketAclV2:BucketAclV2\"",
-      "kind": "deprecated-resource-alias",
-      "severity": "info",
-      "breaking": false,
-      "source": "normalize",
-      "message": "retained as deprecated alias; migrate to \"aws:s3/bucketAcl:BucketAcl\""
+      "kind": "token-remapped",
+      "severity": "warn",
+      "breaking": true,
+      "message": "token deprecated: prefer \"aws:s3/bucketAcl:BucketAcl\" instead of \"aws:s3/bucketAclV2:BucketAclV2\""
     },
     {
       "scope": "function",
@@ -232,19 +175,37 @@
       "kind": "signature-changed",
       "severity": "error",
       "breaking": true,
-      "source": "engine",
       "message": "signature change (pulumi.InvokeOptions)-\u003eT =\u003e (Args, pulumi.InvokeOptions)-\u003eT"
     },
     {
-      "scope": "function",
-      "token": "aws:lb/getListenerRule:getListenerRule",
-      "location": "inputs",
-      "path": "Functions: \"aws:lb/getListenerRule:getListenerRule\": inputs: \"action[*].forward\"",
-      "kind": "max-items-one-changed",
-      "severity": "error",
+      "scope": "type",
+      "token": "aws:lb/GetListenerRuleAction:GetListenerRuleAction",
+      "location": "properties",
+      "path": "Types: \"aws:lb/GetListenerRuleAction:GetListenerRuleAction\": properties: \"forward\"",
+      "kind": "type-changed",
+      "severity": "warn",
       "breaking": true,
-      "source": "normalize",
-      "message": "\"action[*].forward\" renamed to \"action[*].forwards\" and type changed from \"#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward\" to \"array\""
+      "message": "renamed to \"forwards\" and type changed from \"#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward\" to \"array\u003c#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward\u003e\""
+    },
+    {
+      "scope": "type",
+      "token": "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
+      "location": "properties",
+      "path": "Types: \"aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\": properties: \"keyModesOfUse\"",
+      "kind": "type-changed",
+      "severity": "warn",
+      "breaking": true,
+      "message": "type changed from \"string\" to \"array\""
+    },
+    {
+      "scope": "type",
+      "token": "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
+      "location": "properties",
+      "path": "Types: \"aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\": properties: \"keyModesOfUse\": items",
+      "kind": "type-changed",
+      "severity": "warn",
+      "breaking": true,
+      "message": "had no type but now has \"string\""
     },
     {
       "scope": "type",
@@ -252,9 +213,8 @@
       "location": "required",
       "path": "Types: \"aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption\": required: \"signInOptions\"",
       "kind": "optional-to-required",
-      "severity": "error",
+      "severity": "warn",
       "breaking": true,
-      "source": "engine",
       "message": "property has changed to Required"
     }
   ],
@@ -269,7 +229,6 @@
             "kind": "missing-resource",
             "severity": "error",
             "breaking": true,
-            "source": "engine",
             "message": "missing"
           }
         ]
@@ -284,7 +243,6 @@
             "kind": "optional-to-required",
             "severity": "error",
             "breaking": true,
-            "source": "engine",
             "message": "input has changed to Required"
           }
         ]
@@ -299,7 +257,6 @@
             "kind": "missing-input",
             "severity": "warn",
             "breaking": true,
-            "source": "engine",
             "message": "missing"
           }
         ],
@@ -309,22 +266,10 @@
             "token": "aws:eks/cluster:Cluster",
             "location": "properties",
             "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"certificateAuthorities\"",
-            "kind": "max-items-one-changed",
-            "severity": "error",
-            "breaking": true,
-            "source": "normalize",
-            "message": "\"certificateAuthorities\" renamed to \"certificateAuthority\" and type changed from \"array\" to \"#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\""
-          },
-          {
-            "scope": "resource",
-            "token": "aws:eks/cluster:Cluster",
-            "location": "properties",
-            "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"certificateAuthority\"",
-            "kind": "missing-output",
+            "kind": "type-changed",
             "severity": "warn",
             "breaking": true,
-            "source": "engine",
-            "message": "missing output \"certificateAuthority\""
+            "message": "renamed to \"certificateAuthority\" and type changed from \"array\u003c#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\u003e\" to \"#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\""
           },
           {
             "scope": "resource",
@@ -334,7 +279,6 @@
             "kind": "missing-output",
             "severity": "warn",
             "breaking": true,
-            "source": "engine",
             "message": "missing output \"defaultAddonsToRemoves\""
           }
         ]
@@ -346,11 +290,10 @@
             "token": "aws:paymentcryptography/key:Key",
             "location": "inputs",
             "path": "Resources: \"aws:paymentcryptography/key:Key\": inputs: \"keyAttributes\"",
-            "kind": "max-items-one-changed",
-            "severity": "error",
+            "kind": "type-changed",
+            "severity": "warn",
             "breaking": true,
-            "source": "normalize",
-            "message": "\"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
+            "message": "type changed from \"array\u003c#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\u003e\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
           }
         ],
         "properties": [
@@ -359,11 +302,10 @@
             "token": "aws:paymentcryptography/key:Key",
             "location": "properties",
             "path": "Resources: \"aws:paymentcryptography/key:Key\": properties: \"keyAttributes\"",
-            "kind": "max-items-one-changed",
-            "severity": "error",
+            "kind": "type-changed",
+            "severity": "warn",
             "breaking": true,
-            "source": "normalize",
-            "message": "\"keyAttributes\" type changed from \"array\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
+            "message": "type changed from \"array\u003c#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\u003e\" to \"#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\""
           }
         ]
       },
@@ -374,33 +316,30 @@
             "token": "aws:s3/bucket:Bucket",
             "location": "inputs",
             "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"loggings\"",
-            "kind": "max-items-one-changed",
-            "severity": "error",
+            "kind": "type-changed",
+            "severity": "warn",
             "breaking": true,
-            "source": "normalize",
-            "message": "\"loggings\" renamed to \"logging\" and type changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
+            "message": "renamed to \"logging\" and type changed from \"array\u003c#/types/aws:s3/BucketLogging:BucketLogging\u003e\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
           },
           {
             "scope": "resource",
             "token": "aws:s3/bucket:Bucket",
             "location": "inputs",
             "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"versionings\"",
-            "kind": "max-items-one-changed",
-            "severity": "error",
+            "kind": "type-changed",
+            "severity": "warn",
             "breaking": true,
-            "source": "normalize",
-            "message": "\"versionings\" renamed to \"versioning\" and type changed from \"array\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\""
+            "message": "renamed to \"versioning\" and type changed from \"array\u003c#/types/aws:s3/BucketVersioning:BucketVersioning\u003e\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\""
           },
           {
             "scope": "resource",
             "token": "aws:s3/bucket:Bucket",
             "location": "inputs",
             "path": "Resources: \"aws:s3/bucket:Bucket\": inputs: \"websites\"",
-            "kind": "max-items-one-changed",
-            "severity": "error",
+            "kind": "type-changed",
+            "severity": "warn",
             "breaking": true,
-            "source": "normalize",
-            "message": "\"websites\" renamed to \"website\" and type changed from \"array\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
+            "message": "renamed to \"website\" and type changed from \"array\u003c#/types/aws:s3/BucketWebsite:BucketWebsite\u003e\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
           }
         ],
         "properties": [
@@ -409,33 +348,30 @@
             "token": "aws:s3/bucket:Bucket",
             "location": "properties",
             "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"loggings\"",
-            "kind": "max-items-one-changed",
-            "severity": "error",
+            "kind": "type-changed",
+            "severity": "warn",
             "breaking": true,
-            "source": "normalize",
-            "message": "\"loggings\" renamed to \"logging\" and type changed from \"array\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
+            "message": "renamed to \"logging\" and type changed from \"array\u003c#/types/aws:s3/BucketLogging:BucketLogging\u003e\" to \"#/types/aws:s3/BucketLogging:BucketLogging\""
           },
           {
             "scope": "resource",
             "token": "aws:s3/bucket:Bucket",
             "location": "properties",
             "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"versionings\"",
-            "kind": "max-items-one-changed",
-            "severity": "error",
+            "kind": "type-changed",
+            "severity": "warn",
             "breaking": true,
-            "source": "normalize",
-            "message": "\"versionings\" renamed to \"versioning\" and type changed from \"array\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\""
+            "message": "renamed to \"versioning\" and type changed from \"array\u003c#/types/aws:s3/BucketVersioning:BucketVersioning\u003e\" to \"#/types/aws:s3/BucketVersioning:BucketVersioning\""
           },
           {
             "scope": "resource",
             "token": "aws:s3/bucket:Bucket",
             "location": "properties",
             "path": "Resources: \"aws:s3/bucket:Bucket\": properties: \"websites\"",
-            "kind": "max-items-one-changed",
-            "severity": "error",
+            "kind": "type-changed",
+            "severity": "warn",
             "breaking": true,
-            "source": "normalize",
-            "message": "\"websites\" renamed to \"website\" and type changed from \"array\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
+            "message": "renamed to \"website\" and type changed from \"array\u003c#/types/aws:s3/BucketWebsite:BucketWebsite\u003e\" to \"#/types/aws:s3/BucketWebsite:BucketWebsite\""
           }
         ]
       },
@@ -445,11 +381,10 @@
             "scope": "resource",
             "token": "aws:s3/bucketAclV2:BucketAclV2",
             "path": "Resources: \"aws:s3/bucketAclV2:BucketAclV2\"",
-            "kind": "deprecated-resource-alias",
-            "severity": "info",
-            "breaking": false,
-            "source": "normalize",
-            "message": "retained as deprecated alias; migrate to \"aws:s3/bucketAcl:BucketAcl\""
+            "kind": "token-remapped",
+            "severity": "warn",
+            "breaking": true,
+            "message": "token deprecated: prefer \"aws:s3/bucketAcl:BucketAcl\" instead of \"aws:s3/bucketAclV2:BucketAclV2\""
           }
         ]
       }
@@ -464,28 +399,50 @@
             "kind": "signature-changed",
             "severity": "error",
             "breaking": true,
-            "source": "engine",
             "message": "signature change (pulumi.InvokeOptions)-\u003eT =\u003e (Args, pulumi.InvokeOptions)-\u003eT"
-          }
-        ]
-      },
-      "aws:lb/getListenerRule:getListenerRule": {
-        "inputs": [
-          {
-            "scope": "function",
-            "token": "aws:lb/getListenerRule:getListenerRule",
-            "location": "inputs",
-            "path": "Functions: \"aws:lb/getListenerRule:getListenerRule\": inputs: \"action[*].forward\"",
-            "kind": "max-items-one-changed",
-            "severity": "error",
-            "breaking": true,
-            "source": "normalize",
-            "message": "\"action[*].forward\" renamed to \"action[*].forwards\" and type changed from \"#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward\" to \"array\""
           }
         ]
       }
     },
     "types": {
+      "aws:lb/GetListenerRuleAction:GetListenerRuleAction": {
+        "properties": [
+          {
+            "scope": "type",
+            "token": "aws:lb/GetListenerRuleAction:GetListenerRuleAction",
+            "location": "properties",
+            "path": "Types: \"aws:lb/GetListenerRuleAction:GetListenerRuleAction\": properties: \"forward\"",
+            "kind": "type-changed",
+            "severity": "warn",
+            "breaking": true,
+            "message": "renamed to \"forwards\" and type changed from \"#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward\" to \"array\u003c#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward\u003e\""
+          }
+        ]
+      },
+      "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes": {
+        "properties": [
+          {
+            "scope": "type",
+            "token": "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
+            "location": "properties",
+            "path": "Types: \"aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\": properties: \"keyModesOfUse\"",
+            "kind": "type-changed",
+            "severity": "warn",
+            "breaking": true,
+            "message": "type changed from \"string\" to \"array\""
+          },
+          {
+            "scope": "type",
+            "token": "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
+            "location": "properties",
+            "path": "Types: \"aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes\": properties: \"keyModesOfUse\": items",
+            "kind": "type-changed",
+            "severity": "warn",
+            "breaking": true,
+            "message": "had no type but now has \"string\""
+          }
+        ]
+      },
       "aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption": {
         "required": [
           {
@@ -494,9 +451,8 @@
             "location": "required",
             "path": "Types: \"aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption\": required: \"signInOptions\"",
             "kind": "optional-to-required",
-            "severity": "error",
+            "severity": "warn",
             "breaking": true,
-            "source": "engine",
             "message": "property has changed to Required"
           }
         ]

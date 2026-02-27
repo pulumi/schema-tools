@@ -20,13 +20,13 @@ func TestSchemasRealAWSExamplesExpectedNormalization(t *testing.T) {
 		OldMetadata: oldMetadata,
 		NewMetadata: newMetadata,
 	})
-	var out bytes.Buffer
-	if err := RenderText(&out, result); err != nil {
-		t.Fatalf("RenderText failed: %v", err)
+	var renderedOut bytes.Buffer
+	if err := RenderText(&renderedOut, result); err != nil {
+		t.Fatalf("render text output: %v", err)
 	}
-	rendered := out.String()
+	rendered := renderedOut.String()
 
-	assertContains(t, rendered, `"loggings" renamed to "logging" and type changed from "array" to "#/types/aws:s3/BucketLogging:BucketLogging"`)
+	assertContains(t, rendered, `"loggings" renamed to "logging" and type changed from "array<#/types/aws:s3/BucketLogging:BucketLogging>" to "#/types/aws:s3/BucketLogging:BucketLogging"`)
 	assertContains(t, rendered, `"containers" type changed from "#/types/aws:batch/JobDefinitionEksPropertiesPodPropertiesContainers:JobDefinitionEksPropertiesPodPropertiesContainers" to "array<#/types/aws:batch/JobDefinitionEksPropertiesPodPropertiesContainer:JobDefinitionEksPropertiesPodPropertiesContainer>"`)
 	assertContains(t, rendered, `"forward" renamed to "forwards" and type changed from "#/types/aws:lb/getListenerRuleActionForward:getListenerRuleActionForward" to "array<#/types/aws:lb/getListenerRuleActionForward:getListenerRuleActionForward>"`)
 	assertContains(t, rendered, `"stickiness" renamed to "stickinesses" and type changed from "#/types/aws:lb/getListenerRuleActionForwardStickiness:getListenerRuleActionForwardStickiness" to "array<#/types/aws:lb/getListenerRuleActionForwardStickiness:getListenerRuleActionForwardStickiness>"`)

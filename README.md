@@ -147,7 +147,12 @@ To emit machine-readable JSON output:
 $ schema-tools compare -p docker -o v3.0.0 -n v4.0.0 --json
 {
   "summary": [ {"category": "...", "count": 1} ],
-  "breaking_changes": [...],
+  "changes": [...],
+  "grouped": {
+    "resources": {},
+    "functions": {},
+    "types": {}
+  },
   "new_resources": [...],
   "new_functions": [...]
 }
@@ -161,7 +166,7 @@ Summary by category:
 - missing-input: 1
 ```
 
-To emit summary-only JSON (includes summary entries):
+To emit summary-only JSON (category counts only):
 
 ```shell
 $ schema-tools compare -p docker -o v3.0.0 -n v4.0.0 --json --summary
@@ -169,14 +174,22 @@ $ schema-tools compare -p docker -o v3.0.0 -n v4.0.0 --json --summary
   "summary": [
     {
       "category": "missing-input",
-      "count": 1,
-      "entries": [
-        "Functions: \"docker:index/getNetwork:getNetwork\": inputs: \"id\" missing input \"id\""
-      ]
+      "count": 1
     }
   ]
 }
 ```
+
+### Compare V2 Lookup-First Invariants
+
+The compare pipeline uses one-pass, lookup-first normalization during change generation:
+
+- Token remap lookups call `ResolveToken` / `ResolveNewToken` directly per compare decision.
+- Field and type-equivalence lookups resolve directly from metadata at call time.
+- No constructor service or prebuilt lookup map is required before compare starts.
+- Decisions are source-evidence-gated and must remain deterministic.
+- Lookup outcomes are explicit: `none`, `resolved`, or `ambiguous`.
+- Command rendering does not inject synthetic normalization diagnostics or rewrite emitted lines post hoc.
 
 ## Squeeze
 

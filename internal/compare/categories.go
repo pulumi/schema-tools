@@ -26,14 +26,21 @@ func formatName(provider, s string) string {
 	return strings.ReplaceAll(strings.TrimPrefix(s, fmt.Sprintf("%s:", provider)), ":", ".")
 }
 
-func kindSeverity(kind ChangeKind) Severity {
+func kindSeverity(kind ChangeKind, path []string) Severity {
 	switch kind {
 	case ChangeKindMissingResource, ChangeKindMissingFunction, ChangeKindMissingType, ChangeKindSignatureChanged:
 		return SeverityDanger
 	case ChangeKindMissingInput, ChangeKindMissingOutput, ChangeKindMissingProperty, ChangeKindTypeChanged:
 		return SeverityWarn
-	case ChangeKindOptionalToRequired, ChangeKindRequiredToOptional, ChangeKindNewResource, ChangeKindNewFunction:
+	case ChangeKindOptionalToRequired:
+		if isInputRequiredPath(path) {
+			return SeverityDanger
+		}
+		return SeverityWarn
+	case ChangeKindRequiredToOptional, ChangeKindNewResource, ChangeKindNewFunction:
 		return SeverityInfo
+	case ChangeKindTokenRemapped:
+		return SeverityWarn
 	}
 	panic("unsupported change kind severity mapping")
 }
@@ -42,9 +49,11 @@ func kindBreaking(kind ChangeKind) bool {
 	switch kind {
 	case ChangeKindNewResource, ChangeKindNewFunction:
 		return false
+	case ChangeKindRequiredToOptional:
+		return false
 	case ChangeKindMissingResource, ChangeKindMissingFunction, ChangeKindMissingType,
 		ChangeKindMissingInput, ChangeKindMissingOutput, ChangeKindMissingProperty,
-		ChangeKindTypeChanged, ChangeKindOptionalToRequired, ChangeKindRequiredToOptional,
+		ChangeKindTypeChanged, ChangeKindOptionalToRequired, ChangeKindTokenRemapped,
 		ChangeKindSignatureChanged:
 		return true
 	}
@@ -57,8 +66,15 @@ func newChange(category, name string, path []string, kind ChangeKind, descriptio
 		Name:        name,
 		Path:        path,
 		Kind:        kind,
-		Severity:    kindSeverity(kind),
+		Severity:    kindSeverity(kind, path),
 		Breaking:    kindBreaking(kind),
 		Description: description,
 	}
+}
+
+func isInputRequiredPath(path []string) bool {
+	if len(path) == 0 {
+		return false
+	}
+	return path[0] == "required inputs" || (len(path) >= 2 && path[0] == "inputs" && path[1] == "required")
 }

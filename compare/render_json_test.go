@@ -218,7 +218,7 @@ func TestJSONOutputFixtureGoldens(t *testing.T) {
 	assertGoldenJSON(t, NewSummaryJSONOutput(result), "compare-summary.golden.json")
 }
 
-func TestNewFullJSONOutputIncludesNonBreakingTokenRemaps(t *testing.T) {
+func TestNewFullJSONOutputIncludesBreakingTokenRemaps(t *testing.T) {
 	oldSchema := schema.PackageSpec{
 		Resources: map[string]schema.ResourceSpec{
 			"my-pkg:index/v1:Widget": {},
@@ -240,8 +240,8 @@ func TestNewFullJSONOutputIncludesNonBreakingTokenRemaps(t *testing.T) {
 	if got, want := payload.Changes[0].Kind, "token-remapped"; got != want {
 		t.Fatalf("expected remap kind %q, got %q", want, got)
 	}
-	if payload.Changes[0].Breaking {
-		t.Fatalf("expected non-breaking remap change, got %#v", payload.Changes[0])
+	if !payload.Changes[0].Breaking {
+		t.Fatalf("expected breaking remap change, got %#v", payload.Changes[0])
 	}
 
 	foundSummary := false

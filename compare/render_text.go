@@ -26,7 +26,7 @@ func RenderText(out io.Writer, result Result) error {
 	if err := write("### Does the PR have any schema changes?\n\n"); err != nil {
 		return err
 	}
-	displayed := breakingOnlyChanges(result.Changes)
+	displayed := result.displayedBreakingChanges()
 	remaps := tokenRemapOnlyChanges(result.Changes)
 	breakingCount := len(displayed)
 	totalBreakingCount := result.totalBreakingCount(breakingCount)
@@ -111,6 +111,13 @@ func (result Result) totalBreakingCount(displayed int) int {
 	return displayed
 }
 
+func (result Result) displayedBreakingChanges() []Change {
+	if result.displayed != nil {
+		return sortStructuredChanges(ensureChangeSlice(result.displayed))
+	}
+	return breakingOnlyChanges(result.Changes)
+}
+
 func breakingOnlyChanges(changes []Change) []Change {
 	if len(changes) == 0 {
 		return []Change{}
@@ -130,7 +137,7 @@ func tokenRemapOnlyChanges(changes []Change) []Change {
 	}
 	out := make([]Change, 0, len(changes))
 	for _, change := range changes {
-		if change.Kind == "token-remapped" {
+		if change.Kind == "token-remapped" && !change.Breaking {
 			out = append(out, change)
 		}
 	}

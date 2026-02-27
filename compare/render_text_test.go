@@ -231,11 +231,11 @@ func TestRenderTextResolvedTokenRemapShowsGuidance(t *testing.T) {
 		t.Fatalf("RenderText failed: %v", err)
 	}
 	text := out.String()
-	if !strings.Contains(text, "Looking good! No breaking changes found.") {
-		t.Fatalf("expected no-breaking message for remap-only changes, got:\n%s", text)
+	if !strings.Contains(text, "Found 1 breaking change:") {
+		t.Fatalf("expected remap to be counted as a breaking change, got:\n%s", text)
 	}
-	if !strings.Contains(text, "#### Token remaps") {
-		t.Fatalf("expected token remap section, got:\n%s", text)
+	if strings.Contains(text, "#### Token remaps") {
+		t.Fatalf("did not expect separate token remap section for breaking remaps, got:\n%s", text)
 	}
 	if !strings.Contains(text, `token remapped: migrate from "my-pkg:index/v1:Widget" to "my-pkg:index/v2:Widget"`) {
 		t.Fatalf("expected remap guidance in text output, got:\n%s", text)
@@ -329,7 +329,7 @@ func TestRenderTextEmitsEquivalentMaxItemsTypeRefRenameInOnePass(t *testing.T) {
 	if strings.Contains(text, "Looking good! No breaking changes found.") {
 		t.Fatalf("expected visible type change for type-ref rename maxItems transition, got:\n%s", text)
 	}
-	if !strings.Contains(text, `type changed from "array" to "#/types/my-pkg:index/v2:WidgetSpec"`) {
+	if !strings.Contains(text, `type changed from "array<#/types/my-pkg:index/v1:WidgetSpec>" to "#/types/my-pkg:index/v2:WidgetSpec"`) {
 		t.Fatalf("expected type changed diagnostic for type-ref rename maxItems transition:\n%s", text)
 	}
 }

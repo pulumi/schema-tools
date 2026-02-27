@@ -61,7 +61,6 @@ func TestSchemasBuildsSummaryWithEntriesAndPaths(t *testing.T) {
 		"missing-function",
 		"missing-resource",
 		"optional-to-required",
-		"required-to-optional",
 		"type-changed",
 	}
 	gotCategories := make([]string, 0, len(result.Summary))
@@ -99,7 +98,7 @@ func TestSchemasFixtureBuildsStructuredGroupedProjection(t *testing.T) {
 	oldSchema, newSchema := mustLoadFixtureSchemas(t)
 	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1})
 
-	if got, want := len(result.Changes), 8; got != want {
+	if got, want := len(result.Changes), 6; got != want {
 		t.Fatalf("unexpected change count: got %d want %d", got, want)
 	}
 	if got := countGroupedLeaves(result.Grouped); got != len(result.Changes) {
@@ -140,26 +139,29 @@ func TestSchemasBreakingChangesIncludeDirectAndNestedForSameFunction(t *testing.
 	}
 }
 
-func TestSchemasMaxChangesLimitsStructuredChanges(t *testing.T) {
+func TestSchemasMaxChangesDoesNotLimitStructuredChanges(t *testing.T) {
 	oldSchema, newSchema := mustLoadFixtureSchemas(t)
 	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: 1})
 
-	if got, want := len(result.Changes), 1; got != want {
-		t.Fatalf("unexpected capped change count: got %d want %d", got, want)
+	if got, want := len(result.Changes), 6; got != want {
+		t.Fatalf("unexpected structured change count: got %d want %d", got, want)
 	}
 	if got := countGroupedLeaves(result.Grouped); got != len(result.Changes) {
-		t.Fatalf("grouped leaves must match capped change count: got %d want %d", got, len(result.Changes))
+		t.Fatalf("grouped leaves must match structured change count: got %d want %d", got, len(result.Changes))
 	}
 }
 
-func TestSchemasMaxChangesZeroTracksTotalBreakingCount(t *testing.T) {
+func TestSchemasMaxChangesZeroTracksTotalBreakingCountWithoutTruncatingStructured(t *testing.T) {
 	oldSchema, newSchema := mustLoadFixtureSchemas(t)
 	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: 0})
 
-	if len(result.Changes) != 0 || !isGroupedEmpty(result.Grouped) {
-		t.Fatalf("expected no displayed breaking lines with max-changes=0, got changes=%v grouped=%v", result.Changes, result.Grouped)
+	if got, want := len(result.Changes), 6; got != want {
+		t.Fatalf("expected full structured changes with max-changes=0, got %d want %d", got, want)
 	}
-	if got, want := result.totalBreaking, 8; got != want {
+	if isGroupedEmpty(result.Grouped) {
+		t.Fatalf("expected grouped structured changes with max-changes=0")
+	}
+	if got, want := result.totalBreaking, 6; got != want {
 		t.Fatalf("unexpected total breaking count: got %d want %d", got, want)
 	}
 }
@@ -261,8 +263,8 @@ func TestSchemasSuppressesAddRemoveForResolvedResourceTokenRemap(t *testing.T) {
 	newMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index/v2:Widget","past":[{"name":"my-pkg:index/v1:Widget","inCodegen":false,"majorVersion":1}]}}}}`)
 
 	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1, OldMetadata: oldMetadata, NewMetadata: newMetadata})
-	if got := result.totalBreaking; got != 0 {
-		t.Fatalf("expected no breaking changes, got total=%d details=%v", got, result.Changes)
+	if got := result.totalBreaking; got != 1 {
+		t.Fatalf("expected one breaking remap change, got total=%d details=%v", got, result.Changes)
 	}
 	if got, want := result.Summary, []SummaryItem{{Category: "token-remapped", Count: 1, Entries: []string{`Resources: "my-pkg:index/v1:Widget" token remapped: migrate from "my-pkg:index/v1:Widget" to "my-pkg:index/v2:Widget"`}}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected summary: got %#v want %#v", got, want)
@@ -273,8 +275,8 @@ func TestSchemasSuppressesAddRemoveForResolvedResourceTokenRemap(t *testing.T) {
 			Token:    "my-pkg:index/v1:Widget",
 			Path:     `Resources: "my-pkg:index/v1:Widget"`,
 			Kind:     "token-remapped",
-			Severity: SeverityInfo,
-			Breaking: false,
+			Severity: SeverityWarn,
+			Breaking: true,
 			Message:  `token remapped: migrate from "my-pkg:index/v1:Widget" to "my-pkg:index/v2:Widget"`,
 		},
 	}; !reflect.DeepEqual(got, want) {
@@ -314,7 +316,7 @@ func TestSchemasRetainedInCodegenAliasStillListsCanonicalNewResource(t *testing.
 		t.Fatalf("expected exactly one canonical new resource, got %d (%#v)", got, result.NewResources)
 	}
 	if got, want := result.Summary, []SummaryItem{{Category: "token-remapped", Count: 1, Entries: []string{`Resources: "aws:s3/bucketAclV2:BucketAclV2" token deprecated: prefer "aws:s3/bucketAcl:BucketAcl" instead of "aws:s3/bucketAclV2:BucketAclV2"`}}}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("expected non-breaking remap summary signal, got %#v", got)
+		t.Fatalf("expected remap summary signal, got %#v", got)
 	}
 	if got, want := result.Changes, []Change{
 		{
@@ -322,8 +324,8 @@ func TestSchemasRetainedInCodegenAliasStillListsCanonicalNewResource(t *testing.
 			Token:    "aws:s3/bucketAclV2:BucketAclV2",
 			Path:     `Resources: "aws:s3/bucketAclV2:BucketAclV2"`,
 			Kind:     "token-remapped",
-			Severity: SeverityInfo,
-			Breaking: false,
+			Severity: SeverityWarn,
+			Breaking: true,
 			Message:  `token deprecated: prefer "aws:s3/bucketAcl:BucketAcl" instead of "aws:s3/bucketAclV2:BucketAclV2"`,
 		},
 	}; !reflect.DeepEqual(got, want) {
@@ -357,7 +359,7 @@ func TestSchemasRetainedInCodegenAliasStillListsCanonicalNewFunction(t *testing.
 		t.Fatalf("expected NewFunctions to contain s3/getBucketAcl.getBucketAcl, got %#v", got)
 	}
 	if got, want := result.Summary, []SummaryItem{{Category: "token-remapped", Count: 1, Entries: []string{`Functions: "aws:s3/getBucketAclV2:getBucketAclV2" token deprecated: prefer "aws:s3/getBucketAcl:getBucketAcl" instead of "aws:s3/getBucketAclV2:getBucketAclV2"`}}}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("expected non-breaking remap summary signal, got %#v", got)
+		t.Fatalf("expected remap summary signal, got %#v", got)
 	}
 	if got, want := result.Changes, []Change{
 		{
@@ -365,8 +367,8 @@ func TestSchemasRetainedInCodegenAliasStillListsCanonicalNewFunction(t *testing.
 			Token:    "aws:s3/getBucketAclV2:getBucketAclV2",
 			Path:     `Functions: "aws:s3/getBucketAclV2:getBucketAclV2"`,
 			Kind:     "token-remapped",
-			Severity: SeverityInfo,
-			Breaking: false,
+			Severity: SeverityWarn,
+			Breaking: true,
 			Message:  `token deprecated: prefer "aws:s3/getBucketAcl:getBucketAcl" instead of "aws:s3/getBucketAclV2:getBucketAclV2"`,
 		},
 	}; !reflect.DeepEqual(got, want) {
@@ -389,8 +391,8 @@ func TestSchemasSuppressesAddRemoveForResolvedFunctionTokenRemap(t *testing.T) {
 	newMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"datasources":{"tf_widget":{"current":"my-pkg:index/v2:getWidget","past":[{"name":"my-pkg:index/v1:getWidget","inCodegen":false,"majorVersion":1}]}}}}`)
 
 	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1, OldMetadata: oldMetadata, NewMetadata: newMetadata})
-	if got := result.totalBreaking; got != 0 {
-		t.Fatalf("expected no breaking changes, got total=%d details=%v", got, result.Changes)
+	if got := result.totalBreaking; got != 1 {
+		t.Fatalf("expected one breaking remap change, got total=%d details=%v", got, result.Changes)
 	}
 	if got, want := result.Summary, []SummaryItem{{Category: "token-remapped", Count: 1, Entries: []string{`Functions: "my-pkg:index/v1:getWidget" token remapped: migrate from "my-pkg:index/v1:getWidget" to "my-pkg:index/v2:getWidget"`}}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected summary: got %#v want %#v", got, want)
@@ -401,8 +403,8 @@ func TestSchemasSuppressesAddRemoveForResolvedFunctionTokenRemap(t *testing.T) {
 			Token:    "my-pkg:index/v1:getWidget",
 			Path:     `Functions: "my-pkg:index/v1:getWidget"`,
 			Kind:     "token-remapped",
-			Severity: SeverityInfo,
-			Breaking: false,
+			Severity: SeverityWarn,
+			Breaking: true,
 			Message:  `token remapped: migrate from "my-pkg:index/v1:getWidget" to "my-pkg:index/v2:getWidget"`,
 		},
 	}; !reflect.DeepEqual(got, want) {
@@ -535,7 +537,6 @@ func expectedFixtureSummaryCounts() map[string]int {
 		"missing-function":     1,
 		"missing-resource":     1,
 		"optional-to-required": 3,
-		"required-to-optional": 2,
 		"type-changed":         1,
 	}
 }
@@ -552,10 +553,6 @@ func expectedFixtureSummaryEntries() map[string][]string {
 			`Functions: "my-pkg:index:MyFunction": inputs: required: "arg" input has changed to Required`,
 			`Resources: "my-pkg:index:MyResource": required inputs: "count" input has changed to Required`,
 			`Types: "my-pkg:index:MyType": required: "count" property has changed to Required`,
-		},
-		"required-to-optional": {
-			`Resources: "my-pkg:index:MyResource": required: "value" property is no longer Required`,
-			`Types: "my-pkg:index:MyType": required: "field" property is no longer Required`,
 		},
 		"type-changed": {
 			`Types: "my-pkg:index:MyType": properties: "field" type changed from "string" to "integer"`,
