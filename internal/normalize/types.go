@@ -75,3 +75,23 @@ type FieldHistory struct {
 	Fields      map[string]*FieldHistory `json:"fields,omitempty"`
 	Elem        *FieldHistory            `json:"elem,omitempty"`
 }
+
+// TokenLookupOutcome describes token lookup result state.
+type TokenLookupOutcome string
+
+const (
+	// TokenLookupOutcomeNone indicates there is no metadata evidence for a resolution.
+	TokenLookupOutcomeNone TokenLookupOutcome = "none"
+	// TokenLookupOutcomeResolved indicates one deterministic token was resolved.
+	TokenLookupOutcomeResolved TokenLookupOutcome = "resolved"
+	// TokenLookupOutcomeAmbiguous indicates multiple candidate tokens were found.
+	TokenLookupOutcomeAmbiguous TokenLookupOutcome = "ambiguous"
+)
+
+// TokenLookupResult is the result of a token lookup request.
+type TokenLookupResult struct {
+	Outcome TokenLookupOutcome
+	Token   string
+	// Candidates is sorted for deterministic ambiguity handling.
+	Candidates []string
+}

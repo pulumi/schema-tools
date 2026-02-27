@@ -1,0 +1,87 @@
+{
+  "old": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget_a": {
+          "current": "pkg:index/widgetA:WidgetA",
+          "past": [
+            {
+              "name": "pkg:index/widgetLegacy:Widget",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        },
+        "pkg_widget_b": {
+          "current": "pkg:index/widgetB:WidgetB",
+          "past": [
+            {
+              "name": "pkg:index/widgetLegacy:Widget",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        }
+      }
+    }
+  },
+  "new": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget_a": {
+          "current": "pkg:index/widgetA_v2:WidgetA",
+          "past": [
+            {
+              "name": "pkg:index/widgetA:WidgetA",
+              "inCodegen": true,
+              "majorVersion": 1
+            },
+            {
+              "name": "pkg:index/widgetLegacy:Widget",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        },
+        "pkg_widget_b": {
+          "current": "pkg:index/widgetB_v2:WidgetB",
+          "past": [
+            {
+              "name": "pkg:index/widgetB:WidgetB",
+              "inCodegen": true,
+              "majorVersion": 1
+            },
+            {
+              "name": "pkg:index/widgetLegacy:Widget",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "legacy token is ambiguous",
+      "direction": "old",
+      "scope": "resources",
+      "token": "pkg:index/widgetLegacy:Widget",
+      "outcome": "ambiguous",
+      "resolved": "",
+      "candidates": [
+        "pkg:index/widgetA_v2:WidgetA",
+        "pkg:index/widgetB_v2:WidgetB"
+      ]
+    },
+    {
+      "name": "specific token remains deterministic",
+      "direction": "old",
+      "scope": "resources",
+      "token": "pkg:index/widgetA:WidgetA",
+      "outcome": "resolved",
+      "resolved": "pkg:index/widgetA_v2:WidgetA",
+      "candidates": []
+    }
+  ]
+}

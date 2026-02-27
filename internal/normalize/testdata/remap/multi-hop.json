@@ -1,0 +1,68 @@
+{
+  "old": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget": {
+          "current": "pkg:index/widgetV2:Widget",
+          "past": [
+            {
+              "name": "pkg:index/widget:Widget",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        }
+      }
+    }
+  },
+  "new": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget": {
+          "current": "pkg:index/widgetV3:Widget",
+          "past": [
+            {
+              "name": "pkg:index/widgetV2:Widget",
+              "inCodegen": true,
+              "majorVersion": 2
+            },
+            {
+              "name": "pkg:index/widget:Widget",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "old alias resolves across two hops",
+      "direction": "old",
+      "scope": "resources",
+      "token": "pkg:index/widget:Widget",
+      "outcome": "resolved",
+      "resolved": "pkg:index/widgetV3:Widget",
+      "candidates": []
+    },
+    {
+      "name": "old current resolves across two hops",
+      "direction": "old",
+      "scope": "resources",
+      "token": "pkg:index/widgetV2:Widget",
+      "outcome": "resolved",
+      "resolved": "pkg:index/widgetV3:Widget",
+      "candidates": []
+    },
+    {
+      "name": "new current resolves to old current",
+      "direction": "new",
+      "scope": "resources",
+      "token": "pkg:index/widgetV3:Widget",
+      "outcome": "resolved",
+      "resolved": "pkg:index/widgetV2:Widget",
+      "candidates": []
+    }
+  ]
+}
