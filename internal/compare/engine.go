@@ -64,7 +64,7 @@ func buildChanges(provider string, oldSchema, newSchema schema.PackageSpec, oldM
 				changes = append(changes, newChange(resourcesCategory, resName, []string{"inputs", propName}, ChangeKindMissingInput, "missing"))
 				continue
 			}
-			appendTypeChanges(&changes, resourcesCategory, resName, []string{"inputs", propName}, &prop.TypeSpec, &newProp.TypeSpec)
+			appendTypeChanges(&changes, resourcesCategory, resName, []string{"inputs", propName}, &prop.TypeSpec, &newProp.TypeSpec, oldMetadata, newMetadata)
 		}
 
 		for _, propName := range sortedMapKeys(res.Properties) {
@@ -74,7 +74,7 @@ func buildChanges(provider string, oldSchema, newSchema schema.PackageSpec, oldM
 				changes = append(changes, newChange(resourcesCategory, resName, []string{"properties", propName}, ChangeKindMissingOutput, fmt.Sprintf("missing output %q", propName)))
 				continue
 			}
-			appendTypeChanges(&changes, resourcesCategory, resName, []string{"properties", propName}, &prop.TypeSpec, &newProp.TypeSpec)
+			appendTypeChanges(&changes, resourcesCategory, resName, []string{"properties", propName}, &prop.TypeSpec, &newProp.TypeSpec, oldMetadata, newMetadata)
 		}
 
 		oldRequiredInputs := set.FromSlice(res.RequiredInputs)
@@ -139,7 +139,7 @@ func buildChanges(provider string, oldSchema, newSchema schema.PackageSpec, oldM
 					changes = append(changes, newChange(functionsCategory, funcName, []string{"inputs", propName}, ChangeKindMissingInput, fmt.Sprintf("missing input %q", propName)))
 					continue
 				}
-				appendTypeChanges(&changes, functionsCategory, funcName, []string{"inputs", propName}, &prop.TypeSpec, &newProp.TypeSpec)
+				appendTypeChanges(&changes, functionsCategory, funcName, []string{"inputs", propName}, &prop.TypeSpec, &newProp.TypeSpec, oldMetadata, newMetadata)
 			}
 			if newFunc.Inputs != nil {
 				oldRequired := set.FromSlice(f.Inputs.Required)
@@ -179,7 +179,7 @@ func buildChanges(provider string, oldSchema, newSchema schema.PackageSpec, oldM
 					changes = append(changes, newChange(functionsCategory, funcName, []string{"outputs", propName}, ChangeKindMissingOutput, "missing output"))
 					continue
 				}
-				appendTypeChanges(&changes, functionsCategory, funcName, []string{"outputs", propName}, &prop.TypeSpec, &newProp.TypeSpec)
+				appendTypeChanges(&changes, functionsCategory, funcName, []string{"outputs", propName}, &prop.TypeSpec, &newProp.TypeSpec, oldMetadata, newMetadata)
 			}
 			var newRequired set.Set[string]
 			if newFunc.Outputs != nil {
@@ -233,7 +233,7 @@ func buildChanges(provider string, oldSchema, newSchema schema.PackageSpec, oldM
 				changes = append(changes, newChange(typesCategory, typName, []string{"properties", propName}, ChangeKindMissingProperty, "missing"))
 				continue
 			}
-			appendTypeChanges(&changes, typesCategory, typName, []string{"properties", propName}, &prop.TypeSpec, &newProp.TypeSpec)
+			appendTypeChanges(&changes, typesCategory, typName, []string{"properties", propName}, &prop.TypeSpec, &newProp.TypeSpec, nil, nil)
 		}
 
 		newRequired := set.FromSlice(newTyp.Required)
@@ -254,7 +254,7 @@ func buildChanges(provider string, oldSchema, newSchema schema.PackageSpec, oldM
 	return changes, newResources, newFunctions
 }
 
-func appendTypeChanges(changes *[]Change, category, name string, path []string, old, new *schema.TypeSpec) {
+func appendTypeChanges(changes *[]Change, category, name string, path []string, old, new *schema.TypeSpec, oldMetadata, newMetadata *normalize.MetadataEnvelope) {
 	switch {
 	case old == nil && new == nil:
 		return
@@ -274,12 +274,119 @@ func appendTypeChanges(changes *[]Change, category, name string, path []string, 
 	if new.Ref != "" {
 		newType = new.Ref
 	}
+	suppressedAsEquivalentNormalization := false
 	if oldType != newType {
-		*changes = append(*changes, newChange(category, name, path, ChangeKindTypeChanged, fmt.Sprintf("type changed from %q to %q", oldType, newType)))
+		if isEquivalentTypeNormalization(category, name, path, old, new, oldMetadata, newMetadata) {
+			suppressedAsEquivalentNormalization = true
+		} else {
+			*changes = append(*changes, newChange(category, name, path, ChangeKindTypeChanged, fmt.Sprintf("type changed from %q to %q", oldType, newType)))
+		}
+	}
+	if suppressedAsEquivalentNormalization {
+		return
 	}
 
-	appendTypeChanges(changes, category, name, append(slices.Clone(path), "items"), old.Items, new.Items)
-	appendTypeChanges(changes, category, name, append(slices.Clone(path), "additional properties"), old.AdditionalProperties, new.AdditionalProperties)
+	appendTypeChanges(changes, category, name, append(slices.Clone(path), "items"), old.Items, new.Items, oldMetadata, newMetadata)
+	appendTypeChanges(changes, category, name, append(slices.Clone(path), "additional properties"), old.AdditionalProperties, new.AdditionalProperties, oldMetadata, newMetadata)
+}
+
+// isEquivalentTypeNormalization reports whether a type difference is an expected
+// maxItems-like normalization transition for resource/function fields.
+func isEquivalentTypeNormalization(
+	category, token string,
+	path []string,
+	old, new *schema.TypeSpec,
+	oldMetadata, newMetadata *normalize.MetadataEnvelope,
+) bool {
+	scope, field, ok := scopeAndFieldPath(category, path)
+	if !ok {
+		return false
+	}
+	result := normalize.ResolveEquivalentTypeChange(
+		oldMetadata,
+		newMetadata,
+		scope,
+		token,
+		field,
+		typeLookupText(old),
+		typeLookupText(new),
+	)
+	return result.Outcome == normalize.TokenLookupOutcomeResolved && result.Equivalent
+}
+
+// scopeAndFieldPath converts a typed change path into a normalize lookup scope
+// and field path.
+//
+// Example:
+//
+//	scope, field, ok := scopeAndFieldPath(resourcesCategory, []string{"inputs", "list", "items"})
+//	// scope == "resources", field == "list[*]", ok == true
+func scopeAndFieldPath(category string, path []string) (string, string, bool) {
+	if len(path) < 2 {
+		return "", "", false
+	}
+	if path[0] != "inputs" && path[0] != "outputs" && path[0] != "properties" {
+		return "", "", false
+	}
+
+	var scope string
+	switch category {
+	case resourcesCategory:
+		scope = scopeResources
+	case functionsCategory:
+		scope = scopeDatasources
+	default:
+		return "", "", false
+	}
+
+	field := path[1]
+	if field == "" {
+		return "", "", false
+	}
+	for _, segment := range path[2:] {
+		switch segment {
+		case "items":
+			field += "[*]"
+		default:
+			return "", "", false
+		}
+	}
+
+	return scope, field, true
+}
+
+// typeLookupText converts a TypeSpec into normalized cardinality text suitable
+// for equivalent-type lookup classification.
+//
+// Example:
+//
+//	oldText := typeLookupText(&schema.TypeSpec{Type: "array", Items: &schema.TypeSpec{Type: "string"}})
+//	// oldText == "array<string>"
+func typeLookupText(spec *schema.TypeSpec) string {
+	if spec == nil {
+		return ""
+	}
+	if spec.Ref != "" {
+		return spec.Ref
+	}
+	if spec.Type == "array" {
+		if spec.Items == nil {
+			return "array"
+		}
+		itemType := typeLookupText(spec.Items)
+		if itemType == "" {
+			return "array"
+		}
+		return fmt.Sprintf("array<%s>", itemType)
+	}
+	if spec.Type == "object" && spec.AdditionalProperties != nil {
+		valueType := typeLookupText(spec.AdditionalProperties)
+		if valueType == "" {
+			return "map"
+		}
+		return fmt.Sprintf("map<%s>", valueType)
+	}
+	return spec.Type
 }
 
 func sortChanges(changes []Change) {

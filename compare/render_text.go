@@ -104,6 +104,23 @@ func RenderText(out io.Writer, result Result) error {
 	return nil
 }
 
+func breakingChangeEntryCount(lines []string) int {
+	count := 0
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if isBreakingDiagnosticLine(trimmed) {
+			count++
+		}
+	}
+	return count
+}
+
+func isBreakingDiagnosticLine(line string) bool {
+	return strings.HasPrefix(line, "- `") || strings.HasPrefix(line, "#### `")
+}
 func (result Result) totalBreakingCount(displayed int) int {
 	if result.totalBreaking > displayed {
 		return result.totalBreaking
