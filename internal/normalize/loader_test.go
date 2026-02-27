@@ -99,6 +99,35 @@ func TestValidateMetadataVersionUnsupported(t *testing.T) {
 	require.ErrorIs(t, err, ErrMetadataVersionUnsupported)
 }
 
+func TestParseMetadataValidatesTypesScope(t *testing.T) {
+	t.Parallel()
+
+	metadata, err := ParseMetadata([]byte(`{
+		"auto-aliasing": {
+			"types": {
+				"pkg_widget_spec": {
+					"current": "pkg:index/v2:WidgetSpec",
+					"past": [{"name":"pkg:index/v1:WidgetSpec","inCodegen":false,"majorVersion":1}]
+				}
+			}
+		}
+	}`))
+	require.NoError(t, err)
+	require.NotNil(t, metadata.AutoAliasing.Types["pkg_widget_spec"])
+
+	_, err = ParseMetadata([]byte(`{
+		"auto-aliasing": {
+			"types": {
+				"pkg_widget_spec": {
+					"current": ""
+				}
+			}
+		}
+	}`))
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrMetadataInvalid)
+}
+
 func TestMetadataFixtureParity(t *testing.T) {
 	t.Parallel()
 

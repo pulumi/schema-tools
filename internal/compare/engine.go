@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pulumi/inflector"
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 
 	"github.com/pulumi/schema-tools/internal/normalize"
@@ -61,6 +62,10 @@ func buildChanges(provider string, oldSchema, newSchema schema.PackageSpec, oldM
 			prop := res.InputProperties[propName]
 			newProp, ok := newRes.InputProperties[propName]
 			if !ok {
+				if description, ok := renamedPropertyTypeChangeDescription(propName, &prop.TypeSpec, newRes.InputProperties); ok {
+					changes = append(changes, newChange(resourcesCategory, resName, []string{"inputs", propName}, ChangeKindTypeChanged, description))
+					continue
+				}
 				changes = append(changes, newChange(resourcesCategory, resName, []string{"inputs", propName}, ChangeKindMissingInput, "missing"))
 				continue
 			}
@@ -71,6 +76,10 @@ func buildChanges(provider string, oldSchema, newSchema schema.PackageSpec, oldM
 			prop := res.Properties[propName]
 			newProp, ok := newRes.Properties[propName]
 			if !ok {
+				if description, ok := renamedPropertyTypeChangeDescription(propName, &prop.TypeSpec, newRes.Properties); ok {
+					changes = append(changes, newChange(resourcesCategory, resName, []string{"properties", propName}, ChangeKindTypeChanged, description))
+					continue
+				}
 				changes = append(changes, newChange(resourcesCategory, resName, []string{"properties", propName}, ChangeKindMissingOutput, fmt.Sprintf("missing output %q", propName)))
 				continue
 			}
@@ -136,6 +145,10 @@ func buildChanges(provider string, oldSchema, newSchema schema.PackageSpec, oldM
 				}
 				newProp, ok := newFunc.Inputs.Properties[propName]
 				if !ok {
+					if description, renamed := renamedPropertyTypeChangeDescription(propName, &prop.TypeSpec, newFunc.Inputs.Properties); renamed {
+						changes = append(changes, newChange(functionsCategory, funcName, []string{"inputs", propName}, ChangeKindTypeChanged, description))
+						continue
+					}
 					changes = append(changes, newChange(functionsCategory, funcName, []string{"inputs", propName}, ChangeKindMissingInput, fmt.Sprintf("missing input %q", propName)))
 					continue
 				}
@@ -176,6 +189,10 @@ func buildChanges(provider string, oldSchema, newSchema schema.PackageSpec, oldM
 				}
 				newProp, ok := newFunc.Outputs.Properties[propName]
 				if !ok {
+					if description, renamed := renamedPropertyTypeChangeDescription(propName, &prop.TypeSpec, newFunc.Outputs.Properties); renamed {
+						changes = append(changes, newChange(functionsCategory, funcName, []string{"outputs", propName}, ChangeKindTypeChanged, description))
+						continue
+					}
 					changes = append(changes, newChange(functionsCategory, funcName, []string{"outputs", propName}, ChangeKindMissingOutput, "missing output"))
 					continue
 				}
@@ -230,6 +247,10 @@ func buildChanges(provider string, oldSchema, newSchema schema.PackageSpec, oldM
 			prop := typ.Properties[propName]
 			newProp, ok := newTyp.Properties[propName]
 			if !ok {
+				if description, renamed := renamedPropertyTypeChangeDescription(propName, &prop.TypeSpec, newTyp.Properties); renamed {
+					changes = append(changes, newChange(typesCategory, typName, []string{"properties", propName}, ChangeKindTypeChanged, description))
+					continue
+				}
 				changes = append(changes, newChange(typesCategory, typName, []string{"properties", propName}, ChangeKindMissingProperty, "missing"))
 				continue
 			}
@@ -266,6 +287,11 @@ func appendTypeChanges(changes *[]Change, category, name string, path []string, 
 		return
 	}
 
+	if oldTypeText, newTypeText, ok := refArrayBoundaryTypeChangeText(old, new); ok {
+		*changes = append(*changes, newChange(category, name, path, ChangeKindTypeChanged, fmt.Sprintf("type changed from %q to %q", oldTypeText, newTypeText)))
+		return
+	}
+
 	oldType := old.Type
 	if old.Ref != "" {
 		oldType = old.Ref
@@ -274,25 +300,111 @@ func appendTypeChanges(changes *[]Change, category, name string, path []string, 
 	if new.Ref != "" {
 		newType = new.Ref
 	}
-	suppressedAsEquivalentNormalization := false
 	if oldType != newType {
-		if isEquivalentTypeNormalization(category, name, path, old, new, oldMetadata, newMetadata) {
-			suppressedAsEquivalentNormalization = true
-		} else {
-			*changes = append(*changes, newChange(category, name, path, ChangeKindTypeChanged, fmt.Sprintf("type changed from %q to %q", oldType, newType)))
+		*changes = append(*changes, newChange(category, name, path, ChangeKindTypeChanged, fmt.Sprintf("type changed from %q to %q", oldType, newType)))
+		if isMaxItemsEquivalentTransition(category, name, path, old, new, oldMetadata, newMetadata) {
+			return
 		}
-	}
-	if suppressedAsEquivalentNormalization {
-		return
 	}
 
 	appendTypeChanges(changes, category, name, append(slices.Clone(path), "items"), old.Items, new.Items, oldMetadata, newMetadata)
 	appendTypeChanges(changes, category, name, append(slices.Clone(path), "additional properties"), old.AdditionalProperties, new.AdditionalProperties, oldMetadata, newMetadata)
 }
 
-// isEquivalentTypeNormalization reports whether a type difference is an expected
-// maxItems-like normalization transition for resource/function fields.
-func isEquivalentTypeNormalization(
+// renamedPropertyTypeChangeDescription detects simple singular/plural property
+// renames and formats a combined rename+type-change message.
+//
+// Example:
+// old property map: {"loggings": array<#/types/.../BucketLogging>}
+// new property map: {"logging": #/types/.../BucketLogging}
+// result: `renamed to "logging" and type changed from "array" to "#/types/.../BucketLogging"`
+func renamedPropertyTypeChangeDescription(oldName string, oldType *schema.TypeSpec, newProps map[string]schema.PropertySpec) (string, bool) {
+	if oldType == nil {
+		return "", false
+	}
+	for _, candidate := range renameCandidates(oldName) {
+		newProp, ok := newProps[candidate]
+		if !ok || candidate == oldName {
+			continue
+		}
+		oldTypeText, newTypeText, ok := refArrayBoundaryTypeChangeText(oldType, &newProp.TypeSpec)
+		if !ok {
+			continue
+		}
+		return fmt.Sprintf("renamed to %q and type changed from %q to %q", candidate, oldTypeText, newTypeText), true
+	}
+	return "", false
+}
+
+// renameCandidates returns deterministic singular/plural name alternatives used
+// when exact property lookup misses.
+//
+// Example:
+// input: "forwards"
+// output: ["forward", "forwards"]
+func renameCandidates(name string) []string {
+	candidates := []string{singularizeName(name), pluralizeName(name)}
+	out := make([]string, 0, len(candidates))
+	seen := map[string]struct{}{}
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		if _, ok := seen[candidate]; ok {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		out = append(out, candidate)
+	}
+	return out
+}
+
+// singularizeName converts one identifier to its singular form using Pulumi's
+// inflector rules.
+func singularizeName(name string) string {
+	if name == "" {
+		return ""
+	}
+	return inflector.Singularize(name)
+}
+
+// pluralizeName converts one identifier to its plural form using Pulumi's
+// inflector rules.
+func pluralizeName(name string) string {
+	if name == "" {
+		return ""
+	}
+	return inflector.Pluralize(name)
+}
+
+// refArrayBoundaryTypeChangeText normalizes specific ref/array<ref> transitions
+// into one before/after text pair so callers can emit a single diagnostic.
+//
+// Examples:
+//   - old: #/types/pkg:index/Foo:Foo
+//     new: array<#/types/pkg:index/Foo:Foo>
+//     out: ("#/types/pkg:index/Foo:Foo", "array<#/types/pkg:index/Foo:Foo>")
+//   - old: array<#/types/pkg:index/Foos:Foos>
+//     new: #/types/pkg:index/Foo:Foo
+//     out: ("array", "#/types/pkg:index/Foo:Foo")
+func refArrayBoundaryTypeChangeText(old, new *schema.TypeSpec) (string, string, bool) {
+	if old == nil || new == nil {
+		return "", "", false
+	}
+
+	switch {
+	case old.Ref != "" && new.Type == "array" && new.Items != nil && new.Items.Ref != "":
+		return old.Ref, typeLookupText(new), true
+	case old.Type == "array" && old.Items != nil && old.Items.Ref != "" && new.Ref != "":
+		return "array", new.Ref, true
+	default:
+		return "", "", false
+	}
+}
+
+// isMaxItemsEquivalentTransition reports whether old/new types represent a
+// metadata-backed maxItems-like transition for resource/function fields.
+func isMaxItemsEquivalentTransition(
 	category, token string,
 	path []string,
 	old, new *schema.TypeSpec,
@@ -355,8 +467,8 @@ func scopeAndFieldPath(category string, path []string) (string, string, bool) {
 	return scope, field, true
 }
 
-// typeLookupText converts a TypeSpec into normalized cardinality text suitable
-// for equivalent-type lookup classification.
+// typeLookupText converts a TypeSpec into normalized text for compare
+// diagnostics and metadata equivalence checks.
 //
 // Example:
 //

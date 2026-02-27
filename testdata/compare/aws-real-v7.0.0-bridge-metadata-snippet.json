@@ -1,0 +1,74 @@
+{
+  "auto-aliasing": {
+    "version": 1,
+    "resources": {
+      "aws_s3_bucket": {
+        "current": "aws:s3/bucket:Bucket",
+        "past": [
+          {
+            "name": "aws:s3/bucketV2:BucketV2",
+            "inCodegen": true,
+            "majorVersion": 6
+          }
+        ],
+        "majorVersion": 7,
+        "fields": {
+          "logging": {
+            "maxItemsOne": true
+          }
+        }
+      },
+      "aws_batch_job_definition": {
+        "current": "aws:batch/jobDefinition:JobDefinition",
+        "majorVersion": 7,
+        "fields": {
+          "eks_properties": {
+            "maxItemsOne": true,
+            "elem": {
+              "fields": {
+                "pod_properties": {
+                  "maxItemsOne": true,
+                  "elem": {
+                    "fields": {
+                      "containers": {
+                        "maxItemsOne": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "datasources": {
+      "aws_lb_listener_rule": {
+        "current": "aws:lb/getListenerRule:getListenerRule",
+        "majorVersion": 7,
+        "fields": {
+          "action": {
+            "maxItemsOne": false,
+            "elem": {
+              "fields": {
+                "forward": {
+                  "maxItemsOne": false,
+                  "elem": {
+                    "fields": {
+                      "stickiness": {
+                        "maxItemsOne": false
+                      },
+                      "target_group": {
+                        "maxItemsOne": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

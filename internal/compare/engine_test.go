@@ -3,6 +3,7 @@ package compare
 import (
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
@@ -634,6 +635,316 @@ func TestAnalyzeMarksNoneTokenLookupOnMissingFunction(t *testing.T) {
 		},
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected no-evidence function lookup changes: got %#v want %#v", got, want)
+	}
+}
+
+func TestAnalyzeEmitsKeyAttributesArrayToRefWithMaxItemsTransition(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"aws:paymentcryptography/key:Key": {
+				InputProperties: map[string]schema.PropertySpec{
+					"keyAttributes": {
+						TypeSpec: schema.TypeSpec{
+							Type: "array",
+							Items: &schema.TypeSpec{
+								Ref: "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
+							},
+						},
+					},
+				},
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"keyAttributes": {
+							TypeSpec: schema.TypeSpec{
+								Type: "array",
+								Items: &schema.TypeSpec{
+									Ref: "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"aws:paymentcryptography/key:Key": {
+				InputProperties: map[string]schema.PropertySpec{
+					"keyAttributes": {
+						TypeSpec: schema.TypeSpec{
+							Ref: "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
+						},
+					},
+				},
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"keyAttributes": {
+							TypeSpec: schema.TypeSpec{
+								Ref: "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	oldMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"resources":{"aws_paymentcryptography_key":{"current":"aws:paymentcryptography/key:Key","fields":{"key_attributes":{"maxItemsOne":false}}}}}}`)
+	newMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"resources":{"aws_paymentcryptography_key":{"current":"aws:paymentcryptography/key:Key","fields":{"key_attributes":{"maxItemsOne":true}}}}}}`)
+
+	report := Analyze("aws", oldSchema, newSchema, oldMetadata, newMetadata)
+
+	wantDescription := `type changed from "array" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"`
+	matches := []Change{}
+	for _, change := range report.Changes {
+		if change.Category != resourcesCategory || change.Name != "aws:paymentcryptography/key:Key" {
+			continue
+		}
+		if change.Kind != ChangeKindTypeChanged || change.Description != wantDescription {
+			continue
+		}
+		matches = append(matches, change)
+	}
+	if len(matches) != 2 {
+		t.Fatalf("expected exactly 2 keyAttributes type changes, got %d: %#v", len(matches), matches)
+	}
+	wantPaths := map[string]struct{}{
+		"inputs.keyAttributes":     {},
+		"properties.keyAttributes": {},
+	}
+	for _, change := range matches {
+		key := strings.Join(change.Path, ".")
+		if _, ok := wantPaths[key]; !ok {
+			t.Fatalf("unexpected keyAttributes match path %q in %#v", key, matches)
+		}
+		delete(wantPaths, key)
+	}
+	if len(wantPaths) != 0 {
+		missing := make([]string, 0, len(wantPaths))
+		for key := range wantPaths {
+			missing = append(missing, key)
+		}
+		slices.Sort(missing)
+		t.Fatalf("missing expected keyAttributes paths %v in %#v", missing, matches)
+	}
+}
+
+func TestAnalyzeEmitsSingleTypeChangeForEquivalentMaxItemsTransition(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:Widget": {
+				InputProperties: map[string]schema.PropertySpec{
+					"list": {TypeSpec: schema.TypeSpec{Type: "array", Items: &schema.TypeSpec{Type: "string"}}},
+				},
+			},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:Widget": {
+				InputProperties: map[string]schema.PropertySpec{
+					"list": {TypeSpec: schema.TypeSpec{Type: "string"}},
+				},
+			},
+		},
+	}
+	oldMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index:Widget","fields":{"list":{"maxItemsOne":true}}}}}}`)
+	newMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index:Widget","fields":{"list":{"maxItemsOne":false}}}}}}`)
+
+	report := Analyze("my-pkg", oldSchema, newSchema, oldMetadata, newMetadata)
+
+	matches := []Change{}
+	for _, change := range report.Changes {
+		if change.Category == resourcesCategory &&
+			change.Name == "my-pkg:index:Widget" &&
+			change.Kind == ChangeKindTypeChanged &&
+			reflect.DeepEqual(change.Path, []string{"inputs", "list"}) {
+			matches = append(matches, change)
+		}
+	}
+	if len(matches) != 1 {
+		t.Fatalf("expected exactly one type change for maxItems transition, got %#v", report.Changes)
+	}
+	if matches[0].Description != `type changed from "array" to "string"` {
+		t.Fatalf("unexpected maxItems type change description: %q", matches[0].Description)
+	}
+}
+
+func TestAnalyzeEmitsTypeChangeForSameRefRefToArrayWithMaxItemsTransition(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"aws:paymentcryptography/key:Key": {
+				InputProperties: map[string]schema.PropertySpec{
+					"keyAttributes": {
+						TypeSpec: schema.TypeSpec{
+							Ref: "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
+						},
+					},
+				},
+			},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"aws:paymentcryptography/key:Key": {
+				InputProperties: map[string]schema.PropertySpec{
+					"keyAttributes": {
+						TypeSpec: schema.TypeSpec{
+							Type: "array",
+							Items: &schema.TypeSpec{
+								Ref: "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	oldMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"resources":{"aws_paymentcryptography_key":{"current":"aws:paymentcryptography/key:Key","fields":{"key_attributes":{"maxItemsOne":true}}}}}}`)
+	newMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"resources":{"aws_paymentcryptography_key":{"current":"aws:paymentcryptography/key:Key","fields":{"key_attributes":{"maxItemsOne":false}}}}}}`)
+
+	report := Analyze("aws", oldSchema, newSchema, oldMetadata, newMetadata)
+	wantDescription := `type changed from "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes" to "array<#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes>"`
+	found := false
+	for _, change := range report.Changes {
+		if change.Category == resourcesCategory &&
+			change.Name == "aws:paymentcryptography/key:Key" &&
+			change.Kind == ChangeKindTypeChanged &&
+			reflect.DeepEqual(change.Path, []string{"inputs", "keyAttributes"}) &&
+			change.Description == wantDescription {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected same-ref ref->array maxItems type change to be emitted, got %#v", report.Changes)
+	}
+}
+
+func TestAnalyzeEmitsFunctionTypeChangeForSameRefArrayToRefWithMaxItemsTransition(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Functions: map[string]schema.FunctionSpec{
+			"aws:paymentcryptography/getKey:getKey": {
+				Inputs: &schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"keyAttributes": {
+							TypeSpec: schema.TypeSpec{
+								Type: "array",
+								Items: &schema.TypeSpec{
+									Ref: "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Functions: map[string]schema.FunctionSpec{
+			"aws:paymentcryptography/getKey:getKey": {
+				Inputs: &schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{
+						"keyAttributes": {
+							TypeSpec: schema.TypeSpec{
+								Ref: "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	oldMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"datasources":{"aws_paymentcryptography_get_key":{"current":"aws:paymentcryptography/getKey:getKey","fields":{"key_attributes":{"maxItemsOne":false}}}}}}`)
+	newMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"datasources":{"aws_paymentcryptography_get_key":{"current":"aws:paymentcryptography/getKey:getKey","fields":{"key_attributes":{"maxItemsOne":true}}}}}}`)
+
+	report := Analyze("aws", oldSchema, newSchema, oldMetadata, newMetadata)
+	wantDescription := `type changed from "array" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"`
+	found := false
+	for _, change := range report.Changes {
+		if change.Category == functionsCategory &&
+			change.Name == "aws:paymentcryptography/getKey:getKey" &&
+			change.Kind == ChangeKindTypeChanged &&
+			reflect.DeepEqual(change.Path, []string{"inputs", "keyAttributes"}) &&
+			change.Description == wantDescription {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected function same-ref array->ref maxItems transition to be emitted, got %#v", report.Changes)
+	}
+}
+
+func TestAnalyzeEmitsTypeChangeForResolvedTypeRefRenameWithMaxItemsTransition(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:Widget": {
+				InputProperties: map[string]schema.PropertySpec{
+					"list": {
+						TypeSpec: schema.TypeSpec{
+							Type:  "array",
+							Items: &schema.TypeSpec{Ref: "#/types/my-pkg:index/v1:WidgetSpec"},
+						},
+					},
+				},
+			},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:Widget": {
+				InputProperties: map[string]schema.PropertySpec{
+					"list": {
+						TypeSpec: schema.TypeSpec{
+							Ref: "#/types/my-pkg:index/v2:WidgetSpec",
+						},
+					},
+				},
+			},
+		},
+	}
+	oldMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index:Widget","fields":{"list":{"maxItemsOne":true}}}},"types":{"tf_widget_spec":{"current":"my-pkg:index/v1:WidgetSpec"}}}}`)
+	newMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index:Widget","fields":{"list":{"maxItemsOne":false}}}},"types":{"tf_widget_spec":{"current":"my-pkg:index/v2:WidgetSpec","past":[{"name":"my-pkg:index/v1:WidgetSpec","inCodegen":false,"majorVersion":1}]}}}}`)
+
+	report := Analyze("my-pkg", oldSchema, newSchema, oldMetadata, newMetadata)
+	wantDescription := `type changed from "array" to "#/types/my-pkg:index/v2:WidgetSpec"`
+	found := false
+	for _, change := range report.Changes {
+		if change.Category == resourcesCategory &&
+			change.Name == "my-pkg:index:Widget" &&
+			change.Kind == ChangeKindTypeChanged &&
+			reflect.DeepEqual(change.Path, []string{"inputs", "list"}) &&
+			change.Description == wantDescription {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected type-change diagnostic for resolved type-ref rename maxItems transition, got %#v", report.Changes)
+	}
+}
+
+func TestRefArrayBoundaryTypeChangeTextIgnoresRefTokenEquivalence(t *testing.T) {
+	t.Parallel()
+
+	old := &schema.TypeSpec{Ref: "#/types/my-pkg:index:Alpha"}
+	newType := &schema.TypeSpec{
+		Type:  "array",
+		Items: &schema.TypeSpec{Ref: "#/types/my-pkg:index:Beta"},
+	}
+	oldText, newText, ok := refArrayBoundaryTypeChangeText(old, newType)
+	if !ok {
+		t.Fatalf("expected boundary type change match")
+	}
+	if oldText != "#/types/my-pkg:index:Alpha" {
+		t.Fatalf("unexpected old type text: %q", oldText)
+	}
+	if newText != "array<#/types/my-pkg:index:Beta>" {
+		t.Fatalf("unexpected new type text: %q", newText)
 	}
 }
 

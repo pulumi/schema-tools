@@ -19,10 +19,10 @@ func TestFlattenFieldHistoryDeterministicPaths(t *testing.T) {
 	require.NotNil(t, entry)
 
 	flat := FlattenFieldHistory(entry.Fields)
-	require.Equal(t, []string{"host_image", "host_image[*]", "host_image[*].component", "tags"}, collectBoolPaths(flat))
+	require.Equal(t, []string{"host_image", "host_image[\"*\"]", "host_image[\"*\"].component", "tags"}, collectBoolPaths(flat))
 	require.Equal(t, true, mustBool(t, flat["host_image"]))
-	require.Nil(t, flat["host_image[*]"])
-	require.Equal(t, false, mustBool(t, flat["host_image[*].component"]))
+	require.Nil(t, flat["host_image[\"*\"]"])
+	require.Equal(t, false, mustBool(t, flat["host_image[\"*\"].component"]))
 	require.Equal(t, false, mustBool(t, flat["tags"]))
 }
 
@@ -186,6 +186,87 @@ func TestResolveFieldSingleUnrelatedKnownTargetFieldNoop(t *testing.T) {
 
 	result := ResolveField(oldMetadata, newMetadata, scopeResources, "pkg:index/widget:Widget", "spec")
 	require.Equal(t, FieldLookupResult{Outcome: TokenLookupOutcomeNone, Candidates: []string{}}, result)
+}
+
+func TestResolveFieldSupportsTerraformNameAndSingularFallback(t *testing.T) {
+	t.Parallel()
+
+	oldMetadata := mustParseMetadataJSON(t, `{
+		"auto-aliasing": {
+			"resources": {
+				"pkg_widget": {
+					"current": "pkg:index/widget:Widget",
+					"fields": {
+						"logging": {"maxItemsOne": false},
+						"eks_properties": {
+							"maxItemsOne": true,
+							"elem": {
+								"fields": {
+									"pod_properties": {
+										"maxItemsOne": true,
+										"elem": {
+											"fields": {
+												"containers": {"maxItemsOne": true}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}`)
+	newMetadata := mustParseMetadataJSON(t, `{
+		"auto-aliasing": {
+			"resources": {
+				"pkg_widget": {
+					"current": "pkg:index/widget:Widget",
+					"fields": {
+						"logging": {"maxItemsOne": true},
+						"eks_properties": {
+							"maxItemsOne": true,
+							"elem": {
+								"fields": {
+									"pod_properties": {
+										"maxItemsOne": true,
+										"elem": {
+											"fields": {
+												"containers": {"maxItemsOne": false}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}`)
+
+	require.Equal(
+		t,
+		FieldLookupResult{
+			Outcome:    TokenLookupOutcomeResolved,
+			Field:      "loggings",
+			Transition: MaxItemsOneTransitionChanged,
+			Candidates: []string{},
+		},
+		ResolveField(oldMetadata, newMetadata, scopeResources, "pkg:index/widget:Widget", "loggings"),
+	)
+
+	require.Equal(
+		t,
+		FieldLookupResult{
+			Outcome:    TokenLookupOutcomeResolved,
+			Field:      "eksProperties[*].podProperties[*].containers",
+			Transition: MaxItemsOneTransitionChanged,
+			Candidates: []string{},
+		},
+		ResolveField(oldMetadata, newMetadata, scopeResources, "pkg:index/widget:Widget", "eksProperties[*].podProperties[*].containers"),
+	)
 }
 
 func TestResolveNewFieldDirectionalityGating(t *testing.T) {

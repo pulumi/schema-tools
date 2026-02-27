@@ -73,6 +73,49 @@ func TestTokenLookupMissingEvidence(t *testing.T) {
 	require.Equal(t, TokenLookupOutcomeNone, ResolveToken(nil, nil, "unknown", "pkg:index/missing:Missing").Outcome)
 }
 
+func TestTokenLookupSupportsTypeScope(t *testing.T) {
+	t.Parallel()
+
+	oldMetadata := &MetadataEnvelope{
+		AutoAliasing: &AutoAliasing{
+			Types: map[string]*TokenHistory{
+				"pkg_widget_spec": {Current: "pkg:index/v1:WidgetSpec"},
+			},
+		},
+	}
+	newMetadata := &MetadataEnvelope{
+		AutoAliasing: &AutoAliasing{
+			Types: map[string]*TokenHistory{
+				"pkg_widget_spec": {
+					Current: "pkg:index/v2:WidgetSpec",
+					Past: []TokenAlias{
+						{Name: "pkg:index/v1:WidgetSpec"},
+					},
+				},
+			},
+		},
+	}
+
+	require.Equal(
+		t,
+		TokenLookupResult{
+			Outcome:    TokenLookupOutcomeResolved,
+			Token:      "pkg:index/v2:WidgetSpec",
+			Candidates: []string{},
+		},
+		ResolveToken(oldMetadata, newMetadata, scopeTypes, "pkg:index/v1:WidgetSpec"),
+	)
+	require.Equal(
+		t,
+		TokenLookupResult{
+			Outcome:    TokenLookupOutcomeResolved,
+			Token:      "pkg:index/v1:WidgetSpec",
+			Candidates: []string{},
+		},
+		ResolveNewToken(oldMetadata, newMetadata, scopeTypes, "pkg:index/v2:WidgetSpec"),
+	)
+}
+
 func TestTokenLookupDirectionalityRegression(t *testing.T) {
 	t.Parallel()
 

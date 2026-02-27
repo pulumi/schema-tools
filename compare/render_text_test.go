@@ -242,7 +242,7 @@ func TestRenderTextResolvedTokenRemapShowsGuidance(t *testing.T) {
 	}
 }
 
-func TestRenderTextSuppressesEquivalentMaxItemsTypeChangeInOnePass(t *testing.T) {
+func TestRenderTextEmitsEquivalentMaxItemsTypeChangeInOnePass(t *testing.T) {
 	oldSchema := schema.PackageSpec{
 		Resources: map[string]schema.ResourceSpec{
 			"my-pkg:index:Widget": {
@@ -276,11 +276,108 @@ func TestRenderTextSuppressesEquivalentMaxItemsTypeChangeInOnePass(t *testing.T)
 		t.Fatalf("RenderText failed: %v", err)
 	}
 	text := out.String()
-	if !strings.Contains(text, "Looking good! No breaking changes found.") {
-		t.Fatalf("expected no-breaking message for equivalent maxItems transition, got:\n%s", text)
+	if strings.Contains(text, "Looking good! No breaking changes found.") {
+		t.Fatalf("expected visible type change for maxItems transition, got:\n%s", text)
 	}
-	if strings.Contains(text, "type changed") {
-		t.Fatalf("unexpected type changed diagnostic for equivalent maxItems transition:\n%s", text)
+	if !strings.Contains(text, `type changed from "array" to "string"`) {
+		t.Fatalf("expected type changed diagnostic for maxItems transition:\n%s", text)
+	}
+	if strings.Contains(text, `had no type but now has`) || strings.Contains(text, `but now has no type`) {
+		t.Fatalf("expected maxItems transition to avoid nested duplicate type diagnostics, got:\n%s", text)
+	}
+}
+
+func TestRenderTextEmitsEquivalentMaxItemsTypeRefRenameInOnePass(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:Widget": {
+				InputProperties: map[string]schema.PropertySpec{
+					"list": {
+						TypeSpec: schema.TypeSpec{
+							Type:  "array",
+							Items: &schema.TypeSpec{Ref: "#/types/my-pkg:index/v1:WidgetSpec"},
+						},
+					},
+				},
+			},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:Widget": {
+				InputProperties: map[string]schema.PropertySpec{
+					"list": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index/v2:WidgetSpec"}},
+				},
+			},
+		},
+	}
+	oldMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index:Widget","fields":{"list":{"maxItemsOne":true}}}},"types":{"tf_widget_spec":{"current":"my-pkg:index/v1:WidgetSpec"}}}}`)
+	newMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index:Widget","fields":{"list":{"maxItemsOne":false}}}},"types":{"tf_widget_spec":{"current":"my-pkg:index/v2:WidgetSpec","past":[{"name":"my-pkg:index/v1:WidgetSpec","inCodegen":false,"majorVersion":1}]}}}}`)
+
+	result := Schemas(oldSchema, newSchema, Options{
+		Provider:    "my-pkg",
+		MaxChanges:  -1,
+		OldMetadata: oldMetadata,
+		NewMetadata: newMetadata,
+	})
+
+	var out bytes.Buffer
+	if err := RenderText(&out, result); err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
+	text := out.String()
+	if strings.Contains(text, "Looking good! No breaking changes found.") {
+		t.Fatalf("expected visible type change for type-ref rename maxItems transition, got:\n%s", text)
+	}
+	if !strings.Contains(text, `type changed from "array" to "#/types/my-pkg:index/v2:WidgetSpec"`) {
+		t.Fatalf("expected type changed diagnostic for type-ref rename maxItems transition:\n%s", text)
+	}
+}
+
+func TestRenderTextKeepsTypeChangeWhenTypeRefRenameHasNoEvidence(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:Widget": {
+				InputProperties: map[string]schema.PropertySpec{
+					"list": {
+						TypeSpec: schema.TypeSpec{
+							Type:  "array",
+							Items: &schema.TypeSpec{Ref: "#/types/my-pkg:index/v1:WidgetSpec"},
+						},
+					},
+				},
+			},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:Widget": {
+				InputProperties: map[string]schema.PropertySpec{
+					"list": {TypeSpec: schema.TypeSpec{Ref: "#/types/my-pkg:index/v2:WidgetSpec"}},
+				},
+			},
+		},
+	}
+	oldMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index:Widget","fields":{"list":{"maxItemsOne":true}}}},"types":{"tf_widget_spec":{"current":"my-pkg:index/v1:WidgetSpec"}}}}`)
+	newMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index:Widget","fields":{"list":{"maxItemsOne":false}}}},"types":{"tf_other_spec":{"current":"my-pkg:index/v2:OtherSpec"}}}}`)
+
+	result := Schemas(oldSchema, newSchema, Options{
+		Provider:    "my-pkg",
+		MaxChanges:  -1,
+		OldMetadata: oldMetadata,
+		NewMetadata: newMetadata,
+	})
+
+	var out bytes.Buffer
+	if err := RenderText(&out, result); err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
+	text := out.String()
+	if strings.Contains(text, "Looking good! No breaking changes found.") {
+		t.Fatalf("expected breaking change when type-ref rename has no metadata evidence, got:\n%s", text)
+	}
+	if !strings.Contains(text, "type changed") {
+		t.Fatalf("expected type change diagnostic when type-ref rename has no metadata evidence, got:\n%s", text)
 	}
 }
 
@@ -389,10 +486,10 @@ func TestRenderTextKeepsNestedMapValueTypeChangeWithMaxItemsTransition(t *testin
 		t.Fatalf("expected root list type change to remain visible, got:\n%s", text)
 	}
 	if !strings.Contains(text, `"list" had no type but now has`) {
-		t.Fatalf("expected nested map value-type diagnostic to remain visible, got:\n%s", text)
+		t.Fatalf("expected nested map value-type addition diagnostic to remain visible, got:\n%s", text)
 	}
-	if !strings.Contains(text, `"list" had &{Type:object`) {
-		t.Fatalf("expected nested map value-type diagnostic to remain visible, got:\n%s", text)
+	if !strings.Contains(text, `"list" had`) || !strings.Contains(text, "but now has no type") {
+		t.Fatalf("expected nested map value-type removal diagnostic path/message to remain visible, got:\n%s", text)
 	}
 }
 

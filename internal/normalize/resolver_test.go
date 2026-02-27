@@ -244,6 +244,264 @@ func TestResolveEquivalentTypeChangeResolvedUnknownTransitionNotEquivalent(t *te
 	require.Equal(t, EquivalentTypeChangeResult{Outcome: TokenLookupOutcomeResolved, Equivalent: false, Field: "list", Candidates: []string{}}, result)
 }
 
+func TestResolveEquivalentTypeChangeResolvedTypeRefRenameEquivalent(t *testing.T) {
+	t.Parallel()
+
+	oldMetadata := mustParseMetadataJSON(t, `{
+		"auto-aliasing": {
+			"resources": {
+				"pkg_widget": {
+					"current": "pkg:index/widget:Widget",
+					"fields": {
+						"list": {"maxItemsOne": true}
+					}
+				}
+			},
+			"types": {
+				"pkg_widget_spec": {
+					"current": "pkg:index/v1:WidgetSpec"
+				}
+			}
+		}
+	}`)
+	newMetadata := mustParseMetadataJSON(t, `{
+		"auto-aliasing": {
+			"resources": {
+				"pkg_widget": {
+					"current": "pkg:index/widget:Widget",
+					"fields": {
+						"list": {"maxItemsOne": false}
+					}
+				}
+			},
+			"types": {
+				"pkg_widget_spec": {
+					"current": "pkg:index/v2:WidgetSpec",
+					"past": [{"name":"pkg:index/v1:WidgetSpec","inCodegen":false,"majorVersion":1}]
+				}
+			}
+		}
+	}`)
+
+	result := ResolveEquivalentTypeChange(
+		oldMetadata,
+		newMetadata,
+		scopeResources,
+		"pkg:index/widget:Widget",
+		"list",
+		"array<#/types/pkg:index/v1:WidgetSpec>",
+		"#/types/pkg:index/v2:WidgetSpec",
+	)
+	require.Equal(t, EquivalentTypeChangeResult{Outcome: TokenLookupOutcomeResolved, Equivalent: true, Field: "list", Candidates: []string{}}, result)
+}
+
+func TestResolveEquivalentTypeChangeResolvedTypeRefRenameEquivalentEscapedRef(t *testing.T) {
+	t.Parallel()
+
+	oldMetadata := mustParseMetadataJSON(t, `{
+		"auto-aliasing": {
+			"resources": {
+				"pkg_widget": {
+					"current": "pkg:index/widget:Widget",
+					"fields": {
+						"list": {"maxItemsOne": true}
+					}
+				}
+			},
+			"types": {
+				"pkg_widget_spec": {
+					"current": "pkg:index/v1:WidgetSpec"
+				}
+			}
+		}
+	}`)
+	newMetadata := mustParseMetadataJSON(t, `{
+		"auto-aliasing": {
+			"resources": {
+				"pkg_widget": {
+					"current": "pkg:index/widget:Widget",
+					"fields": {
+						"list": {"maxItemsOne": false}
+					}
+				}
+			},
+			"types": {
+				"pkg_widget_spec": {
+					"current": "pkg:index/v2:WidgetSpec",
+					"past": [{"name":"pkg:index/v1:WidgetSpec","inCodegen":false,"majorVersion":1}]
+				}
+			}
+		}
+	}`)
+
+	result := ResolveEquivalentTypeChange(
+		oldMetadata,
+		newMetadata,
+		scopeResources,
+		"pkg:index/widget:Widget",
+		"list",
+		"array<#/types/pkg:index%2Fv1:WidgetSpec>",
+		"#/types/pkg:index%2Fv2:WidgetSpec",
+	)
+	require.Equal(t, EquivalentTypeChangeResult{Outcome: TokenLookupOutcomeResolved, Equivalent: true, Field: "list", Candidates: []string{}}, result)
+}
+
+func TestResolveEquivalentTypeChangeTypeRefRenameAmbiguousNotEquivalent(t *testing.T) {
+	t.Parallel()
+
+	oldMetadata := mustParseMetadataJSON(t, `{
+		"auto-aliasing": {
+			"resources": {
+				"pkg_widget": {
+					"current": "pkg:index/widget:Widget",
+					"fields": {
+						"list": {"maxItemsOne": true}
+					}
+				}
+			},
+			"types": {
+				"pkg_widget_spec": {
+					"current": "pkg:index/v1:WidgetSpec"
+				}
+			}
+		}
+	}`)
+	newMetadata := mustParseMetadataJSON(t, `{
+		"auto-aliasing": {
+			"resources": {
+				"pkg_widget": {
+					"current": "pkg:index/widget:Widget",
+					"fields": {
+						"list": {"maxItemsOne": false}
+					}
+				}
+			},
+			"types": {
+				"pkg_widget_spec_a": {
+					"current": "pkg:index/v2:WidgetSpecA",
+					"past": [{"name":"pkg:index/v1:WidgetSpec","inCodegen":false,"majorVersion":1}]
+				},
+				"pkg_widget_spec_b": {
+					"current": "pkg:index/v2:WidgetSpecB",
+					"past": [{"name":"pkg:index/v1:WidgetSpec","inCodegen":false,"majorVersion":1}]
+				}
+			}
+		}
+	}`)
+
+	result := ResolveEquivalentTypeChange(
+		oldMetadata,
+		newMetadata,
+		scopeResources,
+		"pkg:index/widget:Widget",
+		"list",
+		"array<#/types/pkg:index/v1:WidgetSpec>",
+		"#/types/pkg:index/v2:WidgetSpecA",
+	)
+	require.Equal(t, EquivalentTypeChangeResult{Outcome: TokenLookupOutcomeResolved, Equivalent: false, Field: "list", Candidates: []string{}}, result)
+}
+
+func TestResolveEquivalentTypeChangeTypeRefRenameNoEvidenceNotEquivalent(t *testing.T) {
+	t.Parallel()
+
+	oldMetadata := mustParseMetadataJSON(t, `{
+		"auto-aliasing": {
+			"resources": {
+				"pkg_widget": {
+					"current": "pkg:index/widget:Widget",
+					"fields": {
+						"list": {"maxItemsOne": true}
+					}
+				}
+			},
+			"types": {
+				"pkg_widget_spec": {
+					"current": "pkg:index/v1:WidgetSpec"
+				}
+			}
+		}
+	}`)
+	newMetadata := mustParseMetadataJSON(t, `{
+		"auto-aliasing": {
+			"resources": {
+				"pkg_widget": {
+					"current": "pkg:index/widget:Widget",
+					"fields": {
+						"list": {"maxItemsOne": false}
+					}
+				}
+			},
+			"types": {
+				"pkg_other_spec": {
+					"current": "pkg:index/v2:OtherSpec"
+				}
+			}
+		}
+	}`)
+
+	result := ResolveEquivalentTypeChange(
+		oldMetadata,
+		newMetadata,
+		scopeResources,
+		"pkg:index/widget:Widget",
+		"list",
+		"array<#/types/pkg:index/v1:WidgetSpec>",
+		"#/types/pkg:index/v2:WidgetSpec",
+	)
+	require.Equal(t, EquivalentTypeChangeResult{Outcome: TokenLookupOutcomeResolved, Equivalent: false, Field: "list", Candidates: []string{}}, result)
+}
+
+func TestResolveEquivalentTypeChangeNestedTypeRefNotOverSuppressed(t *testing.T) {
+	t.Parallel()
+
+	oldMetadata := mustParseMetadataJSON(t, `{
+		"auto-aliasing": {
+			"resources": {
+				"pkg_widget": {
+					"current": "pkg:index/widget:Widget",
+					"fields": {
+						"list": {"maxItemsOne": true}
+					}
+				}
+			},
+			"types": {
+				"pkg_widget_spec": {
+					"current": "pkg:index/v1:WidgetSpec"
+				}
+			}
+		}
+	}`)
+	newMetadata := mustParseMetadataJSON(t, `{
+		"auto-aliasing": {
+			"resources": {
+				"pkg_widget": {
+					"current": "pkg:index/widget:Widget",
+					"fields": {
+						"list": {"maxItemsOne": false}
+					}
+				}
+			},
+			"types": {
+				"pkg_widget_spec": {
+					"current": "pkg:index/v2:WidgetSpec",
+					"past": [{"name":"pkg:index/v1:WidgetSpec","inCodegen":false,"majorVersion":1}]
+				}
+			}
+		}
+	}`)
+
+	result := ResolveEquivalentTypeChange(
+		oldMetadata,
+		newMetadata,
+		scopeResources,
+		"pkg:index/widget:Widget",
+		"list",
+		"array<map<#/types/pkg:index/v1:WidgetSpec>>",
+		"map<#/types/pkg:index/v2:WidgetSpec>",
+	)
+	require.Equal(t, EquivalentTypeChangeResult{Outcome: TokenLookupOutcomeResolved, Equivalent: false, Field: "list", Candidates: []string{}}, result)
+}
+
 func TestParseTypeCardinalityEdgeCases(t *testing.T) {
 	t.Parallel()
 

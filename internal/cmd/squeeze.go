@@ -10,7 +10,6 @@ import (
 
 	mapset "github.com/deckarep/golang-set/v2"
 
-	"github.com/pulumi/pulumi/pkg/v3/codegen"
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/spf13/cobra"
 
@@ -126,7 +125,7 @@ func compareAll(path, out string) error {
 		}
 	}
 
-	sortedKeys := codegen.SortedKeys(resourceMap)
+	sortedKeys := sortedStringKeys(resourceMap)
 	replacements := map[string]string{}
 	for _, name := range sortedKeys {
 		group := resourceMap[name]

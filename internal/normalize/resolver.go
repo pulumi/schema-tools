@@ -16,6 +16,9 @@ func ResolveEquivalentTypeChange(
 		ResolveField(oldMetadata, newMetadata, scope, oldToken, oldField),
 		oldType,
 		newType,
+		func(sourceTypeToken string) TokenLookupResult {
+			return ResolveToken(oldMetadata, newMetadata, scopeTypes, sourceTypeToken)
+		},
 	)
 }
 
@@ -33,12 +36,19 @@ func ResolveNewEquivalentTypeChange(
 		ResolveNewField(oldMetadata, newMetadata, scope, newToken, newField),
 		newType,
 		oldType,
+		func(sourceTypeToken string) TokenLookupResult {
+			return ResolveNewToken(oldMetadata, newMetadata, scopeTypes, sourceTypeToken)
+		},
 	)
 }
 
 // resolveEquivalentTypeChange applies field lookup outcome and transition evidence
 // to compute a conservative equivalence decision for type changes.
-func resolveEquivalentTypeChange(fieldResult FieldLookupResult, sourceType, targetType string) EquivalentTypeChangeResult {
+func resolveEquivalentTypeChange(
+	fieldResult FieldLookupResult,
+	sourceType, targetType string,
+	resolveTypeToken func(sourceTypeToken string) TokenLookupResult,
+) EquivalentTypeChangeResult {
 	result := EquivalentTypeChangeResult{
 		Outcome:    fieldResult.Outcome,
 		Field:      fieldResult.Field,
@@ -50,21 +60,49 @@ func resolveEquivalentTypeChange(fieldResult FieldLookupResult, sourceType, targ
 	}
 
 	if fieldResult.Transition == MaxItemsOneTransitionChanged {
-		result.Equivalent = maxItemsLikeTypeEquivalent(sourceType, targetType)
+		result.Equivalent = maxItemsLikeTypeEquivalent(sourceType, targetType, resolveTypeToken)
 	}
 	return result
 }
 
 // maxItemsLikeTypeEquivalent returns true when source/target differ only in
-// array-vs-single cardinality for the same base type.
-func maxItemsLikeTypeEquivalent(sourceType, targetType string) bool {
+// array-vs-single cardinality for the same base type. When base types are
+// #/types/... refs, one deterministic type-token remap is treated as equivalent.
+func maxItemsLikeTypeEquivalent(
+	sourceType, targetType string,
+	resolveTypeToken func(sourceTypeToken string) TokenLookupResult,
+) bool {
 	sourceBase, sourceArray, sourceOK := parseTypeCardinality(sourceType)
 	targetBase, targetArray, targetOK := parseTypeCardinality(targetType)
 	if !sourceOK || !targetOK {
 		return false
 	}
+	if sourceArray == targetArray {
+		return false
+	}
+	if sourceBase == targetBase {
+		return true
+	}
 
-	return sourceBase == targetBase && sourceArray != targetArray
+	return resolveEquivalentTypeRef(sourceBase, targetBase, resolveTypeToken)
+}
+
+func resolveEquivalentTypeRef(
+	sourceBase, targetBase string,
+	resolveTypeToken func(sourceTypeToken string) TokenLookupResult,
+) bool {
+	if resolveTypeToken == nil {
+		return false
+	}
+
+	sourceTypeToken, sourceOK := ParseTypeRefToken(sourceBase)
+	targetTypeToken, targetOK := ParseTypeRefToken(targetBase)
+	if !sourceOK || !targetOK {
+		return false
+	}
+
+	lookup := resolveTypeToken(sourceTypeToken.String())
+	return lookup.Outcome == TokenLookupOutcomeResolved && lookup.Token == targetTypeToken.String()
 }
 
 // parseTypeCardinality parses normalized type text into a base type and whether
