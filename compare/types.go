@@ -1,9 +1,13 @@
 package compare
 
+import "github.com/pulumi/schema-tools/internal/normalize"
+
 // Options configures compare behavior.
 type Options struct {
-	Provider   string
-	MaxChanges int
+	Provider    string
+	MaxChanges  int
+	OldMetadata *normalize.MetadataEnvelope
+	NewMetadata *normalize.MetadataEnvelope
 }
 
 // SummaryItem is one summary category/count entry for compare output.
