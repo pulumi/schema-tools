@@ -3,6 +3,8 @@ package compare
 import (
 	"fmt"
 	"io"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -24,7 +26,11 @@ func RenderText(out io.Writer, result Result) error {
 	if err := write("### Does the PR have any schema changes?\n\n"); err != nil {
 		return err
 	}
-	switch len(result.BreakingChanges) {
+	displayed := breakingOnlyChanges(result.Changes)
+	breakingCount := len(displayed)
+	totalBreakingCount := result.totalBreakingCount(breakingCount)
+	grouped := groupStructuredChanges(displayed)
+	switch totalBreakingCount {
 	case 0:
 		if err := writeln("Looking good! No breaking changes found."); err != nil {
 			return err
@@ -34,12 +40,17 @@ func RenderText(out io.Writer, result Result) error {
 			return err
 		}
 	default:
-		if err := write("Found %d breaking changes:\n", len(result.BreakingChanges)); err != nil {
+		if err := write("Found %d breaking changes:\n", totalBreakingCount); err != nil {
 			return err
 		}
 	}
-	if len(result.BreakingChanges) > 0 {
-		if err := writeln(strings.Join(result.BreakingChanges, "\n")); err != nil {
+	if breakingCount > 0 {
+		if err := writeGroupedText(write, grouped); err != nil {
+			return err
+		}
+	}
+	if totalBreakingCount > breakingCount {
+		if err := write("Showing %d of %d breaking changes.\n", breakingCount, totalBreakingCount); err != nil {
 			return err
 		}
 	}
@@ -81,4 +92,142 @@ func RenderText(out io.Writer, result Result) error {
 		}
 	}
 	return nil
+}
+
+func (result Result) totalBreakingCount(displayed int) int {
+	if result.totalBreaking > displayed {
+		return result.totalBreaking
+	}
+	return displayed
+}
+
+func breakingOnlyChanges(changes []Change) []Change {
+	if len(changes) == 0 {
+		return []Change{}
+	}
+	out := make([]Change, 0, len(changes))
+	for _, change := range changes {
+		if change.Breaking {
+			out = append(out, change)
+		}
+	}
+	return sortStructuredChanges(out)
+}
+
+func writeGroupedText(write func(string, ...any) error, grouped GroupedChanges) error {
+	sections := []struct {
+		title string
+		data  map[string]map[string][]Change
+	}{
+		{title: "Resources", data: grouped.Resources},
+		{title: "Functions", data: grouped.Functions},
+		{title: "Types", data: grouped.Types},
+	}
+	for _, section := range sections {
+		if len(section.data) == 0 {
+			continue
+		}
+		if err := write("\n#### %s\n", section.title); err != nil {
+			return err
+		}
+		tokens := sortedTokens(section.data)
+		for _, token := range tokens {
+			byLocation := section.data[token]
+			locations := sortedLocations(byLocation)
+
+			if len(locations) == 1 && locations[0] == "general" {
+				for _, change := range sortStructuredChanges(byLocation["general"]) {
+					if err := write("- %s %s\n", severityIcon(change.Severity), nodeEntry(strconv.Quote(token), textChangeMessage(change))); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+
+			if err := write("- %q:\n", token); err != nil {
+				return err
+			}
+			for _, location := range locations {
+				if location == "general" {
+					for _, change := range sortStructuredChanges(byLocation[location]) {
+						if err := write("    - %s %s\n", severityIcon(change.Severity), textChangeMessage(change)); err != nil {
+							return err
+						}
+					}
+					continue
+				}
+				if err := write("    - %s:\n", location); err != nil {
+					return err
+				}
+				for _, change := range sortStructuredChanges(byLocation[location]) {
+					if err := write("        - %s %s\n", severityIcon(change.Severity), textChangeMessage(change)); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func sortedTokens(grouped map[string]map[string][]Change) []string {
+	tokens := make([]string, 0, len(grouped))
+	for token := range grouped {
+		tokens = append(tokens, token)
+	}
+	sort.Strings(tokens)
+	return tokens
+}
+
+func sortedLocations(byLocation map[string][]Change) []string {
+	locations := make([]string, 0, len(byLocation))
+	for location := range byLocation {
+		locations = append(locations, location)
+	}
+	sort.Strings(locations)
+	return locations
+}
+
+func textChangeMessage(change Change) string {
+	message := strings.TrimSpace(change.Message)
+	if message == "" {
+		return strings.TrimSpace(change.Path)
+	}
+	if change.Location == "" || change.Location == "general" {
+		return message
+	}
+
+	label := trailingQuotedValue(change.Path)
+	if label == "" || label == change.Token || strings.Contains(message, `"`+label+`"`) {
+		return message
+	}
+	return fmt.Sprintf("%q %s", label, message)
+}
+
+func trailingQuotedValue(path string) string {
+	if path == "" {
+		return ""
+	}
+	lastQuote := strings.LastIndex(path, `"`)
+	if lastQuote <= 0 {
+		return ""
+	}
+	start := strings.LastIndex(path[:lastQuote], `"`)
+	if start == -1 || start+1 >= lastQuote {
+		return ""
+	}
+	return path[start+1 : lastQuote]
+}
+
+func severityIcon(severity ChangeSeverity) string {
+	switch severity {
+	case SeverityError:
+		return "`🔴`"
+	case SeverityWarn:
+		return "`🟡`"
+	case SeverityInfo:
+		return "`🟢`"
+	default:
+		return "`🟡`"
+	}
 }

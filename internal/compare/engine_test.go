@@ -1,10 +1,8 @@
 package compare
 
 import (
-	"bytes"
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
@@ -265,74 +263,5 @@ func TestAnalyzeSkipsTypeRequiredToOptionalWhenPropertyRemoved(t *testing.T) {
 		if change.Kind == ChangeKindRequiredToOptional && reflect.DeepEqual(change.Path, []string{"required", "value"}) {
 			t.Fatalf("unexpected required-to-optional for removed type property: %#v", change)
 		}
-	}
-}
-
-func TestBreakingChangesSkipsFunctionRequiredToOptionalWhenOutputRemoved(t *testing.T) {
-	oldSchema := schema.PackageSpec{
-		Functions: map[string]schema.FunctionSpec{
-			"my-pkg:index:MyFunction": {
-				Outputs: &schema.ObjectTypeSpec{
-					Required: []string{"value"},
-					Properties: map[string]schema.PropertySpec{
-						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
-					},
-				},
-			},
-		},
-	}
-	newSchema := schema.PackageSpec{
-		Functions: map[string]schema.FunctionSpec{
-			"my-pkg:index:MyFunction": {
-				Outputs: nil,
-			},
-		},
-	}
-
-	violations := BreakingChanges(oldSchema, newSchema)
-	var b bytes.Buffer
-	violations.Display(&b, 10_000)
-	out := b.String()
-	if !strings.Contains(out, "missing output") {
-		t.Fatalf("expected missing output in violations, got %q", out)
-	}
-	if strings.Contains(out, "property is no longer Required") {
-		t.Fatalf("unexpected required-to-optional for removed output, got %q", out)
-	}
-}
-
-func TestBreakingChangesSkipsTypeRequiredToOptionalWhenPropertyRemoved(t *testing.T) {
-	oldSchema := schema.PackageSpec{
-		Types: map[string]schema.ComplexTypeSpec{
-			"my-pkg:index:MyType": {
-				ObjectTypeSpec: schema.ObjectTypeSpec{
-					Required: []string{"value"},
-					Properties: map[string]schema.PropertySpec{
-						"value": {TypeSpec: schema.TypeSpec{Type: "string"}},
-					},
-				},
-			},
-		},
-	}
-	newSchema := schema.PackageSpec{
-		Types: map[string]schema.ComplexTypeSpec{
-			"my-pkg:index:MyType": {
-				ObjectTypeSpec: schema.ObjectTypeSpec{
-					Required:   []string{},
-					Properties: map[string]schema.PropertySpec{},
-				},
-			},
-		},
-	}
-
-	violations := BreakingChanges(oldSchema, newSchema)
-	var b bytes.Buffer
-	violations.Display(&b, 10_000)
-	out := b.String()
-	if !strings.Contains(out, "missing") {
-		t.Fatalf("expected missing property in violations, got %q", out)
-	}
-	if strings.Contains(out, "property is no longer Required") {
-		t.Fatalf("unexpected required-to-optional for removed type property, got %q", out)
 	}
 }

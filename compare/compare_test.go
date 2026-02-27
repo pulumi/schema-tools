@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
+
+	internalcompare "github.com/pulumi/schema-tools/internal/compare"
 )
 
 func TestSchemasSortsNewResourcesAndFunctions(t *testing.T) {
@@ -82,113 +84,157 @@ func TestSchemasBuildsSummaryWithEntriesAndPaths(t *testing.T) {
 	if !reflect.DeepEqual(gotEntries, expectedFixtureSummaryEntries()) {
 		t.Fatalf("summary entries mismatch:\n got: %v\nwant: %v", gotEntries, expectedFixtureSummaryEntries())
 	}
-	if len(result.BreakingChanges) == 0 {
+	if len(result.Changes) == 0 {
 		t.Fatal("expected fixture to produce breaking changes")
 	}
-	for i, line := range result.BreakingChanges {
-		if line == "" {
-			t.Fatalf("unexpected blank breaking change line at index %d", i)
+	for i, change := range result.Changes {
+		if change.Scope == "" || change.Token == "" || change.Path == "" || change.Kind == "" || change.Severity == "" {
+			t.Fatalf("unexpected incomplete structured change at index %d: %+v", i, change)
 		}
 	}
 }
 
-func TestClassifyDiagnosticDescriptions(t *testing.T) {
+func TestSchemasFixtureBuildsStructuredGroupedProjection(t *testing.T) {
+	oldSchema, newSchema := mustLoadFixtureSchemas(t)
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1})
+
+	if got, want := len(result.Changes), 8; got != want {
+		t.Fatalf("unexpected change count: got %d want %d", got, want)
+	}
+	if got := countGroupedLeaves(result.Grouped); got != len(result.Changes) {
+		t.Fatalf("grouped leaves must match change count: got %d want %d", got, len(result.Changes))
+	}
+	if _, ok := result.Grouped.Functions["my-pkg:index:MyFunction"]["inputs"]; !ok {
+		t.Fatalf("expected grouped functions inputs entry for MyFunction, got %+v", result.Grouped.Functions["my-pkg:index:MyFunction"])
+	}
+	if _, ok := result.Grouped.Resources["my-pkg:index:RemovedResource"]["general"]; !ok {
+		t.Fatalf("expected grouped resources general entry for RemovedResource, got %+v", result.Grouped.Resources["my-pkg:index:RemovedResource"])
+	}
+}
+
+func TestSchemasBreakingChangesIncludeDirectAndNestedForSameFunction(t *testing.T) {
+	oldSchema := schemaWithFunction("my-pkg:index:MyFunction", schema.FunctionSpec{
+		Inputs: &schema.ObjectTypeSpec{},
+	})
+	newSchema := schemaWithFunction("my-pkg:index:MyFunction", schema.FunctionSpec{
+		Inputs: &schema.ObjectTypeSpec{
+			Properties: map[string]schema.PropertySpec{
+				"arg": {TypeSpec: schema.TypeSpec{Type: "string"}},
+			},
+			Required: []string{"arg"},
+		},
+	})
+
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1})
+
+	grouped, ok := result.Grouped.Functions["my-pkg:index:MyFunction"]
+	if !ok {
+		t.Fatalf("missing grouped entry for function: %+v", result.Grouped.Functions)
+	}
+	if len(grouped["general"]) == 0 {
+		t.Fatalf("expected direct signature change in general bucket, got %+v", grouped)
+	}
+	if len(grouped["inputs"]) == 0 {
+		t.Fatalf("expected nested input required change in inputs bucket, got %+v", grouped)
+	}
+}
+
+func TestSchemasMaxChangesLimitsStructuredChanges(t *testing.T) {
+	oldSchema, newSchema := mustLoadFixtureSchemas(t)
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: 1})
+
+	if got, want := len(result.Changes), 1; got != want {
+		t.Fatalf("unexpected capped change count: got %d want %d", got, want)
+	}
+	if got := countGroupedLeaves(result.Grouped); got != len(result.Changes) {
+		t.Fatalf("grouped leaves must match capped change count: got %d want %d", got, len(result.Changes))
+	}
+}
+
+func TestSchemasMaxChangesZeroTracksTotalBreakingCount(t *testing.T) {
+	oldSchema, newSchema := mustLoadFixtureSchemas(t)
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: 0})
+
+	if len(result.Changes) != 0 || !isGroupedEmpty(result.Grouped) {
+		t.Fatalf("expected no displayed breaking lines with max-changes=0, got changes=%v grouped=%v", result.Changes, result.Grouped)
+	}
+	if got, want := result.totalBreaking, 8; got != want {
+		t.Fatalf("unexpected total breaking count: got %d want %d", got, want)
+	}
+}
+
+func TestCategoryForKind(t *testing.T) {
 	tests := []struct {
-		name        string
-		path        string
-		description string
-		want        string
+		name string
+		kind internalcompare.ChangeKind
+		want string
 	}{
 		{
-			name:        "resource missing input by path and missing description",
-			path:        `Resources: "pkg:index:Res": inputs: "name"`,
-			description: "missing",
-			want:        "missing-input",
+			name: "missing resource",
+			kind: internalcompare.ChangeKindMissingResource,
+			want: "missing-resource",
 		},
 		{
-			name:        "type missing property by path and missing description",
-			path:        `Types: "pkg:index:Type": properties: "name"`,
-			description: "missing",
-			want:        "missing-property",
+			name: "missing function",
+			kind: internalcompare.ChangeKindMissingFunction,
+			want: "missing-function",
 		},
 		{
-			name:        "function missing input by message",
-			path:        `Functions: "pkg:index:getThing": inputs: "name"`,
-			description: `missing input "name"`,
-			want:        "missing-input",
+			name: "missing type",
+			kind: internalcompare.ChangeKindMissingType,
+			want: "missing-type",
 		},
 		{
-			name:        "missing output",
-			path:        `Functions: "pkg:index:getThing": outputs: "name"`,
-			description: "missing output",
-			want:        "missing-output",
+			name: "missing input",
+			kind: internalcompare.ChangeKindMissingInput,
+			want: "missing-input",
 		},
 		{
-			name:        "missing resource",
-			path:        `Resources: "pkg:index:Res"`,
-			description: "missing",
-			want:        "missing-resource",
+			name: "missing output",
+			kind: internalcompare.ChangeKindMissingOutput,
+			want: "missing-output",
 		},
 		{
-			name:        "missing function",
-			path:        `Functions: "pkg:index:getThing"`,
-			description: "missing",
-			want:        "missing-function",
+			name: "missing property",
+			kind: internalcompare.ChangeKindMissingProperty,
+			want: "missing-property",
 		},
 		{
-			name:        "missing type",
-			path:        `Types: "pkg:index:Type"`,
-			description: "missing",
-			want:        "missing-type",
+			name: "type changed",
+			kind: internalcompare.ChangeKindTypeChanged,
+			want: "type-changed",
 		},
 		{
-			name:        "type changed",
-			path:        "any",
-			description: `type changed from "string" to "integer"`,
-			want:        "type-changed",
+			name: "optional to required",
+			kind: internalcompare.ChangeKindOptionalToRequired,
+			want: "optional-to-required",
 		},
 		{
-			name:        "had no type",
-			path:        "any",
-			description: "had no type but now has %+v",
-			want:        "type-changed",
+			name: "required to optional",
+			kind: internalcompare.ChangeKindRequiredToOptional,
+			want: "required-to-optional",
 		},
 		{
-			name:        "now has no type",
-			path:        "any",
-			description: "had %+v but now has no type",
-			want:        "type-changed",
+			name: "signature changed",
+			kind: internalcompare.ChangeKindSignatureChanged,
+			want: "signature-changed",
 		},
 		{
-			name:        "optional to required",
-			path:        "any",
-			description: "input has changed to Required",
-			want:        "optional-to-required",
+			name: "new resource not summarized",
+			kind: internalcompare.ChangeKindNewResource,
+			want: "other",
 		},
 		{
-			name:        "required to optional",
-			path:        "any",
-			description: "property is no longer Required",
-			want:        "required-to-optional",
-		},
-		{
-			name:        "signature changed",
-			path:        `Functions: "pkg:index:getThing"`,
-			description: "signature change (pulumi.InvokeOptions)->T => (Args, pulumi.InvokeOptions)->T",
-			want:        "signature-changed",
-		},
-		{
-			name:        "fallback other",
-			path:        "any",
-			description: "something unexpected",
-			want:        "other",
+			name: "new function not summarized",
+			kind: internalcompare.ChangeKindNewFunction,
+			want: "other",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := classify(tc.path, tc.description); got != tc.want {
-				t.Fatalf("classify(%q, %q) = %q, want %q", tc.path, tc.description, got, tc.want)
+			if got := categoryForKind(tc.kind); got != tc.want {
+				t.Fatalf("categoryForKind(%q) = %q, want %q", tc.kind, got, tc.want)
 			}
 		})
 	}

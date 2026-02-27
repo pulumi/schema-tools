@@ -1,14 +1,15 @@
 package compare
 
 import (
+	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 
 	internalcompare "github.com/pulumi/schema-tools/internal/compare"
-	"github.com/pulumi/schema-tools/internal/util/diagtree"
 )
 
 // Schemas computes a structured comparison result for two package specs.
@@ -16,38 +17,52 @@ func Schemas(oldSchema, newSchema schema.PackageSpec, opts Options) Result {
 	report := internalcompare.Analyze(opts.Provider, oldSchema, newSchema)
 	sort.Strings(report.NewResources)
 	sort.Strings(report.NewFunctions)
+	breakingChanges := sortAndFilterBreaking(report.Changes)
+	displayed := selectDisplayedChanges(breakingChanges, opts.MaxChanges)
+	structuredChanges := sortStructuredChanges(buildStructuredChanges(displayed))
 
 	result := Result{
-		Summary:         summarize(report),
-		BreakingChanges: splitViolations(report, opts.MaxChanges),
-		NewResources:    ensureSlice(slices.Clone(report.NewResources)),
-		NewFunctions:    ensureSlice(slices.Clone(report.NewFunctions)),
+		Summary:       summarize(breakingChanges),
+		Changes:       ensureChangeSlice(structuredChanges),
+		Grouped:       groupStructuredChanges(structuredChanges),
+		NewResources:  ensureSlice(slices.Clone(report.NewResources)),
+		NewFunctions:  ensureSlice(slices.Clone(report.NewFunctions)),
+		totalBreaking: len(breakingChanges),
 	}
 	return result
 }
 
-func splitViolations(report internalcompare.Report, maxChanges int) []string {
-	// BreakingChanges currently stores rendered output lines from the internal
-	// diagnostic tree. This assumes each displayed violation item is single-line.
-	displayed := strings.TrimRight(displayViolations(report, maxChanges), "\n")
-	if displayed == "" {
-		return []string{}
+func selectDisplayedChanges(changes []internalcompare.Change, maxChanges int) []internalcompare.Change {
+	if len(changes) == 0 {
+		return []internalcompare.Change{}
 	}
-	lines := strings.Split(displayed, "\n")
-	filtered := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			continue
+	if maxChanges == 0 {
+		return []internalcompare.Change{}
+	}
+	displayed := make([]internalcompare.Change, 0, len(changes))
+	emittedEntries := 0
+	withinLimit := func() bool {
+		return maxChanges < 0 || emittedEntries < maxChanges
+	}
+	for _, category := range collectCategories(changes) {
+		if !withinLimit() {
+			break
 		}
-		filtered = append(filtered, line)
+		for _, name := range collectNames(changes, category) {
+			if !withinLimit() {
+				break
+			}
+			nameChanges := changesForName(changes, category, name)
+			for _, change := range nameChanges {
+				if !withinLimit() {
+					break
+				}
+				emittedEntries++
+				displayed = append(displayed, change)
+			}
+		}
 	}
-	return filtered
-}
-
-func displayViolations(report internalcompare.Report, maxChanges int) string {
-	out := &strings.Builder{}
-	report.Violations.Display(out, maxChanges)
-	return out.String()
+	return displayed
 }
 
 func ensureSlice(xs []string) []string {
@@ -57,24 +72,22 @@ func ensureSlice(xs []string) []string {
 	return xs
 }
 
-func summarize(report internalcompare.Report) []SummaryItem {
+func summarize(changes []internalcompare.Change) []SummaryItem {
 	counts := map[string]int{}
 	entries := map[string][]string{}
 
-	report.Violations.WalkDisplayed(func(node *diagtree.Node) {
-		// WalkDisplayed includes displayed branch nodes. Summary items only count
-		// concrete diagnostics, which always carry a description.
-		if node.Description == "" {
-			return
+	for _, change := range changes {
+		category := categoryForKind(change.Kind)
+		if category == "other" {
+			continue
 		}
-		path := nodePath(node)
-		entry := nodeEntry(path, node.Description)
-		category := classify(path, node.Description)
+		path := changePath(change)
+		entry := nodeEntry(path, change.Description)
 		counts[category]++
 		if entry != "" {
 			entries[category] = append(entries[category], entry)
 		}
-	})
+	}
 
 	if len(counts) == 0 {
 		return []SummaryItem{}
@@ -98,45 +111,116 @@ func summarize(report internalcompare.Report) []SummaryItem {
 	return summary
 }
 
-func classify(path string, description string) string {
-	// NOTE: category matching is intentionally coupled to internal compare
-	// diagnostics text (for example "missing input", "has changed to Required").
-	// If those strings change in internal/compare, update this mapping.
-	// Keep specific "missing" path patterns first so they do not get swallowed
-	// by the broader "description == missing" cases below.
-	switch {
-	case strings.HasPrefix(path, "Resources:") && strings.Contains(path, ": inputs:") && description == "missing":
-		return "missing-input"
-	case strings.HasPrefix(path, "Types:") && strings.Contains(path, ": properties:") && description == "missing":
-		return "missing-property"
-	case strings.HasPrefix(description, "missing input"):
-		return "missing-input"
-	case strings.HasPrefix(description, "missing output"):
-		return "missing-output"
-	case description == "missing" && strings.HasPrefix(path, "Resources:"):
+func categoryForKind(kind internalcompare.ChangeKind) string {
+	switch kind {
+	case internalcompare.ChangeKindMissingResource:
 		return "missing-resource"
-	case description == "missing" && strings.HasPrefix(path, "Functions:"):
+	case internalcompare.ChangeKindMissingFunction:
 		return "missing-function"
-	case description == "missing" && strings.HasPrefix(path, "Types:"):
+	case internalcompare.ChangeKindMissingType:
 		return "missing-type"
-	case strings.Contains(description, "type changed") || strings.Contains(description, "had no type") || strings.Contains(description, "now has no type"):
+	case internalcompare.ChangeKindMissingInput:
+		return "missing-input"
+	case internalcompare.ChangeKindMissingOutput:
+		return "missing-output"
+	case internalcompare.ChangeKindMissingProperty:
+		return "missing-property"
+	case internalcompare.ChangeKindTypeChanged:
 		return "type-changed"
-	case strings.Contains(description, "has changed to Required"):
+	case internalcompare.ChangeKindOptionalToRequired:
 		return "optional-to-required"
-	case strings.Contains(description, "is no longer Required"):
+	case internalcompare.ChangeKindRequiredToOptional:
 		return "required-to-optional"
-	case strings.Contains(description, "signature change"):
+	case internalcompare.ChangeKindSignatureChanged:
 		return "signature-changed"
 	default:
 		return "other"
 	}
 }
 
-func nodePath(node *diagtree.Node) string {
-	if node == nil {
+func sortAndFilterBreaking(changes []internalcompare.Change) []internalcompare.Change {
+	out := make([]internalcompare.Change, 0, len(changes))
+	for _, change := range changes {
+		if change.Breaking {
+			out = append(out, change)
+		}
+	}
+	return out
+}
+
+func collectCategories(changes []internalcompare.Change) []string {
+	seen := map[string]struct{}{}
+	categories := make([]string, 0, len(changes))
+	for _, change := range changes {
+		if _, ok := seen[change.Category]; ok {
+			continue
+		}
+		seen[change.Category] = struct{}{}
+		categories = append(categories, change.Category)
+	}
+	return categories
+}
+
+func collectNames(changes []internalcompare.Change, category string) []string {
+	seen := map[string]struct{}{}
+	names := []string{}
+	for _, change := range changes {
+		if change.Category != category {
+			continue
+		}
+		if _, ok := seen[change.Name]; ok {
+			continue
+		}
+		seen[change.Name] = struct{}{}
+		names = append(names, change.Name)
+	}
+	return names
+}
+
+func changesForName(changes []internalcompare.Change, category, name string) []internalcompare.Change {
+	var out []internalcompare.Change
+	for _, change := range changes {
+		if change.Category == category && change.Name == name {
+			out = append(out, change)
+		}
+	}
+	return out
+}
+
+func changePath(change internalcompare.Change) string {
+	if change.Category == "" && change.Name == "" && len(change.Path) == 0 {
 		return ""
 	}
-	return strings.Join(node.PathTitles(), ": ")
+	var b strings.Builder
+	if change.Category != "" {
+		b.WriteString(change.Category)
+	}
+	if change.Name != "" {
+		if b.Len() > 0 {
+			b.WriteString(": ")
+		}
+		b.WriteString(strconv.Quote(change.Name))
+	}
+	for _, segment := range change.Path {
+		if segment == "" {
+			continue
+		}
+		b.WriteString(": ")
+		if isPathLabel(segment) {
+			b.WriteString(segment)
+		} else {
+			b.WriteString(strconv.Quote(segment))
+		}
+	}
+	return b.String()
+}
+
+func isPathLabel(segment string) bool {
+	switch segment {
+	case "inputs", "outputs", "properties", "required", "required inputs", "items", "additional properties":
+		return true
+	}
+	return false
 }
 
 func nodeEntry(path string, description string) string {
@@ -147,6 +231,150 @@ func nodeEntry(path string, description string) string {
 		return description
 	}
 	return path + " " + description
+}
+
+func ensureChangeSlice(changes []Change) []Change {
+	if changes == nil {
+		return []Change{}
+	}
+	return changes
+}
+
+func buildStructuredChanges(changes []internalcompare.Change) []Change {
+	if len(changes) == 0 {
+		return []Change{}
+	}
+	out := make([]Change, 0, len(changes))
+	for _, change := range changes {
+		out = append(out, Change{
+			Scope:    scopeFromCategory(change.Category),
+			Token:    change.Name,
+			Location: locationFromPath(change.Path),
+			Path:     changePath(change),
+			Kind:     string(change.Kind),
+			Severity: severityFromInternal(change.Severity),
+			Breaking: change.Breaking,
+			Message:  change.Description,
+		})
+	}
+	return out
+}
+
+func scopeFromCategory(category string) ChangeScope {
+	switch category {
+	case "Resources":
+		return ScopeResource
+	case "Functions":
+		return ScopeFunction
+	case "Types":
+		return ScopeType
+	}
+	panic(fmt.Sprintf("unsupported internal compare category %q", category))
+}
+
+func locationFromPath(path []string) string {
+	if len(path) == 0 {
+		return ""
+	}
+	return path[0]
+}
+
+func severityFromInternal(severity internalcompare.Severity) ChangeSeverity {
+	switch severity {
+	case internalcompare.SeverityDanger:
+		return SeverityError
+	case internalcompare.SeverityWarn:
+		return SeverityWarn
+	case internalcompare.SeverityInfo:
+		return SeverityInfo
+	}
+	panic(fmt.Sprintf("unsupported internal compare severity %q", severity))
+}
+
+func sortStructuredChanges(changes []Change) []Change {
+	if len(changes) == 0 {
+		return []Change{}
+	}
+	out := slices.Clone(changes)
+	slices.SortFunc(out, func(a, b Change) int {
+		if d := cmpInt(scopeSortOrder(a.Scope), scopeSortOrder(b.Scope)); d != 0 {
+			return d
+		}
+		if d := strings.Compare(a.Token, b.Token); d != 0 {
+			return d
+		}
+		if d := strings.Compare(a.Location, b.Location); d != 0 {
+			return d
+		}
+		if d := strings.Compare(a.Path, b.Path); d != 0 {
+			return d
+		}
+		if d := strings.Compare(a.Kind, b.Kind); d != 0 {
+			return d
+		}
+		if d := strings.Compare(a.Message, b.Message); d != 0 {
+			return d
+		}
+		return strings.Compare(string(a.Severity), string(b.Severity))
+	})
+	return out
+}
+
+func cmpInt(a, b int) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func scopeSortOrder(scope ChangeScope) int {
+	switch scope {
+	case ScopeResource:
+		return 0
+	case ScopeFunction:
+		return 1
+	case ScopeType:
+		return 2
+	default:
+		return 3
+	}
+}
+
+func groupStructuredChanges(changes []Change) GroupedChanges {
+	grouped := GroupedChanges{
+		Resources: map[string]map[string][]Change{},
+		Functions: map[string]map[string][]Change{},
+		Types:     map[string]map[string][]Change{},
+	}
+	for _, change := range changes {
+		location := change.Location
+		if location == "" {
+			location = "general"
+		}
+		switch change.Scope {
+		case ScopeResource:
+			appendGrouped(grouped.Resources, change.Token, location, change)
+		case ScopeFunction:
+			appendGrouped(grouped.Functions, change.Token, location, change)
+		case ScopeType:
+			appendGrouped(grouped.Types, change.Token, location, change)
+		}
+	}
+	return grouped
+}
+
+func appendGrouped(group map[string]map[string][]Change, token, location string, change Change) {
+	if token == "" {
+		return
+	}
+	if group[token] == nil {
+		group[token] = map[string][]Change{}
+	}
+	group[token][location] = append(group[token][location], change)
 }
 
 func sortAndUnique(values []string) []string {

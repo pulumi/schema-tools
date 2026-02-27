@@ -13,10 +13,11 @@ type SummaryJSONOutput struct {
 
 // FullJSONOutput is the compare --json payload shape.
 type FullJSONOutput struct {
-	Summary         []SummaryItem `json:"summary"`
-	BreakingChanges []string      `json:"breaking_changes"`
-	NewResources    []string      `json:"new_resources"`
-	NewFunctions    []string      `json:"new_functions"`
+	Summary      []SummaryItem  `json:"summary"`
+	Changes      []Change       `json:"changes"`
+	Grouped      GroupedChanges `json:"grouped"`
+	NewResources []string       `json:"new_resources"`
+	NewFunctions []string       `json:"new_functions"`
 }
 
 // MarshalJSON produces deterministic output ordering and non-nil slices.
@@ -28,10 +29,10 @@ func (result Result) MarshalJSON() ([]byte, error) {
 }
 
 // NewSummaryJSONOutput normalizes a compare result to the summary-only CLI JSON
-// shape, preserving summary entries.
+// shape with category counts only.
 func NewSummaryJSONOutput(result Result) SummaryJSONOutput {
 	normalized := normalizeForJSON(result)
-	return SummaryJSONOutput{Summary: normalized.Summary}
+	return SummaryJSONOutput{Summary: summaryWithoutEntries(normalized.Summary)}
 }
 
 // NewFullJSONOutput normalizes a compare result to the full CLI JSON shape.
@@ -39,21 +40,60 @@ func NewSummaryJSONOutput(result Result) SummaryJSONOutput {
 func NewFullJSONOutput(result Result) FullJSONOutput {
 	normalized := normalizeForJSON(result)
 	return FullJSONOutput{
-		Summary:         summaryWithoutEntries(normalized.Summary),
-		BreakingChanges: normalized.BreakingChanges,
-		NewResources:    normalized.NewResources,
-		NewFunctions:    normalized.NewFunctions,
+		Summary:      summaryWithoutEntries(normalized.Summary),
+		Changes:      normalized.Changes,
+		Grouped:      normalized.Grouped,
+		NewResources: normalized.NewResources,
+		NewFunctions: normalized.NewFunctions,
 	}
 }
 
 func normalizeForJSON(result Result) Result {
+	normalizedChanges := sortStructuredChanges(ensureChangeSlice(slices.Clone(result.Changes)))
+	normalizedGrouped := normalizeGrouped(result.Grouped)
+	if isGroupedEmpty(normalizedGrouped) {
+		normalizedGrouped = groupStructuredChanges(normalizedChanges)
+	}
 	normalized := Result{
-		Summary:         normalizeSummary(result.Summary),
-		BreakingChanges: ensureSlice(slices.Clone(result.BreakingChanges)),
-		NewResources:    ensureSlice(slices.Clone(result.NewResources)),
-		NewFunctions:    ensureSlice(slices.Clone(result.NewFunctions)),
+		Summary:       normalizeSummary(result.Summary),
+		Changes:       normalizedChanges,
+		Grouped:       normalizedGrouped,
+		NewResources:  ensureSlice(slices.Clone(result.NewResources)),
+		NewFunctions:  ensureSlice(slices.Clone(result.NewFunctions)),
+		totalBreaking: result.totalBreaking,
 	}
 	return normalized
+}
+
+func isGroupedEmpty(grouped GroupedChanges) bool {
+	return len(grouped.Resources) == 0 && len(grouped.Functions) == 0 && len(grouped.Types) == 0
+}
+
+func normalizeGrouped(grouped GroupedChanges) GroupedChanges {
+	return GroupedChanges{
+		Resources: normalizeGroupedScope(grouped.Resources),
+		Functions: normalizeGroupedScope(grouped.Functions),
+		Types:     normalizeGroupedScope(grouped.Types),
+	}
+}
+
+func normalizeGroupedScope(grouped map[string]map[string][]Change) map[string]map[string][]Change {
+	if len(grouped) == 0 {
+		return map[string]map[string][]Change{}
+	}
+	out := make(map[string]map[string][]Change, len(grouped))
+	for token, byLocation := range grouped {
+		if len(byLocation) == 0 {
+			out[token] = map[string][]Change{}
+			continue
+		}
+		locationCopy := make(map[string][]Change, len(byLocation))
+		for location, changes := range byLocation {
+			locationCopy[location] = sortStructuredChanges(changes)
+		}
+		out[token] = locationCopy
+	}
+	return out
 }
 
 func normalizeSummary(items []SummaryItem) []SummaryItem {
