@@ -8,7 +8,7 @@ build:
 	go build $(LDFLAGS)
 
 lint:
-	golangci-lint run
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.10.0 run
 
 install:
 	go install $(LDFLAGS)
