@@ -1,0 +1,82 @@
+{
+  "old": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget": {
+          "current": "pkg:index/widget:Widget"
+        }
+      },
+      "datasources": {
+        "pkg_get_widget": {
+          "current": "pkg:index/getWidget:getWidget"
+        }
+      }
+    }
+  },
+  "new": {
+    "auto-aliasing": {
+      "resources": {
+        "pkg_widget": {
+          "current": "pkg:index/widgetV2:Widget",
+          "past": [
+            {
+              "name": "pkg:index/widget:Widget",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        }
+      },
+      "datasources": {
+        "pkg_get_widget": {
+          "current": "pkg:index/getWidgetV2:getWidgetV2",
+          "past": [
+            {
+              "name": "pkg:index/getWidget:getWidget",
+              "inCodegen": true,
+              "majorVersion": 1
+            }
+          ]
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "old resource resolves to new",
+      "direction": "old",
+      "scope": "resources",
+      "token": "pkg:index/widget:Widget",
+      "outcome": "resolved",
+      "resolved": "pkg:index/widgetV2:Widget",
+      "candidates": []
+    },
+    {
+      "name": "old datasource resolves to new",
+      "direction": "old",
+      "scope": "datasources",
+      "token": "pkg:index/getWidget:getWidget",
+      "outcome": "resolved",
+      "resolved": "pkg:index/getWidgetV2:getWidgetV2",
+      "candidates": []
+    },
+    {
+      "name": "new resource resolves to old",
+      "direction": "new",
+      "scope": "resources",
+      "token": "pkg:index/widgetV2:Widget",
+      "outcome": "resolved",
+      "resolved": "pkg:index/widget:Widget",
+      "candidates": []
+    },
+    {
+      "name": "new datasource resolves to old",
+      "direction": "new",
+      "scope": "datasources",
+      "token": "pkg:index/getWidgetV2:getWidgetV2",
+      "outcome": "resolved",
+      "resolved": "pkg:index/getWidget:getWidget",
+      "candidates": []
+    }
+  ]
+}
