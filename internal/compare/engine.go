@@ -2,6 +2,7 @@ package compare
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -231,14 +232,8 @@ func appendTypeChanges(changes *[]Change, category, name string, path []string, 
 		*changes = append(*changes, newChange(category, name, path, ChangeKindTypeChanged, fmt.Sprintf("type changed from %q to %q", oldType, newType)))
 	}
 
-	appendTypeChanges(changes, category, name, append(slicesClone(path), "items"), old.Items, new.Items)
-	appendTypeChanges(changes, category, name, append(slicesClone(path), "additional properties"), old.AdditionalProperties, new.AdditionalProperties)
-}
-
-func slicesClone(xs []string) []string {
-	out := make([]string, len(xs))
-	copy(out, xs)
-	return out
+	appendTypeChanges(changes, category, name, append(slices.Clone(path), "items"), old.Items, new.Items)
+	appendTypeChanges(changes, category, name, append(slices.Clone(path), "additional properties"), old.AdditionalProperties, new.AdditionalProperties)
 }
 
 func sortChanges(changes []Change) {
