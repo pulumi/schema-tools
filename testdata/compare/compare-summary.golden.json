@@ -1,0 +1,24 @@
+{
+  "summary": [
+    {
+      "category": "missing-function",
+      "count": 1
+    },
+    {
+      "category": "missing-resource",
+      "count": 1
+    },
+    {
+      "category": "optional-to-required",
+      "count": 3
+    },
+    {
+      "category": "required-to-optional",
+      "count": 2
+    },
+    {
+      "category": "type-changed",
+      "count": 1
+    }
+  ]
+}

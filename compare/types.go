@@ -14,10 +14,50 @@ type SummaryItem struct {
 	Entries []string `json:"entries,omitempty"`
 }
 
+// ChangeScope identifies the top-level schema object family for a change.
+type ChangeScope string
+
+const (
+	ScopeResource ChangeScope = "resource"
+	ScopeFunction ChangeScope = "function"
+	ScopeType     ChangeScope = "type"
+)
+
+// ChangeSeverity is the normalized severity label used in structured output.
+type ChangeSeverity string
+
+const (
+	SeverityError ChangeSeverity = "error"
+	SeverityWarn  ChangeSeverity = "warn"
+	SeverityInfo  ChangeSeverity = "info"
+)
+
+// Change is the canonical structured compare leaf record used for JSON output.
+type Change struct {
+	Scope    ChangeScope    `json:"scope"`
+	Token    string         `json:"token"`
+	Location string         `json:"location,omitempty"`
+	Path     string         `json:"path"`
+	Kind     string         `json:"kind"`
+	Severity ChangeSeverity `json:"severity"`
+	Breaking bool           `json:"breaking"`
+	Message  string         `json:"message,omitempty"`
+}
+
+// GroupedChanges is a grouped view over canonical leaf changes.
+// Keys are token -> location -> leaf changes.
+type GroupedChanges struct {
+	Resources map[string]map[string][]Change `json:"resources"`
+	Functions map[string]map[string][]Change `json:"functions"`
+	Types     map[string]map[string][]Change `json:"types"`
+}
+
 // Result is the structured output of schema comparison.
 type Result struct {
-	Summary         []SummaryItem `json:"summary"`
-	BreakingChanges []string      `json:"breaking_changes"`
-	NewResources    []string      `json:"new_resources"`
-	NewFunctions    []string      `json:"new_functions"`
+	Summary       []SummaryItem  `json:"summary"`
+	Changes       []Change       `json:"changes"`
+	Grouped       GroupedChanges `json:"grouped"`
+	NewResources  []string       `json:"new_resources"`
+	NewFunctions  []string       `json:"new_functions"`
+	totalBreaking int
 }

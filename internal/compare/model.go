@@ -1,7 +1,5 @@
 package compare
 
-import "github.com/pulumi/schema-tools/internal/util/diagtree"
-
 // Severity is the typed severity for a canonical change item.
 type Severity string
 
@@ -45,6 +43,4 @@ type Report struct {
 	Changes      []Change
 	NewResources []string
 	NewFunctions []string
-	// Deprecated compatibility field; callers should consume Changes.
-	Violations *diagtree.Node
 }

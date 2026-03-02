@@ -1,0 +1,216 @@
+{
+  "summary": [
+    {
+      "category": "missing-function",
+      "count": 1
+    },
+    {
+      "category": "missing-resource",
+      "count": 1
+    },
+    {
+      "category": "optional-to-required",
+      "count": 3
+    },
+    {
+      "category": "required-to-optional",
+      "count": 2
+    },
+    {
+      "category": "type-changed",
+      "count": 1
+    }
+  ],
+  "changes": [
+    {
+      "scope": "resource",
+      "token": "my-pkg:index:MyResource",
+      "location": "required",
+      "path": "Resources: \"my-pkg:index:MyResource\": required: \"value\"",
+      "kind": "required-to-optional",
+      "severity": "info",
+      "breaking": true,
+      "message": "property is no longer Required"
+    },
+    {
+      "scope": "resource",
+      "token": "my-pkg:index:MyResource",
+      "location": "required inputs",
+      "path": "Resources: \"my-pkg:index:MyResource\": required inputs: \"count\"",
+      "kind": "optional-to-required",
+      "severity": "info",
+      "breaking": true,
+      "message": "input has changed to Required"
+    },
+    {
+      "scope": "resource",
+      "token": "my-pkg:index:RemovedResource",
+      "path": "Resources: \"my-pkg:index:RemovedResource\"",
+      "kind": "missing-resource",
+      "severity": "error",
+      "breaking": true,
+      "message": "missing"
+    },
+    {
+      "scope": "function",
+      "token": "my-pkg:index:MyFunction",
+      "location": "inputs",
+      "path": "Functions: \"my-pkg:index:MyFunction\": inputs: required: \"arg\"",
+      "kind": "optional-to-required",
+      "severity": "info",
+      "breaking": true,
+      "message": "input has changed to Required"
+    },
+    {
+      "scope": "function",
+      "token": "my-pkg:index:removedFunction",
+      "path": "Functions: \"my-pkg:index:removedFunction\"",
+      "kind": "missing-function",
+      "severity": "error",
+      "breaking": true,
+      "message": "missing"
+    },
+    {
+      "scope": "type",
+      "token": "my-pkg:index:MyType",
+      "location": "properties",
+      "path": "Types: \"my-pkg:index:MyType\": properties: \"field\"",
+      "kind": "type-changed",
+      "severity": "warn",
+      "breaking": true,
+      "message": "type changed from \"string\" to \"integer\""
+    },
+    {
+      "scope": "type",
+      "token": "my-pkg:index:MyType",
+      "location": "required",
+      "path": "Types: \"my-pkg:index:MyType\": required: \"count\"",
+      "kind": "optional-to-required",
+      "severity": "info",
+      "breaking": true,
+      "message": "property has changed to Required"
+    },
+    {
+      "scope": "type",
+      "token": "my-pkg:index:MyType",
+      "location": "required",
+      "path": "Types: \"my-pkg:index:MyType\": required: \"field\"",
+      "kind": "required-to-optional",
+      "severity": "info",
+      "breaking": true,
+      "message": "property is no longer Required"
+    }
+  ],
+  "grouped": {
+    "resources": {
+      "my-pkg:index:MyResource": {
+        "required": [
+          {
+            "scope": "resource",
+            "token": "my-pkg:index:MyResource",
+            "location": "required",
+            "path": "Resources: \"my-pkg:index:MyResource\": required: \"value\"",
+            "kind": "required-to-optional",
+            "severity": "info",
+            "breaking": true,
+            "message": "property is no longer Required"
+          }
+        ],
+        "required inputs": [
+          {
+            "scope": "resource",
+            "token": "my-pkg:index:MyResource",
+            "location": "required inputs",
+            "path": "Resources: \"my-pkg:index:MyResource\": required inputs: \"count\"",
+            "kind": "optional-to-required",
+            "severity": "info",
+            "breaking": true,
+            "message": "input has changed to Required"
+          }
+        ]
+      },
+      "my-pkg:index:RemovedResource": {
+        "general": [
+          {
+            "scope": "resource",
+            "token": "my-pkg:index:RemovedResource",
+            "path": "Resources: \"my-pkg:index:RemovedResource\"",
+            "kind": "missing-resource",
+            "severity": "error",
+            "breaking": true,
+            "message": "missing"
+          }
+        ]
+      }
+    },
+    "functions": {
+      "my-pkg:index:MyFunction": {
+        "inputs": [
+          {
+            "scope": "function",
+            "token": "my-pkg:index:MyFunction",
+            "location": "inputs",
+            "path": "Functions: \"my-pkg:index:MyFunction\": inputs: required: \"arg\"",
+            "kind": "optional-to-required",
+            "severity": "info",
+            "breaking": true,
+            "message": "input has changed to Required"
+          }
+        ]
+      },
+      "my-pkg:index:removedFunction": {
+        "general": [
+          {
+            "scope": "function",
+            "token": "my-pkg:index:removedFunction",
+            "path": "Functions: \"my-pkg:index:removedFunction\"",
+            "kind": "missing-function",
+            "severity": "error",
+            "breaking": true,
+            "message": "missing"
+          }
+        ]
+      }
+    },
+    "types": {
+      "my-pkg:index:MyType": {
+        "properties": [
+          {
+            "scope": "type",
+            "token": "my-pkg:index:MyType",
+            "location": "properties",
+            "path": "Types: \"my-pkg:index:MyType\": properties: \"field\"",
+            "kind": "type-changed",
+            "severity": "warn",
+            "breaking": true,
+            "message": "type changed from \"string\" to \"integer\""
+          }
+        ],
+        "required": [
+          {
+            "scope": "type",
+            "token": "my-pkg:index:MyType",
+            "location": "required",
+            "path": "Types: \"my-pkg:index:MyType\": required: \"count\"",
+            "kind": "optional-to-required",
+            "severity": "info",
+            "breaking": true,
+            "message": "property has changed to Required"
+          },
+          {
+            "scope": "type",
+            "token": "my-pkg:index:MyType",
+            "location": "required",
+            "path": "Types: \"my-pkg:index:MyType\": required: \"field\"",
+            "kind": "required-to-optional",
+            "severity": "info",
+            "breaking": true,
+            "message": "property is no longer Required"
+          }
+        ]
+      }
+    }
+  },
+  "new_resources": [],
+  "new_functions": []
+}

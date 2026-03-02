@@ -97,7 +97,7 @@ func compareCmd() *cobra.Command {
 		"the maximum number of breaking changes to display. Pass -1 to display all changes")
 	command.Flags().BoolVar(&jsonMode, "json", false, "render compare output as JSON")
 	command.Flags().BoolVar(&summaryMode, "summary", false,
-		"render summary-only output (text counts; with --json, includes entry details)")
+		"render summary-only output (text counts; with --json, category counts only)")
 
 	return command
 }

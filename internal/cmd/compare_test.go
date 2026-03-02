@@ -19,18 +19,51 @@ import (
 
 func TestRenderCompareOutputModes(t *testing.T) {
 	result := compare.Result{
-		Summary:         []compare.SummaryItem{{Category: "missing-input", Count: 1, Entries: []string{"e1"}}},
-		BreakingChanges: []string{"line-1"},
-		NewResources:    []string{"r1"},
-		NewFunctions:    []string{"f1"},
+		Summary: []compare.SummaryItem{{Category: "missing-input", Count: 1, Entries: []string{"e1"}}},
+		Changes: []compare.Change{
+			{
+				Scope:    compare.ScopeResource,
+				Token:    "pkg:index:Res",
+				Location: "inputs",
+				Path:     `Resources: "pkg:index:Res": inputs: "name"`,
+				Kind:     "missing-input",
+				Severity: compare.SeverityWarn,
+				Breaking: true,
+				Message:  "missing input",
+			},
+		},
+		Grouped: compare.GroupedChanges{
+			Resources: map[string]map[string][]compare.Change{
+				"pkg:index:Res": {
+					"inputs": {
+						{
+							Scope:    compare.ScopeResource,
+							Token:    "pkg:index:Res",
+							Location: "inputs",
+							Path:     `Resources: "pkg:index:Res": inputs: "name"`,
+							Kind:     "missing-input",
+							Severity: compare.SeverityWarn,
+							Breaking: true,
+							Message:  "missing input",
+						},
+					},
+				},
+			},
+			Functions: map[string]map[string][]compare.Change{},
+			Types:     map[string]map[string][]compare.Change{},
+		},
+		NewResources: []string{"r1"},
+		NewFunctions: []string{"f1"},
 	}
 
 	t.Run("json", func(t *testing.T) {
 		var out bytes.Buffer
 		err := renderCompareOutput(&out, result, true, false)
 		assert.NoError(t, err)
-		assert.Contains(t, out.String(), `"breaking_changes": [`)
-		assert.Contains(t, out.String(), `"line-1"`)
+		assert.Contains(t, out.String(), `"changes": [`)
+		assert.Contains(t, out.String(), `"grouped": {`)
+		assert.Contains(t, out.String(), `"scope": "resource"`)
+		assert.NotContains(t, out.String(), `"breaking_changes":`)
 		assert.True(t, strings.HasSuffix(out.String(), "\n"))
 	})
 
@@ -49,8 +82,8 @@ func TestRenderCompareOutputModes(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Contains(t, out.String(), `"summary": [`)
 		assert.Contains(t, out.String(), `"missing-input"`)
-		assert.Contains(t, out.String(), `"entries": [`)
-		assert.NotContains(t, out.String(), `"line-1"`)
+		assert.NotContains(t, out.String(), `"entries": [`)
+		assert.NotContains(t, out.String(), `"scope":`)
 		assert.NotContains(t, out.String(), `"r1"`)
 		assert.NotContains(t, out.String(), `"f1"`)
 		assert.NotContains(t, out.String(), `"breaking_changes":`)
@@ -133,7 +166,7 @@ func TestCompareSchemasFixtureTextOutput(t *testing.T) {
 	assert.NoError(t, compare.RenderText(&out, result))
 
 	text := out.String()
-	assert.Contains(t, text, "Found 14 breaking changes:")
+	assert.Contains(t, text, "Found 8 breaking changes:")
 	assert.Contains(t, text, `"my-pkg:index:RemovedResource" missing`)
 	assert.Contains(t, text, `"my-pkg:index:removedFunction" missing`)
 	assert.Contains(t, text, `type changed from "string" to "integer"`)
@@ -155,13 +188,14 @@ func TestRenderCompareOutputFixtureJSON(t *testing.T) {
 
 		var payload struct {
 			Summary []struct {
-				Category string `json:"category"`
-				Count    int    `json:"count"`
-				Entries  []string
+				Category string   `json:"category"`
+				Count    int      `json:"count"`
+				Entries  []string `json:"entries,omitempty"`
 			} `json:"summary"`
-			BreakingChanges []string `json:"breaking_changes"`
-			NewResources    []string `json:"new_resources"`
-			NewFunctions    []string `json:"new_functions"`
+			Changes      []compare.Change       `json:"changes"`
+			Grouped      compare.GroupedChanges `json:"grouped"`
+			NewResources []string               `json:"new_resources"`
+			NewFunctions []string               `json:"new_functions"`
 		}
 		assert.NoError(t, json.Unmarshal(out.Bytes(), &payload))
 
@@ -177,7 +211,8 @@ func TestRenderCompareOutputFixtureJSON(t *testing.T) {
 			"required-to-optional": 2,
 			"type-changed":         1,
 		}))
-		assert.Equal(t, result.BreakingChanges, payload.BreakingChanges)
+		assert.Equal(t, result.Changes, payload.Changes)
+		assert.Equal(t, result.Grouped, payload.Grouped)
 		assert.Empty(t, payload.NewResources)
 		assert.Empty(t, payload.NewFunctions)
 	})
@@ -191,20 +226,45 @@ func TestRenderCompareOutputFixtureJSON(t *testing.T) {
 			Summary []struct {
 				Category string   `json:"category"`
 				Count    int      `json:"count"`
-				Entries  []string `json:"entries"`
+				Entries  []string `json:"entries,omitempty"`
 			} `json:"summary"`
 		}
 		assert.NoError(t, json.Unmarshal(out.Bytes(), &payload))
 
-		entriesByCategory := map[string][]string{}
+		countsByCategory := map[string]int{}
 		for _, item := range payload.Summary {
-			entriesByCategory[item.Category] = item.Entries
+			assert.Empty(t, item.Entries)
+			countsByCategory[item.Category] = item.Count
 		}
-		assert.Equal(t, []string{
-			`Functions: "my-pkg:index:MyFunction": inputs: required: "arg" input has changed to Required`,
-			`Resources: "my-pkg:index:MyResource": required inputs: "count" input has changed to Required`,
-			`Types: "my-pkg:index:MyType": required: "count" property has changed to Required`,
-		}, entriesByCategory["optional-to-required"])
+		assert.Equal(t, map[string]int{
+			"missing-function":     1,
+			"missing-resource":     1,
+			"optional-to-required": 3,
+			"required-to-optional": 2,
+			"type-changed":         1,
+		}, countsByCategory)
+	})
+}
+
+func TestRenderCompareOutputFixtureJSONGoldens(t *testing.T) {
+	oldSchema, newSchema := mustLoadCompareFixtureSchemas(t)
+	result := compare.Schemas(oldSchema, newSchema, compare.Options{
+		Provider:   "my-pkg",
+		MaxChanges: -1,
+	})
+
+	t.Run("full", func(t *testing.T) {
+		var out bytes.Buffer
+		err := renderCompareOutput(&out, result, true, false)
+		assert.NoError(t, err)
+		assertJSONGoldenString(t, out.String(), "compare-full.golden.json")
+	})
+
+	t.Run("summary", func(t *testing.T) {
+		var out bytes.Buffer
+		err := renderCompareOutput(&out, result, true, true)
+		assert.NoError(t, err)
+		assertJSONGoldenString(t, out.String(), "compare-summary.golden.json")
 	})
 }
 
@@ -218,13 +278,27 @@ func mustLoadCompareFixtureSchemas(t testing.TB) (schema.PackageSpec, schema.Pac
 
 func mustLoadCompareFixtureSchema(t testing.TB, name string) schema.PackageSpec {
 	t.Helper()
-	data, err := os.ReadFile("../../testdata/compare/" + name)
-	if err != nil {
-		t.Fatalf("failed to read fixture %s: %v", name, err)
-	}
+	data := mustReadCompareFixtureFile(t, name)
 	var spec schema.PackageSpec
 	if err := json.Unmarshal(data, &spec); err != nil {
 		t.Fatalf("failed to unmarshal fixture %q: %v", name, err)
 	}
 	return spec
+}
+
+func mustReadCompareFixtureFile(t testing.TB, name string) []byte {
+	t.Helper()
+	data, err := os.ReadFile("../../testdata/compare/" + name)
+	if err != nil {
+		t.Fatalf("failed to read fixture %s: %v", name, err)
+	}
+	return data
+}
+
+func assertJSONGoldenString(t testing.TB, got, goldenName string) {
+	t.Helper()
+	want := string(mustReadCompareFixtureFile(t, goldenName))
+	if strings.TrimSpace(got) != strings.TrimSpace(want) {
+		t.Fatalf("%s mismatch:\n--- got ---\n%s\n--- want ---\n%s", goldenName, strings.TrimSpace(got), strings.TrimSpace(want))
+	}
 }
