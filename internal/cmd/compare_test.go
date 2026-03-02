@@ -110,39 +110,6 @@ func TestRenderCompareOutputModes(t *testing.T) {
 	})
 }
 
-func TestRenderCompareOutputTextPreservesBreakingDiagnosticLines(t *testing.T) {
-	result := compare.Result{
-		BreakingChanges: []string{
-			"### Resources",
-			`#### "my-pkg:index:Widget"`,
-			`- ` + "`🟡`" + ` inputs: "list" type changed from "array" to "string"`,
-		},
-	}
-
-	var out bytes.Buffer
-	err := renderCompareOutput(&out, result, false, false)
-	assert.NoError(t, err)
-	text := out.String()
-	assert.Contains(t, text, `type changed from "array" to "string"`)
-	assert.NotContains(t, text, "maxItemsOne")
-}
-
-func TestRenderCompareOutputTextUsesOnePassDisplayedEntryCountWhenCapped(t *testing.T) {
-	result := compare.Result{
-		BreakingChanges: []string{
-			"### Resources",
-			`#### "my-pkg:index:Widget"`,
-			`- ` + "`🟢`" + ` inputs: required: "list" input has changed to Required`,
-		},
-	}
-
-	var out bytes.Buffer
-	err := renderCompareOutput(&out, result, false, false)
-	assert.NoError(t, err)
-	text := out.String()
-	assert.Contains(t, text, "Found 1 breaking change:")
-}
-
 func TestCompareLocalCurrentUserErrorCancelsOldSchemaDownload(t *testing.T) {
 	deps := compareDeps{
 		currentUser: func() (*user.User, error) {

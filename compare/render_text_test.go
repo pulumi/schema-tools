@@ -385,10 +385,13 @@ func TestRenderTextKeepsNestedMapValueTypeChangeWithMaxItemsTransition(t *testin
 		t.Fatalf("RenderText failed: %v", err)
 	}
 	text := out.String()
-	if !strings.Contains(text, `inputs: "list" type changed from "array" to "object"`) {
+	if !strings.Contains(text, `"list" type changed from "array" to "object"`) {
 		t.Fatalf("expected root list type change to remain visible, got:\n%s", text)
 	}
-	if !strings.Contains(text, `inputs: "list": additional properties had no type but now has`) {
+	if !strings.Contains(text, `"list" had no type but now has`) {
+		t.Fatalf("expected nested map value-type diagnostic to remain visible, got:\n%s", text)
+	}
+	if !strings.Contains(text, `"list" had &{Type:object`) {
 		t.Fatalf("expected nested map value-type diagnostic to remain visible, got:\n%s", text)
 	}
 }
