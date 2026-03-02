@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
 func TestMarshalJSONDeterministicOrdering(t *testing.T) {
@@ -214,6 +216,46 @@ func TestJSONOutputFixtureGoldens(t *testing.T) {
 
 	assertGoldenJSON(t, NewFullJSONOutput(result), "compare-full.golden.json")
 	assertGoldenJSON(t, NewSummaryJSONOutput(result), "compare-summary.golden.json")
+}
+
+func TestNewFullJSONOutputIncludesNonBreakingTokenRemaps(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index/v1:Widget": {},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index/v2:Widget": {},
+		},
+	}
+	oldMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index/v1:Widget"}}}}`)
+	newMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index/v2:Widget","past":[{"name":"my-pkg:index/v1:Widget","inCodegen":false,"majorVersion":1}]}}}}`)
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1, OldMetadata: oldMetadata, NewMetadata: newMetadata})
+
+	payload := NewFullJSONOutput(result)
+	if got, want := len(payload.Changes), 1; got != want {
+		t.Fatalf("expected one remap change, got %d (%#v)", got, payload.Changes)
+	}
+	if got, want := payload.Changes[0].Kind, "token-remapped"; got != want {
+		t.Fatalf("expected remap kind %q, got %q", want, got)
+	}
+	if payload.Changes[0].Breaking {
+		t.Fatalf("expected non-breaking remap change, got %#v", payload.Changes[0])
+	}
+
+	foundSummary := false
+	for _, item := range payload.Summary {
+		if item.Category == "token-remapped" && item.Count == 1 {
+			foundSummary = true
+		}
+		if len(item.Entries) != 0 {
+			t.Fatalf("full JSON summary should omit entries, got %#v", payload.Summary)
+		}
+	}
+	if !foundSummary {
+		t.Fatalf("expected token-remapped summary category in full JSON, got %#v", payload.Summary)
+	}
 }
 
 func TestNewFullJSONOutputStructuredContractKeys(t *testing.T) {

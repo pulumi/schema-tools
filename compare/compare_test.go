@@ -12,6 +12,7 @@ import (
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 
 	internalcompare "github.com/pulumi/schema-tools/internal/compare"
+	"github.com/pulumi/schema-tools/internal/normalize"
 )
 
 func TestSchemasSortsNewResourcesAndFunctions(t *testing.T) {
@@ -229,6 +230,11 @@ func TestCategoryForKind(t *testing.T) {
 			kind: internalcompare.ChangeKindNewFunction,
 			want: "other",
 		},
+		{
+			name: "token remap summarized",
+			kind: internalcompare.ChangeKindTokenRemapped,
+			want: "token-remapped",
+		},
 	}
 
 	for _, tc := range tests {
@@ -237,6 +243,173 @@ func TestCategoryForKind(t *testing.T) {
 				t.Fatalf("categoryForKind(%q) = %q, want %q", tc.kind, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestSchemasSuppressesAddRemoveForResolvedResourceTokenRemap(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index/v1:Widget": {},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index/v2:Widget": {},
+		},
+	}
+	oldMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index/v1:Widget"}}}}`)
+	newMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index/v2:Widget","past":[{"name":"my-pkg:index/v1:Widget","inCodegen":false,"majorVersion":1}]}}}}`)
+
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1, OldMetadata: oldMetadata, NewMetadata: newMetadata})
+	if got := result.totalBreaking; got != 0 {
+		t.Fatalf("expected no breaking changes, got total=%d details=%v", got, result.Changes)
+	}
+	if got, want := result.Summary, []SummaryItem{{Category: "token-remapped", Count: 1, Entries: []string{`Resources: "my-pkg:index/v1:Widget" token remapped: migrate from "my-pkg:index/v1:Widget" to "my-pkg:index/v2:Widget"`}}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected summary: got %#v want %#v", got, want)
+	}
+	if got, want := result.Changes, []Change{
+		{
+			Scope:    ScopeResource,
+			Token:    "my-pkg:index/v1:Widget",
+			Path:     `Resources: "my-pkg:index/v1:Widget"`,
+			Kind:     "token-remapped",
+			Severity: SeverityInfo,
+			Breaking: false,
+			Message:  `token remapped: migrate from "my-pkg:index/v1:Widget" to "my-pkg:index/v2:Widget"`,
+		},
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected remap changes: got %#v want %#v", got, want)
+	}
+	if got, want := result.NewResources, []string{}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected new resources: got %#v want %#v", got, want)
+	}
+}
+
+func TestSchemasRetainedInCodegenAliasStillListsCanonicalNewResource(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"aws:s3/bucketAclV2:BucketAclV2": {},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"aws:s3/bucketAclV2:BucketAclV2": {},
+			"aws:s3/bucketAcl:BucketAcl":     {},
+		},
+	}
+	oldMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"resources":{"aws_s3_bucket_acl":{"current":"aws:s3/bucketAclV2:BucketAclV2"}}}}`)
+	newMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"resources":{"aws_s3_bucket_acl":{"current":"aws:s3/bucketAcl:BucketAcl","past":[{"name":"aws:s3/bucketAclV2:BucketAclV2","inCodegen":true,"majorVersion":7}]}}}}`)
+
+	result := Schemas(oldSchema, newSchema, Options{
+		Provider:    "aws",
+		MaxChanges:  -1,
+		OldMetadata: oldMetadata,
+		NewMetadata: newMetadata,
+	})
+
+	if got, want := result.NewResources, []string{"s3/bucketAcl.BucketAcl"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected NewResources to contain s3/bucketAcl.BucketAcl, got %#v", got)
+	}
+	if got, want := len(result.NewResources), 1; got != want {
+		t.Fatalf("expected exactly one canonical new resource, got %d (%#v)", got, result.NewResources)
+	}
+	if got, want := result.Summary, []SummaryItem{{Category: "token-remapped", Count: 1, Entries: []string{`Resources: "aws:s3/bucketAclV2:BucketAclV2" token deprecated: prefer "aws:s3/bucketAcl:BucketAcl" instead of "aws:s3/bucketAclV2:BucketAclV2"`}}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected non-breaking remap summary signal, got %#v", got)
+	}
+	if got, want := result.Changes, []Change{
+		{
+			Scope:    ScopeResource,
+			Token:    "aws:s3/bucketAclV2:BucketAclV2",
+			Path:     `Resources: "aws:s3/bucketAclV2:BucketAclV2"`,
+			Kind:     "token-remapped",
+			Severity: SeverityInfo,
+			Breaking: false,
+			Message:  `token deprecated: prefer "aws:s3/bucketAcl:BucketAcl" instead of "aws:s3/bucketAclV2:BucketAclV2"`,
+		},
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected remap/deprecation change lines, got %#v", got)
+	}
+}
+
+func TestSchemasRetainedInCodegenAliasStillListsCanonicalNewFunction(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Functions: map[string]schema.FunctionSpec{
+			"aws:s3/getBucketAclV2:getBucketAclV2": {},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Functions: map[string]schema.FunctionSpec{
+			"aws:s3/getBucketAclV2:getBucketAclV2": {},
+			"aws:s3/getBucketAcl:getBucketAcl":     {},
+		},
+	}
+	oldMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"datasources":{"aws_s3_bucket_acl":{"current":"aws:s3/getBucketAclV2:getBucketAclV2"}}}}`)
+	newMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"datasources":{"aws_s3_bucket_acl":{"current":"aws:s3/getBucketAcl:getBucketAcl","past":[{"name":"aws:s3/getBucketAclV2:getBucketAclV2","inCodegen":true,"majorVersion":7}]}}}}`)
+
+	result := Schemas(oldSchema, newSchema, Options{
+		Provider:    "aws",
+		MaxChanges:  -1,
+		OldMetadata: oldMetadata,
+		NewMetadata: newMetadata,
+	})
+
+	if got, want := result.NewFunctions, []string{"s3/getBucketAcl.getBucketAcl"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected NewFunctions to contain s3/getBucketAcl.getBucketAcl, got %#v", got)
+	}
+	if got, want := result.Summary, []SummaryItem{{Category: "token-remapped", Count: 1, Entries: []string{`Functions: "aws:s3/getBucketAclV2:getBucketAclV2" token deprecated: prefer "aws:s3/getBucketAcl:getBucketAcl" instead of "aws:s3/getBucketAclV2:getBucketAclV2"`}}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected non-breaking remap summary signal, got %#v", got)
+	}
+	if got, want := result.Changes, []Change{
+		{
+			Scope:    ScopeFunction,
+			Token:    "aws:s3/getBucketAclV2:getBucketAclV2",
+			Path:     `Functions: "aws:s3/getBucketAclV2:getBucketAclV2"`,
+			Kind:     "token-remapped",
+			Severity: SeverityInfo,
+			Breaking: false,
+			Message:  `token deprecated: prefer "aws:s3/getBucketAcl:getBucketAcl" instead of "aws:s3/getBucketAclV2:getBucketAclV2"`,
+		},
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected remap/deprecation change lines, got %#v", got)
+	}
+}
+
+func TestSchemasSuppressesAddRemoveForResolvedFunctionTokenRemap(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Functions: map[string]schema.FunctionSpec{
+			"my-pkg:index/v1:getWidget": {},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Functions: map[string]schema.FunctionSpec{
+			"my-pkg:index/v2:getWidget": {},
+		},
+	}
+	oldMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"datasources":{"tf_widget":{"current":"my-pkg:index/v1:getWidget"}}}}`)
+	newMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"datasources":{"tf_widget":{"current":"my-pkg:index/v2:getWidget","past":[{"name":"my-pkg:index/v1:getWidget","inCodegen":false,"majorVersion":1}]}}}}`)
+
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1, OldMetadata: oldMetadata, NewMetadata: newMetadata})
+	if got := result.totalBreaking; got != 0 {
+		t.Fatalf("expected no breaking changes, got total=%d details=%v", got, result.Changes)
+	}
+	if got, want := result.Summary, []SummaryItem{{Category: "token-remapped", Count: 1, Entries: []string{`Functions: "my-pkg:index/v1:getWidget" token remapped: migrate from "my-pkg:index/v1:getWidget" to "my-pkg:index/v2:getWidget"`}}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected summary: got %#v want %#v", got, want)
+	}
+	if got, want := result.Changes, []Change{
+		{
+			Scope:    ScopeFunction,
+			Token:    "my-pkg:index/v1:getWidget",
+			Path:     `Functions: "my-pkg:index/v1:getWidget"`,
+			Kind:     "token-remapped",
+			Severity: SeverityInfo,
+			Breaking: false,
+			Message:  `token remapped: migrate from "my-pkg:index/v1:getWidget" to "my-pkg:index/v2:getWidget"`,
+		},
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected remap changes: got %#v want %#v", got, want)
+	}
+	if got, want := result.NewFunctions, []string{}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected new functions: got %#v want %#v", got, want)
 	}
 }
 
@@ -406,4 +579,13 @@ func schemaWithType(token string, typ schema.ComplexTypeSpec) schema.PackageSpec
 			token: typ,
 		},
 	}
+}
+
+func mustParseMetadataCompare(t testing.TB, metadata string) *normalize.MetadataEnvelope {
+	t.Helper()
+	parsed, err := normalize.ParseMetadata([]byte(metadata))
+	if err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+	return parsed
 }

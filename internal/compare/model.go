@@ -23,8 +23,26 @@ const (
 	ChangeKindOptionalToRequired ChangeKind = "optional-to-required"
 	ChangeKindRequiredToOptional ChangeKind = "required-to-optional"
 	ChangeKindSignatureChanged   ChangeKind = "signature-changed"
+	ChangeKindTokenRemapped      ChangeKind = "token-remapped"
 	ChangeKindNewResource        ChangeKind = "new-resource"
 	ChangeKindNewFunction        ChangeKind = "new-function"
+)
+
+// NormalizationReason captures typed token-lookup attribution for one change.
+type NormalizationReason struct {
+	Outcome    NormalizationOutcome
+	Lookup     string
+	Token      string
+	Candidates []string
+}
+
+// NormalizationOutcome identifies whether a lookup found a deterministic mapping.
+type NormalizationOutcome string
+
+const (
+	NormalizationOutcomeNone      NormalizationOutcome = "none"
+	NormalizationOutcomeResolved  NormalizationOutcome = "resolved"
+	NormalizationOutcomeAmbiguous NormalizationOutcome = "ambiguous"
 )
 
 // Change is the canonical typed compare event emitted by the engine.
@@ -36,6 +54,7 @@ type Change struct {
 	Severity    Severity
 	Breaking    bool
 	Description string
+	Reason      *NormalizationReason
 }
 
 // Report captures compare engine output.

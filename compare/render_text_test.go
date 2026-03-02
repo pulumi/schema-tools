@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
 func TestRenderTextNoBreakingChanges(t *testing.T) {
@@ -206,5 +208,36 @@ func TestRenderTextWriteError(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected write error")
+	}
+}
+
+func TestRenderTextResolvedTokenRemapShowsGuidance(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index/v1:Widget": {},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index/v2:Widget": {},
+		},
+	}
+	oldMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index/v1:Widget"}}}}`)
+	newMetadata := mustParseMetadataCompare(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index/v2:Widget","past":[{"name":"my-pkg:index/v1:Widget","inCodegen":false,"majorVersion":1}]}}}}`)
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1, OldMetadata: oldMetadata, NewMetadata: newMetadata})
+
+	var out bytes.Buffer
+	if err := RenderText(&out, result); err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "Looking good! No breaking changes found.") {
+		t.Fatalf("expected no-breaking message for remap-only changes, got:\n%s", text)
+	}
+	if !strings.Contains(text, "#### Token remaps") {
+		t.Fatalf("expected token remap section, got:\n%s", text)
+	}
+	if !strings.Contains(text, `token remapped: migrate from "my-pkg:index/v1:Widget" to "my-pkg:index/v2:Widget"`) {
+		t.Fatalf("expected remap guidance in text output, got:\n%s", text)
 	}
 }

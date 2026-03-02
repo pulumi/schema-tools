@@ -27,6 +27,7 @@ func RenderText(out io.Writer, result Result) error {
 		return err
 	}
 	displayed := breakingOnlyChanges(result.Changes)
+	remaps := tokenRemapOnlyChanges(result.Changes)
 	breakingCount := len(displayed)
 	totalBreakingCount := result.totalBreakingCount(breakingCount)
 	grouped := groupStructuredChanges(displayed)
@@ -51,6 +52,15 @@ func RenderText(out io.Writer, result Result) error {
 	}
 	if totalBreakingCount > breakingCount {
 		if err := write("Showing %d of %d breaking changes.\n", breakingCount, totalBreakingCount); err != nil {
+			return err
+		}
+	}
+	if len(remaps) > 0 {
+		if err := write("\n#### Token remaps\n"); err != nil {
+			return err
+		}
+		remapGrouped := groupStructuredChanges(remaps)
+		if err := writeGroupedText(write, remapGrouped); err != nil {
 			return err
 		}
 	}
@@ -108,6 +118,19 @@ func breakingOnlyChanges(changes []Change) []Change {
 	out := make([]Change, 0, len(changes))
 	for _, change := range changes {
 		if change.Breaking {
+			out = append(out, change)
+		}
+	}
+	return sortStructuredChanges(out)
+}
+
+func tokenRemapOnlyChanges(changes []Change) []Change {
+	if len(changes) == 0 {
+		return []Change{}
+	}
+	out := make([]Change, 0, len(changes))
+	for _, change := range changes {
+		if change.Kind == "token-remapped" {
 			out = append(out, change)
 		}
 	}

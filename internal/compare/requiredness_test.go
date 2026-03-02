@@ -11,7 +11,7 @@ func TestAnalyzeNoBreakingChanges(t *testing.T) {
 	oldSchema := simpleResourceSchema(simpleResource([]string{"value"}, nil))
 	newSchema := simpleResourceSchema(simpleResource([]string{"value"}, nil))
 
-	report := Analyze("my-pkg", oldSchema, newSchema)
+	report := Analyze("my-pkg", oldSchema, newSchema, nil, nil)
 	if len(report.Changes) != 0 {
 		t.Fatalf("expected no changes, got %#v", report.Changes)
 	}
@@ -65,7 +65,7 @@ func TestAnalyzeResourceRequiredness(t *testing.T) {
 			oldSchema := simpleResourceSchema(simpleResource(tt.oldRequired, tt.oldRequiredInputs))
 			newSchema := simpleResourceSchema(simpleResource(tt.newRequired, tt.newRequiredInputs))
 
-			report := Analyze("my-pkg", oldSchema, newSchema)
+			report := Analyze("my-pkg", oldSchema, newSchema, nil, nil)
 			assertExactChanges(t, report.Changes, tt.expected)
 		})
 	}
@@ -100,7 +100,7 @@ func TestAnalyzeFunctionRequiredness(t *testing.T) {
 		},
 	})
 
-	report := Analyze("my-pkg", oldSchema, newSchema)
+	report := Analyze("my-pkg", oldSchema, newSchema, nil, nil)
 	assertExactChanges(t, report.Changes, []Change{
 		{
 			Category:    functionsCategory,
@@ -143,7 +143,7 @@ func TestAnalyzeTypeRequiredness(t *testing.T) {
 		},
 	})
 
-	report := Analyze("my-pkg", oldSchema, newSchema)
+	report := Analyze("my-pkg", oldSchema, newSchema, nil, nil)
 	assertExactChanges(t, report.Changes, []Change{
 		{
 			Category:    typesCategory,
@@ -172,7 +172,7 @@ func TestAnalyzeRequirednessSkipsRemovedResourceProperty(t *testing.T) {
 	oldSchema := simpleResourceSchema(old)
 	newSchema := simpleResourceSchema(simpleResource(nil, nil))
 
-	report := Analyze("my-pkg", oldSchema, newSchema)
+	report := Analyze("my-pkg", oldSchema, newSchema, nil, nil)
 	expectedMissingOutput := Change{
 		Category:    resourcesCategory,
 		Name:        "my-pkg:index:MyResource",
@@ -189,6 +189,48 @@ func TestAnalyzeRequirednessSkipsRemovedResourceProperty(t *testing.T) {
 			t.Fatalf("unexpected required-to-optional for removed output property: %#v", change)
 		}
 	}
+}
+
+func TestAnalyzeResourceRequirednessAcrossResolvedTokenRemap(t *testing.T) {
+	oldSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index/v1:Widget": simpleResource([]string{"value"}, nil),
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index/v2:Widget": simpleResource(nil, nil),
+		},
+	}
+	oldMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index/v1:Widget"}}}}`)
+	newMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index/v2:Widget","past":[{"name":"my-pkg:index/v1:Widget","inCodegen":false,"majorVersion":1}]}}}}`)
+
+	report := Analyze("my-pkg", oldSchema, newSchema, oldMetadata, newMetadata)
+	assertExactChanges(t, report.Changes, []Change{
+		{
+			Category:    resourcesCategory,
+			Name:        "my-pkg:index/v1:Widget",
+			Kind:        ChangeKindTokenRemapped,
+			Severity:    SeverityInfo,
+			Breaking:    false,
+			Description: `token remapped: migrate from "my-pkg:index/v1:Widget" to "my-pkg:index/v2:Widget"`,
+			Reason: &NormalizationReason{
+				Outcome:    NormalizationOutcomeResolved,
+				Lookup:     "ResolveToken",
+				Token:      "my-pkg:index/v2:Widget",
+				Candidates: []string{},
+			},
+		},
+		{
+			Category:    resourcesCategory,
+			Name:        "my-pkg:index/v1:Widget",
+			Path:        []string{"required", "value"},
+			Kind:        ChangeKindRequiredToOptional,
+			Severity:    SeverityInfo,
+			Breaking:    true,
+			Description: changedToOptional("property"),
+		},
+	})
 }
 
 func assertExactChanges(t *testing.T, got, want []Change) {

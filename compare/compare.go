@@ -14,15 +14,18 @@ import (
 
 // Schemas computes a structured comparison result for two package specs.
 func Schemas(oldSchema, newSchema schema.PackageSpec, opts Options) Result {
-	report := internalcompare.Analyze(opts.Provider, oldSchema, newSchema)
+	report := internalcompare.Analyze(opts.Provider, oldSchema, newSchema, opts.OldMetadata, opts.NewMetadata)
 	sort.Strings(report.NewResources)
 	sort.Strings(report.NewFunctions)
 	breakingChanges := sortAndFilterBreaking(report.Changes)
+	remapChanges := sortAndFilterTokenRemaps(report.Changes)
 	displayed := selectDisplayedChanges(breakingChanges, opts.MaxChanges)
-	structuredChanges := sortStructuredChanges(buildStructuredChanges(displayed))
+	publicChanges := sortAndMergeChanges(displayed, remapChanges)
+	structuredChanges := sortStructuredChanges(buildStructuredChanges(publicChanges))
+	summaryChanges := sortAndMergeChanges(breakingChanges, remapChanges)
 
 	result := Result{
-		Summary:       summarize(breakingChanges),
+		Summary:       summarize(summaryChanges),
 		Changes:       ensureChangeSlice(structuredChanges),
 		Grouped:       groupStructuredChanges(structuredChanges),
 		NewResources:  ensureSlice(slices.Clone(report.NewResources)),
@@ -133,6 +136,8 @@ func categoryForKind(kind internalcompare.ChangeKind) string {
 		return "required-to-optional"
 	case internalcompare.ChangeKindSignatureChanged:
 		return "signature-changed"
+	case internalcompare.ChangeKindTokenRemapped:
+		return "token-remapped"
 	default:
 		return "other"
 	}
@@ -146,6 +151,56 @@ func sortAndFilterBreaking(changes []internalcompare.Change) []internalcompare.C
 		}
 	}
 	return out
+}
+
+func sortAndFilterTokenRemaps(changes []internalcompare.Change) []internalcompare.Change {
+	out := make([]internalcompare.Change, 0, len(changes))
+	for _, change := range changes {
+		if change.Kind == internalcompare.ChangeKindTokenRemapped {
+			out = append(out, change)
+		}
+	}
+	return out
+}
+
+func sortAndMergeChanges(first, second []internalcompare.Change) []internalcompare.Change {
+	if len(first) == 0 && len(second) == 0 {
+		return []internalcompare.Change{}
+	}
+	merged := make([]internalcompare.Change, 0, len(first)+len(second))
+	merged = append(merged, first...)
+	merged = append(merged, second...)
+	slices.SortFunc(merged, compareInternalChanges)
+	return merged
+}
+
+func compareInternalChanges(a, b internalcompare.Change) int {
+	if d := strings.Compare(a.Category, b.Category); d != 0 {
+		return d
+	}
+	if d := strings.Compare(a.Name, b.Name); d != 0 {
+		return d
+	}
+	if d := strings.Compare(strings.Join(a.Path, "\x00"), strings.Join(b.Path, "\x00")); d != 0 {
+		return d
+	}
+	if d := strings.Compare(string(a.Kind), string(b.Kind)); d != 0 {
+		return d
+	}
+	if d := strings.Compare(string(a.Severity), string(b.Severity)); d != 0 {
+		return d
+	}
+	if d := strings.Compare(a.Description, b.Description); d != 0 {
+		return d
+	}
+	return strings.Compare(reasonSortKey(a.Reason), reasonSortKey(b.Reason))
+}
+
+func reasonSortKey(reason *internalcompare.NormalizationReason) string {
+	if reason == nil {
+		return ""
+	}
+	return string(reason.Outcome) + "\x00" + reason.Lookup + "\x00" + reason.Token + "\x00" + strings.Join(reason.Candidates, "\x00")
 }
 
 func collectCategories(changes []internalcompare.Change) []string {
