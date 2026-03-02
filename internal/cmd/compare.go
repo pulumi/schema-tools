@@ -178,6 +178,8 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 		return err
 	}
 
+	// Compare now emits canonical one-pass results directly; command rendering
+	// should not inject or rewrite normalization diagnostics post hoc.
 	result := compare.Schemas(schOld, schNew, compare.Options{
 		Provider:   input.provider,
 		MaxChanges: input.maxChanges,
