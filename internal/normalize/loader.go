@@ -65,11 +65,14 @@ func ValidateMetadata(metadata *MetadataEnvelope) error {
 	if err := validateTokenHistoryMap("datasources", metadata.AutoAliasing.Datasources); err != nil {
 		return err
 	}
+	if err := validateTokenHistoryMap("types", metadata.AutoAliasing.Types); err != nil {
+		return err
+	}
 
 	return nil
 }
 
-// validateTokenHistoryMap validates one scope map ("resources" or "datasources")
+// validateTokenHistoryMap validates one scope map ("resources", "datasources", or "types")
 // and returns typed metadata errors with field-level context.
 func validateTokenHistoryMap(kind string, m map[string]*TokenHistory) error {
 	for tfToken, history := range m {

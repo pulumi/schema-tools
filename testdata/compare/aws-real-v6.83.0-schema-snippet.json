@@ -1,0 +1,109 @@
+{
+  "name": "aws",
+  "resources": {
+    "aws:s3/bucket:Bucket": {
+      "inputProperties": {
+        "loggings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/types/aws:s3/BucketLogging:BucketLogging"
+          }
+        }
+      }
+    },
+    "aws:batch/jobDefinition:JobDefinition": {
+      "properties": {
+        "eksProperties": {
+          "$ref": "#/types/aws:batch/JobDefinitionEksProperties:JobDefinitionEksProperties"
+        }
+      }
+    }
+  },
+  "functions": {
+    "aws:lb/getListenerRule:getListenerRule": {
+      "inputs": {
+        "properties": {
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/types/aws:lb/getListenerRuleAction:getListenerRuleAction"
+            }
+          }
+        }
+      }
+    }
+  },
+  "types": {
+    "aws:s3/BucketLogging:BucketLogging": {
+      "type": "object",
+      "properties": {
+        "targetBucket": {
+          "type": "string"
+        },
+        "targetPrefix": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "targetBucket"
+      ]
+    },
+    "aws:batch/JobDefinitionEksProperties:JobDefinitionEksProperties": {
+      "type": "object",
+      "properties": {
+        "podProperties": {
+          "$ref": "#/types/aws:batch/JobDefinitionEksPropertiesPodProperties:JobDefinitionEksPropertiesPodProperties"
+        }
+      }
+    },
+    "aws:batch/JobDefinitionEksPropertiesPodProperties:JobDefinitionEksPropertiesPodProperties": {
+      "type": "object",
+      "properties": {
+        "containers": {
+          "$ref": "#/types/aws:batch/JobDefinitionEksPropertiesPodPropertiesContainers:JobDefinitionEksPropertiesPodPropertiesContainers"
+        }
+      }
+    },
+    "aws:batch/JobDefinitionEksPropertiesPodPropertiesContainers:JobDefinitionEksPropertiesPodPropertiesContainers": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "image"
+      ]
+    },
+    "aws:lb/getListenerRuleAction:getListenerRuleAction": {
+      "type": "object",
+      "properties": {
+        "forward": {
+          "$ref": "#/types/aws:lb/getListenerRuleActionForward:getListenerRuleActionForward"
+        }
+      }
+    },
+    "aws:lb/getListenerRuleActionForward:getListenerRuleActionForward": {
+      "type": "object",
+      "properties": {
+        "stickiness": {
+          "$ref": "#/types/aws:lb/getListenerRuleActionForwardStickiness:getListenerRuleActionForwardStickiness"
+        },
+        "targetGroups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "aws:lb/getListenerRuleActionForwardStickiness:getListenerRuleActionForwardStickiness": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

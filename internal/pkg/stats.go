@@ -109,9 +109,9 @@ func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
 			}
 		}
 
-		res.totalOutputs = len(t.ObjectTypeSpec.Properties)
+			res.totalOutputs = len(t.Properties)
 
-		for _, output := range t.ObjectTypeSpec.Properties {
+			for _, output := range t.Properties {
 			if output.Description == "" {
 				res.outputsMissingDesc++
 			}
@@ -155,9 +155,9 @@ func CountStats(sch schema.PackageSpec) PulumiSchemaStats {
 			}
 		}
 
-		stats.Resources.TotalOutputProperties += len(r.ObjectTypeSpec.Properties)
+		stats.Resources.TotalOutputProperties += len(r.Properties)
 
-		for _, output := range r.ObjectTypeSpec.Properties {
+		for _, output := range r.Properties {
 			if output.Description == "" {
 				stats.Resources.OutputPropertiesMissingDescriptions++
 			}

@@ -52,6 +52,7 @@ type AutoAliasing struct {
 	Version     *int                     `json:"version,omitempty"`
 	Resources   map[string]*TokenHistory `json:"resources,omitempty"`
 	Datasources map[string]*TokenHistory `json:"datasources,omitempty"`
+	Types       map[string]*TokenHistory `json:"types,omitempty"`
 }
 
 // TokenHistory tracks current/past token names and field history for a TF token.
@@ -111,7 +112,7 @@ type FieldLookupResult struct {
 type EquivalentTypeChangeResult struct {
 	Outcome TokenLookupOutcome
 	// Equivalent is true only for resolved lookups with array<->single changes
-	// over the same base type.
+	// over the same base type, including resolved #/types/... ref renames.
 	Equivalent bool
 	Field      string
 	// Candidates is sorted for deterministic ambiguity handling.

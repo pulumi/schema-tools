@@ -5,6 +5,7 @@ import "sort"
 const (
 	scopeResources   = "resources"
 	scopeDatasources = "datasources"
+	scopeTypes       = "types"
 )
 
 type tokenLookupDirection string
@@ -162,6 +163,8 @@ func readHistoryMap(metadata *MetadataEnvelope, scope string) map[string]*TokenH
 		return metadata.AutoAliasing.Resources
 	case scopeDatasources:
 		return metadata.AutoAliasing.Datasources
+	case scopeTypes:
+		return metadata.AutoAliasing.Types
 	default:
 		return nil
 	}

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pulumi/pulumi/pkg/v3/codegen"
 	"github.com/spf13/cobra"
 
 	"github.com/pulumi/schema-tools/internal/pkg"
@@ -57,11 +56,11 @@ func stats(provider string, repositoryUrl string, details bool, tag string) erro
 
 	if details {
 		fmt.Printf("\n\n### All Resources:\n\n")
-		for _, n := range codegen.SortedKeys(sch.Resources) {
+		for _, n := range sortedStringKeys(sch.Resources) {
 			fmt.Println(n)
 		}
 		fmt.Printf("\n### All Functions:\n\n")
-		for _, n := range codegen.SortedKeys(sch.Functions) {
+		for _, n := range sortedStringKeys(sch.Functions) {
 			fmt.Println(n)
 		}
 	}
