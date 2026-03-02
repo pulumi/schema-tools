@@ -64,4 +64,5 @@ type Result struct {
 	NewResources  []string       `json:"new_resources"`
 	NewFunctions  []string       `json:"new_functions"`
 	totalBreaking int
+	displayed     []Change
 }

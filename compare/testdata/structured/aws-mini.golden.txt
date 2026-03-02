@@ -1,6 +1,6 @@
 ### Does the PR have any schema changes?
 
-Found 17 breaking changes:
+Found 19 breaking changes:
 
 #### Resources
 - `🔴` "aws:chime/voiceConnectorOrganization:VoiceConnectorOrganization" missing
@@ -11,34 +11,38 @@ Found 17 breaking changes:
     - inputs:
         - `🟡` "defaultAddonsToRemoves" missing
     - properties:
-        - `🔴` "certificateAuthorities" renamed to "certificateAuthority" and type changed from "array" to "#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority"
-        - `🟡` missing output "certificateAuthority"
+        - `🟡` "certificateAuthorities" renamed to "certificateAuthority" and type changed from "array<#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority>" to "#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority"
         - `🟡` missing output "defaultAddonsToRemoves"
 - "aws:paymentcryptography/key:Key":
     - inputs:
-        - `🔴` "keyAttributes" type changed from "array" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
+        - `🟡` "keyAttributes" type changed from "array<#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes>" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
     - properties:
-        - `🔴` "keyAttributes" type changed from "array" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
+        - `🟡` "keyAttributes" type changed from "array<#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes>" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
 - "aws:s3/bucket:Bucket":
     - inputs:
-        - `🔴` "loggings" renamed to "logging" and type changed from "array" to "#/types/aws:s3/BucketLogging:BucketLogging"
-        - `🔴` "versionings" renamed to "versioning" and type changed from "array" to "#/types/aws:s3/BucketVersioning:BucketVersioning"
-        - `🔴` "websites" renamed to "website" and type changed from "array" to "#/types/aws:s3/BucketWebsite:BucketWebsite"
+        - `🟡` "loggings" renamed to "logging" and type changed from "array<#/types/aws:s3/BucketLogging:BucketLogging>" to "#/types/aws:s3/BucketLogging:BucketLogging"
+        - `🟡` "versionings" renamed to "versioning" and type changed from "array<#/types/aws:s3/BucketVersioning:BucketVersioning>" to "#/types/aws:s3/BucketVersioning:BucketVersioning"
+        - `🟡` "websites" renamed to "website" and type changed from "array<#/types/aws:s3/BucketWebsite:BucketWebsite>" to "#/types/aws:s3/BucketWebsite:BucketWebsite"
     - properties:
-        - `🔴` "loggings" renamed to "logging" and type changed from "array" to "#/types/aws:s3/BucketLogging:BucketLogging"
-        - `🔴` "versionings" renamed to "versioning" and type changed from "array" to "#/types/aws:s3/BucketVersioning:BucketVersioning"
-        - `🔴` "websites" renamed to "website" and type changed from "array" to "#/types/aws:s3/BucketWebsite:BucketWebsite"
+        - `🟡` "loggings" renamed to "logging" and type changed from "array<#/types/aws:s3/BucketLogging:BucketLogging>" to "#/types/aws:s3/BucketLogging:BucketLogging"
+        - `🟡` "versionings" renamed to "versioning" and type changed from "array<#/types/aws:s3/BucketVersioning:BucketVersioning>" to "#/types/aws:s3/BucketVersioning:BucketVersioning"
+        - `🟡` "websites" renamed to "website" and type changed from "array<#/types/aws:s3/BucketWebsite:BucketWebsite>" to "#/types/aws:s3/BucketWebsite:BucketWebsite"
+- `🟡` "aws:s3/bucketAclV2:BucketAclV2" token deprecated: prefer "aws:s3/bucketAcl:BucketAcl" instead of "aws:s3/bucketAclV2:BucketAclV2"
 
 #### Functions
 - `🔴` "aws:bedrock/getInferenceProfiles:getInferenceProfiles" signature change (pulumi.InvokeOptions)->T => (Args, pulumi.InvokeOptions)->T
-- "aws:lb/getListenerRule:getListenerRule":
-    - inputs:
-        - `🔴` "action[*].forward" renamed to "action[*].forwards" and type changed from "#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward" to "array"
 
 #### Types
+- "aws:lb/GetListenerRuleAction:GetListenerRuleAction":
+    - properties:
+        - `🟡` "forward" renamed to "forwards" and type changed from "#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward" to "array<#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward>"
+- "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes":
+    - properties:
+        - `🟡` "keyModesOfUse" type changed from "string" to "array"
+        - `🟡` "keyModesOfUse" had no type but now has "string"
 - "aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption":
     - required:
-        - `🔴` "signInOptions" property has changed to Required
+        - `🟡` "signInOptions" property has changed to Required
 
 #### New resources:
 

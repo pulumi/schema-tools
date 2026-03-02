@@ -20,8 +20,9 @@ func Schemas(oldSchema, newSchema schema.PackageSpec, opts Options) Result {
 	breakingChanges := sortAndFilterBreaking(report.Changes)
 	remapChanges := sortAndFilterTokenRemaps(report.Changes)
 	displayed := selectDisplayedChanges(breakingChanges, opts.MaxChanges)
-	publicChanges := sortAndMergeChanges(displayed, remapChanges)
+	publicChanges := sortAndMergeChanges(breakingChanges, remapChanges)
 	structuredChanges := sortStructuredChanges(buildStructuredChanges(publicChanges))
+	displayedStructured := sortStructuredChanges(buildStructuredChanges(displayed))
 	summaryChanges := sortAndMergeChanges(breakingChanges, remapChanges)
 
 	result := Result{
@@ -31,6 +32,7 @@ func Schemas(oldSchema, newSchema schema.PackageSpec, opts Options) Result {
 		NewResources:  ensureSlice(slices.Clone(report.NewResources)),
 		NewFunctions:  ensureSlice(slices.Clone(report.NewFunctions)),
 		totalBreaking: len(breakingChanges),
+		displayed:     ensureChangeSlice(displayedStructured),
 	}
 	return result
 }
@@ -156,7 +158,7 @@ func sortAndFilterBreaking(changes []internalcompare.Change) []internalcompare.C
 func sortAndFilterTokenRemaps(changes []internalcompare.Change) []internalcompare.Change {
 	out := make([]internalcompare.Change, 0, len(changes))
 	for _, change := range changes {
-		if change.Kind == internalcompare.ChangeKindTokenRemapped {
+		if change.Kind == internalcompare.ChangeKindTokenRemapped && !change.Breaking {
 			out = append(out, change)
 		}
 	}

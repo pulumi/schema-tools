@@ -280,10 +280,10 @@ func appendTypeChanges(changes *[]Change, category, name string, path []string, 
 	case old == nil && new == nil:
 		return
 	case old != nil && new == nil:
-		*changes = append(*changes, newChange(category, name, path, ChangeKindTypeChanged, fmt.Sprintf("had %+v but now has no type", old)))
+		*changes = append(*changes, newChange(category, name, path, ChangeKindTypeChanged, fmt.Sprintf("had %q but now has no type", typeLookupText(old))))
 		return
 	case old == nil && new != nil:
-		*changes = append(*changes, newChange(category, name, path, ChangeKindTypeChanged, fmt.Sprintf("had no type but now has %+v", new)))
+		*changes = append(*changes, newChange(category, name, path, ChangeKindTypeChanged, fmt.Sprintf("had no type but now has %q", typeLookupText(new))))
 		return
 	}
 
@@ -317,7 +317,7 @@ func appendTypeChanges(changes *[]Change, category, name string, path []string, 
 // Example:
 // old property map: {"loggings": array<#/types/.../BucketLogging>}
 // new property map: {"logging": #/types/.../BucketLogging}
-// result: `renamed to "logging" and type changed from "array" to "#/types/.../BucketLogging"`
+// result: `renamed to "logging" and type changed from "array<#/types/.../BucketLogging>" to "#/types/.../BucketLogging"`
 func renamedPropertyTypeChangeDescription(oldName string, oldType *schema.TypeSpec, newProps map[string]schema.PropertySpec) (string, bool) {
 	if oldType == nil {
 		return "", false
@@ -386,7 +386,7 @@ func pluralizeName(name string) string {
 //     out: ("#/types/pkg:index/Foo:Foo", "array<#/types/pkg:index/Foo:Foo>")
 //   - old: array<#/types/pkg:index/Foos:Foos>
 //     new: #/types/pkg:index/Foo:Foo
-//     out: ("array", "#/types/pkg:index/Foo:Foo")
+//     out: ("array<#/types/pkg:index/Foos:Foos>", "#/types/pkg:index/Foo:Foo")
 func refArrayBoundaryTypeChangeText(old, new *schema.TypeSpec) (string, string, bool) {
 	if old == nil || new == nil {
 		return "", "", false
@@ -396,7 +396,7 @@ func refArrayBoundaryTypeChangeText(old, new *schema.TypeSpec) (string, string, 
 	case old.Ref != "" && new.Type == "array" && new.Items != nil && new.Items.Ref != "":
 		return old.Ref, typeLookupText(new), true
 	case old.Type == "array" && old.Items != nil && old.Items.Ref != "" && new.Ref != "":
-		return "array", new.Ref, true
+		return typeLookupText(old), new.Ref, true
 	default:
 		return "", "", false
 	}
@@ -610,8 +610,8 @@ func tokenRemapChange(category, oldToken, newToken string, reason *Normalization
 		Category:    category,
 		Name:        oldToken,
 		Kind:        ChangeKindTokenRemapped,
-		Severity:    SeverityInfo,
-		Breaking:    false,
+		Severity:    SeverityWarn,
+		Breaking:    true,
 		Description: description,
 		Reason:      cloneReason(reason),
 	}

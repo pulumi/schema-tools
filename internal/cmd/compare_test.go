@@ -14,6 +14,8 @@ import (
 
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/pulumi/schema-tools/compare"
+	"github.com/pulumi/schema-tools/internal/normalize"
+	"github.com/pulumi/schema-tools/internal/pkg"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -110,6 +112,52 @@ func TestRenderCompareOutputModes(t *testing.T) {
 	})
 }
 
+func TestRenderCompareOutputTextPreservesBreakingDiagnosticLines(t *testing.T) {
+	result := compare.Result{
+		Changes: []compare.Change{
+			{
+				Scope:    compare.ScopeResource,
+				Token:    "my-pkg:index:Widget",
+				Location: "inputs",
+				Path:     `Resources: "my-pkg:index:Widget": inputs: "list"`,
+				Kind:     "type-changed",
+				Severity: compare.SeverityWarn,
+				Breaking: true,
+				Message:  `"list" type changed from "array" to "string"`,
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	err := renderCompareOutput(&out, result, false, false)
+	assert.NoError(t, err)
+	text := out.String()
+	assert.Contains(t, text, `type changed from "array" to "string"`)
+	assert.NotContains(t, text, "maxItemsOne")
+}
+
+func TestRenderCompareOutputTextUsesOnePassDisplayedEntryCountWhenCapped(t *testing.T) {
+	result := compare.Result{
+		Changes: []compare.Change{
+			{
+				Scope:    compare.ScopeResource,
+				Token:    "my-pkg:index:Widget",
+				Location: "inputs",
+				Path:     `Resources: "my-pkg:index:Widget": inputs: required: "list"`,
+				Kind:     "optional-to-required",
+				Severity: compare.SeverityInfo,
+				Breaking: true,
+				Message:  `"list" input has changed to Required`,
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	err := renderCompareOutput(&out, result, false, false)
+	assert.NoError(t, err)
+	text := out.String()
+	assert.Contains(t, text, "Found 1 breaking change:")
+}
 func TestCompareLocalCurrentUserErrorCancelsOldSchemaDownload(t *testing.T) {
 	deps := compareDeps{
 		currentUser: func() (*user.User, error) {
@@ -149,6 +197,54 @@ func TestCompareLocalCurrentUserErrorCancelsOldSchemaDownload(t *testing.T) {
 	}
 }
 
+func TestResolveCompareMetadataSourceMissingFileReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	deps := compareDeps{
+		downloadRepoFile: func(context.Context, string, string, string, string) ([]byte, error) {
+			return nil, pkg.ErrRepoFileNotFound
+		},
+		parseMetadata: normalize.ParseMetadata,
+	}
+
+	_, err := resolveCompareMetadataSource(
+		context.Background(),
+		deps,
+		"old",
+		"aws",
+		"github://api.github.com/pulumi",
+		"v1.0.0",
+	)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrCompareMetadataRequired)
+	assert.ErrorIs(t, err, pkg.ErrRepoFileNotFound)
+	assert.Contains(t, err.Error(), "compare old metadata required")
+}
+
+func TestResolveCompareMetadataSourceMissingPayloadReturnsSentinel(t *testing.T) {
+	t.Parallel()
+
+	deps := compareDeps{
+		downloadRepoFile: func(context.Context, string, string, string, string) ([]byte, error) {
+			return []byte{}, nil
+		},
+		parseMetadata: normalize.ParseMetadata,
+	}
+
+	_, err := resolveCompareMetadataSource(
+		context.Background(),
+		deps,
+		"new",
+		"aws",
+		"github://api.github.com/pulumi",
+		"v2.0.0",
+	)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrCompareMetadataRequired)
+	assert.ErrorIs(t, err, normalize.ErrMetadataRequired)
+	assert.Contains(t, err.Error(), "compare new metadata required")
+}
+
 type errorWriter struct{}
 
 func (errorWriter) Write(p []byte) (int, error) {
@@ -166,12 +262,12 @@ func TestCompareSchemasFixtureTextOutput(t *testing.T) {
 	assert.NoError(t, compare.RenderText(&out, result))
 
 	text := out.String()
-	assert.Contains(t, text, "Found 8 breaking changes:")
+	assert.Contains(t, text, "Found 6 breaking changes:")
 	assert.Contains(t, text, `"my-pkg:index:RemovedResource" missing`)
 	assert.Contains(t, text, `"my-pkg:index:removedFunction" missing`)
 	assert.Contains(t, text, `type changed from "string" to "integer"`)
 	assert.Contains(t, text, `input has changed to Required`)
-	assert.Contains(t, text, `property is no longer Required`)
+	assert.NotContains(t, text, `property is no longer Required`)
 }
 
 func TestRenderCompareOutputFixtureJSON(t *testing.T) {
@@ -208,7 +304,6 @@ func TestRenderCompareOutputFixtureJSON(t *testing.T) {
 			"missing-function":     1,
 			"missing-resource":     1,
 			"optional-to-required": 3,
-			"required-to-optional": 2,
 			"type-changed":         1,
 		}))
 		assert.Equal(t, result.Changes, payload.Changes)
@@ -240,7 +335,6 @@ func TestRenderCompareOutputFixtureJSON(t *testing.T) {
 			"missing-function":     1,
 			"missing-resource":     1,
 			"optional-to-required": 3,
-			"required-to-optional": 2,
 			"type-changed":         1,
 		}, countsByCategory)
 	})

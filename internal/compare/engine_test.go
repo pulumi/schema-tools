@@ -158,7 +158,7 @@ func TestAnalyzeEmitsDeterministicTypedBreakingChanges(t *testing.T) {
 			Name:        "my-pkg:index:MyResource",
 			Path:        []string{"required inputs", "value"},
 			Kind:        ChangeKindOptionalToRequired,
-			Severity:    SeverityInfo,
+			Severity:    SeverityDanger,
 			Breaking:    true,
 			Description: "input has changed to Required",
 		},
@@ -340,8 +340,8 @@ func TestAnalyzeResolvesResourceTokenRemapFromMetadata(t *testing.T) {
 			Category:    resourcesCategory,
 			Name:        "my-pkg:index/v1:Widget",
 			Kind:        ChangeKindTokenRemapped,
-			Severity:    SeverityInfo,
-			Breaking:    false,
+			Severity:    SeverityWarn,
+			Breaking:    true,
 			Description: `token remapped: migrate from "my-pkg:index/v1:Widget" to "my-pkg:index/v2:Widget"`,
 			Reason: &NormalizationReason{
 				Outcome:    NormalizationOutcomeResolved,
@@ -393,8 +393,8 @@ func TestAnalyzeRetainedInCodegenAliasKeepsCanonicalNewResourceAndRemapSignal(t 
 			Category:    resourcesCategory,
 			Name:        "aws:s3/bucketAclV2:BucketAclV2",
 			Kind:        ChangeKindTokenRemapped,
-			Severity:    SeverityInfo,
-			Breaking:    false,
+			Severity:    SeverityWarn,
+			Breaking:    true,
 			Description: `token deprecated: prefer "aws:s3/bucketAcl:BucketAcl" instead of "aws:s3/bucketAclV2:BucketAclV2"`,
 			Reason: &NormalizationReason{
 				Outcome:    NormalizationOutcomeResolved,
@@ -446,8 +446,8 @@ func TestAnalyzeRetainedInCodegenAliasKeepsCanonicalNewFunctionAndRemapSignal(t 
 			Category:    functionsCategory,
 			Name:        "aws:s3/getBucketAclV2:getBucketAclV2",
 			Kind:        ChangeKindTokenRemapped,
-			Severity:    SeverityInfo,
-			Breaking:    false,
+			Severity:    SeverityWarn,
+			Breaking:    true,
 			Description: `token deprecated: prefer "aws:s3/getBucketAcl:getBucketAcl" instead of "aws:s3/getBucketAclV2:getBucketAclV2"`,
 			Reason: &NormalizationReason{
 				Outcome:    NormalizationOutcomeResolved,
@@ -556,8 +556,8 @@ func TestAnalyzeResolvesFunctionTokenRemapFromMetadata(t *testing.T) {
 			Category:    functionsCategory,
 			Name:        "my-pkg:index/v1:getWidget",
 			Kind:        ChangeKindTokenRemapped,
-			Severity:    SeverityInfo,
-			Breaking:    false,
+			Severity:    SeverityWarn,
+			Breaking:    true,
 			Description: `token remapped: migrate from "my-pkg:index/v1:getWidget" to "my-pkg:index/v2:getWidget"`,
 			Reason: &NormalizationReason{
 				Outcome:    NormalizationOutcomeResolved,
@@ -695,7 +695,7 @@ func TestAnalyzeEmitsKeyAttributesArrayToRefWithMaxItemsTransition(t *testing.T)
 
 	report := Analyze("aws", oldSchema, newSchema, oldMetadata, newMetadata)
 
-	wantDescription := `type changed from "array" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"`
+	wantDescription := `type changed from "array<#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes>" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"`
 	matches := []Change{}
 	for _, change := range report.Changes {
 		if change.Category != resourcesCategory || change.Name != "aws:paymentcryptography/key:Key" {
@@ -862,7 +862,7 @@ func TestAnalyzeEmitsFunctionTypeChangeForSameRefArrayToRefWithMaxItemsTransitio
 	newMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"datasources":{"aws_paymentcryptography_get_key":{"current":"aws:paymentcryptography/getKey:getKey","fields":{"key_attributes":{"maxItemsOne":true}}}}}}`)
 
 	report := Analyze("aws", oldSchema, newSchema, oldMetadata, newMetadata)
-	wantDescription := `type changed from "array" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"`
+	wantDescription := `type changed from "array<#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes>" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"`
 	found := false
 	for _, change := range report.Changes {
 		if change.Category == functionsCategory &&
@@ -911,7 +911,7 @@ func TestAnalyzeEmitsTypeChangeForResolvedTypeRefRenameWithMaxItemsTransition(t 
 	newMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"resources":{"tf_widget":{"current":"my-pkg:index:Widget","fields":{"list":{"maxItemsOne":false}}}},"types":{"tf_widget_spec":{"current":"my-pkg:index/v2:WidgetSpec","past":[{"name":"my-pkg:index/v1:WidgetSpec","inCodegen":false,"majorVersion":1}]}}}}`)
 
 	report := Analyze("my-pkg", oldSchema, newSchema, oldMetadata, newMetadata)
-	wantDescription := `type changed from "array" to "#/types/my-pkg:index/v2:WidgetSpec"`
+	wantDescription := `type changed from "array<#/types/my-pkg:index/v1:WidgetSpec>" to "#/types/my-pkg:index/v2:WidgetSpec"`
 	found := false
 	for _, change := range report.Changes {
 		if change.Category == resourcesCategory &&

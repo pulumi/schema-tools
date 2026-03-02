@@ -3,8 +3,10 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -14,13 +16,16 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/pulumi/schema-tools/compare"
+	"github.com/pulumi/schema-tools/internal/normalize"
 	"github.com/pulumi/schema-tools/internal/pkg"
 )
 
 type compareDeps struct {
 	currentUser          func() (*user.User, error)
 	downloadSchema       func(context.Context, string, string, string) (schema.PackageSpec, error)
+	downloadRepoFile     func(context.Context, string, string, string, string) ([]byte, error)
 	loadLocalPackageSpec func(string) (schema.PackageSpec, error)
+	parseMetadata        func([]byte) (*normalize.MetadataEnvelope, error)
 }
 
 type compareInput struct {
@@ -39,8 +44,32 @@ func defaultCompareDeps() compareDeps {
 	return compareDeps{
 		currentUser:          user.Current,
 		downloadSchema:       pkg.DownloadSchema,
+		downloadRepoFile:     pkg.DownloadRepoFile,
 		loadLocalPackageSpec: pkg.LoadLocalPackageSpec,
+		parseMetadata:        normalize.ParseMetadata,
 	}
+}
+
+var ErrCompareMetadataRequired = errors.New("compare metadata required")
+
+type compareMetadataRequiredError struct {
+	Side   string
+	Source string
+	Path   string
+	Commit string
+	Err    error
+}
+
+func (e *compareMetadataRequiredError) Error() string {
+	return fmt.Sprintf("compare %s metadata required: %s@%s:%s", e.Side, e.Source, e.Commit, e.Path)
+}
+
+func (e *compareMetadataRequiredError) Unwrap() error {
+	return e.Err
+}
+
+func (e *compareMetadataRequiredError) Is(target error) bool {
+	return target == ErrCompareMetadataRequired
 }
 
 func compareCmd() *cobra.Command {
@@ -107,6 +136,11 @@ func runCompareCmd(input compareInput) error {
 }
 
 func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
+	deps = applyCompareDepsDefaults(deps)
+	if strings.TrimSpace(input.provider) == "" {
+		return fmt.Errorf("--provider must be set")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	loadLocal := func(path string) (schema.PackageSpec, error) {
@@ -117,6 +151,11 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 		return deps.loadLocalPackageSpec(schemaPath)
 	}
 
+	oldCommit := input.oldCommit
+	if oldCommit == "" && input.oldPath == "" {
+		oldCommit = "master"
+	}
+
 	var schOld schema.PackageSpec
 	schOldDone := make(chan error, 1)
 	go func() {
@@ -124,10 +163,8 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 		switch {
 		case input.oldPath != "":
 			schOld, err = loadLocal(input.oldPath)
-		case input.oldCommit != "":
-			schOld, err = deps.downloadSchema(ctx, input.repository, input.provider, input.oldCommit)
 		default:
-			schOld, err = deps.downloadSchema(ctx, input.repository, input.provider, "master")
+			schOld, err = deps.downloadSchema(ctx, input.repository, input.provider, oldCommit)
 		}
 		if err != nil {
 			cancel()
@@ -136,12 +173,15 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 	}()
 
 	var schNew schema.PackageSpec
+	newCommit := input.newCommit
+	newIsLocal := false
 	if input.newPath != "" {
 		var err error
 		schNew, err = loadLocal(input.newPath)
 		if err != nil {
 			return err
 		}
+		newIsLocal = true
 	} else if strings.HasPrefix(input.newCommit, "--local-path=") {
 		fmt.Fprintln(os.Stderr, "Warning: --local-path= in --new-commit is deprecated, use --new-path instead")
 		parts := strings.Split(input.newCommit, "=")
@@ -153,6 +193,8 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 		if err != nil {
 			return err
 		}
+		newCommit = ""
+		newIsLocal = true
 	} else if input.newCommit == "--local" {
 		fmt.Fprintln(os.Stderr, "Warning: --local in --new-commit is deprecated, use --new-path instead")
 		usr, err := deps.currentUser()
@@ -166,6 +208,8 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 		if err != nil {
 			return err
 		}
+		newCommit = ""
+		newIsLocal = true
 	} else {
 		var err error
 		schNew, err = deps.downloadSchema(ctx, input.repository, input.provider, input.newCommit)
@@ -178,13 +222,93 @@ func runCompareCmdWithDeps(input compareInput, deps compareDeps) error {
 		return err
 	}
 
-	// Compare now emits canonical one-pass results directly; command rendering
-	// should not inject or rewrite normalization diagnostics post hoc.
+	var oldMetadata, newMetadata *normalize.MetadataEnvelope
+	remoteCompare := input.oldPath == "" && !newIsLocal && !isFileRepositoryURL(input.repository)
+	if remoteCompare {
+		var err error
+		oldMetadata, err = resolveCompareMetadataSource(
+			ctx, deps, "old", input.provider, input.repository, oldCommit,
+		)
+		if err != nil {
+			return err
+		}
+		newMetadata, err = resolveCompareMetadataSource(
+			ctx, deps, "new", input.provider, input.repository, newCommit,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
 	result := compare.Schemas(schOld, schNew, compare.Options{
-		Provider:   input.provider,
-		MaxChanges: input.maxChanges,
+		Provider:    input.provider,
+		MaxChanges:  input.maxChanges,
+		OldMetadata: oldMetadata,
+		NewMetadata: newMetadata,
 	})
 	return renderCompareOutput(os.Stdout, result, input.jsonMode, input.summaryMode)
+}
+
+func applyCompareDepsDefaults(deps compareDeps) compareDeps {
+	defaults := defaultCompareDeps()
+	if deps.currentUser == nil {
+		deps.currentUser = defaults.currentUser
+	}
+	if deps.downloadSchema == nil {
+		deps.downloadSchema = defaults.downloadSchema
+	}
+	if deps.downloadRepoFile == nil {
+		deps.downloadRepoFile = defaults.downloadRepoFile
+	}
+	if deps.loadLocalPackageSpec == nil {
+		deps.loadLocalPackageSpec = defaults.loadLocalPackageSpec
+	}
+	if deps.parseMetadata == nil {
+		deps.parseMetadata = defaults.parseMetadata
+	}
+	return deps
+}
+
+func resolveCompareMetadataSource(
+	ctx context.Context,
+	deps compareDeps,
+	side, provider, repository, commit string,
+) (*normalize.MetadataEnvelope, error) {
+	metadataRepoPath := pkg.StandardMetadataPath(provider)
+
+	payload, err := deps.downloadRepoFile(ctx, repository, provider, commit, metadataRepoPath)
+	if err != nil {
+		if errors.Is(err, pkg.ErrRepoFileNotFound) {
+			return nil, &compareMetadataRequiredError{
+				Side:   side,
+				Source: repository,
+				Path:   metadataRepoPath,
+				Commit: commit,
+				Err:    err,
+			}
+		}
+		return nil, fmt.Errorf("download %s metadata: %w", side, err)
+	}
+
+	metadata, err := deps.parseMetadata(payload)
+	if err != nil {
+		if errors.Is(err, normalize.ErrMetadataRequired) {
+			return nil, &compareMetadataRequiredError{
+				Side:   side,
+				Source: repository,
+				Path:   metadataRepoPath,
+				Commit: commit,
+				Err:    err,
+			}
+		}
+		return nil, fmt.Errorf("parse %s metadata: %w", side, err)
+	}
+	return metadata, nil
+}
+
+func isFileRepositoryURL(repository string) bool {
+	repoURL, err := url.Parse(repository)
+	return err == nil && repoURL.Scheme == "file"
 }
 
 func renderCompareOutput(out io.Writer, result compare.Result, jsonMode bool, summaryMode bool) error {
