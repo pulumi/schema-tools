@@ -14,7 +14,7 @@ func TestAnalyzeNoBreakingChanges(t *testing.T) {
 	newSchema := simpleResourceSchema(simpleResource([]string{"value"}, nil))
 
 	report := Analyze("my-pkg", oldSchema, newSchema)
-	assert.Equal(t, 0, report.Violations.Display(&bytes.Buffer{}, 10_000))
+	assert.Empty(t, report.Changes)
 	assert.Empty(t, report.NewResources)
 	assert.Empty(t, report.NewFunctions)
 }
