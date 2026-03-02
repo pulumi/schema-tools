@@ -1,0 +1,10 @@
+{
+  "auto-aliasing": {
+    "version": 2,
+    "resources": {
+      "pkg_r1": {
+        "current": "pkg:index/r1:R1"
+      }
+    }
+  }
+}
