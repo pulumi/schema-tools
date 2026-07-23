@@ -15,6 +15,7 @@ func TestRenderSummaryIncludesCountsOnly(t *testing.T) {
 			Count:    2,
 			Entries:  []string{"e1", "e2"},
 		}},
+		NewTypeCount: 1500,
 	}
 
 	var out bytes.Buffer
@@ -29,8 +30,22 @@ func TestRenderSummaryIncludesCountsOnly(t *testing.T) {
 	if !strings.Contains(text, "- missing-input: 2") {
 		t.Fatalf("missing category/count line: %s", text)
 	}
+	if !strings.Contains(text, "New types: 1500") {
+		t.Fatalf("missing new type count: %s", text)
+	}
 	if strings.Contains(text, "e1") || strings.Contains(text, "e2") {
 		t.Fatalf("did not expect entries in summary text output: %s", text)
+	}
+}
+
+func TestRenderSummaryIncludesNewTypeCount(t *testing.T) {
+	var out bytes.Buffer
+	if err := RenderSummary(&out, Result{NewTypeCount: 1500}); err != nil {
+		t.Fatalf("RenderSummary returned error: %v", err)
+	}
+
+	if text := out.String(); !strings.Contains(text, "New types: 1500") {
+		t.Fatalf("missing new type count: %s", text)
 	}
 }
 

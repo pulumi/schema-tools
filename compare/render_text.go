@@ -96,8 +96,14 @@ func RenderText(out io.Writer, result Result) error {
 		}
 	}
 
-	if len(newResources) == 0 && len(newFunctions) == 0 {
-		if err := writeln("No new resources/functions."); err != nil {
+	if result.NewTypeCount > 0 {
+		if err := write("\n#### New types: %d\n", result.NewTypeCount); err != nil {
+			return err
+		}
+	}
+
+	if len(newResources) == 0 && len(newFunctions) == 0 && result.NewTypeCount == 0 {
+		if err := writeln("No new resources/functions/types."); err != nil {
 			return err
 		}
 	}

@@ -462,5 +462,6 @@
   "new_resources": [
     "s3/bucketAcl.BucketAcl"
   ],
-  "new_functions": []
+  "new_functions": [],
+  "new_type_count": 1
 }

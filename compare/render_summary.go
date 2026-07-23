@@ -11,6 +11,11 @@ func RenderSummary(out io.Writer, result Result) error {
 		if _, err := fmt.Fprintln(out, "No breaking changes found."); err != nil {
 			return fmt.Errorf("write summary output: %w", err)
 		}
+		if result.NewTypeCount > 0 {
+			if _, err := fmt.Fprintf(out, "New types: %d\n", result.NewTypeCount); err != nil {
+				return fmt.Errorf("write summary output: %w", err)
+			}
+		}
 		return nil
 	}
 
@@ -19,6 +24,11 @@ func RenderSummary(out io.Writer, result Result) error {
 	}
 	for _, item := range result.Summary {
 		if _, err := fmt.Fprintf(out, "- %s: %d\n", item.Category, item.Count); err != nil {
+			return fmt.Errorf("write summary output: %w", err)
+		}
+	}
+	if result.NewTypeCount > 0 {
+		if _, err := fmt.Fprintf(out, "New types: %d\n", result.NewTypeCount); err != nil {
 			return fmt.Errorf("write summary output: %w", err)
 		}
 	}

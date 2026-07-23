@@ -154,7 +154,8 @@ $ schema-tools compare -p docker -o v3.0.0 -n v4.0.0 --json
     "types": {}
   },
   "new_resources": [...],
-  "new_functions": [...]
+  "new_functions": [...],
+  "new_type_count": 42
 }
 ```
 
@@ -176,7 +177,8 @@ $ schema-tools compare -p docker -o v3.0.0 -n v4.0.0 --json --summary
       "category": "missing-input",
       "count": 1
     }
-  ]
+  ],
+  "new_type_count": 42
 }
 ```
 

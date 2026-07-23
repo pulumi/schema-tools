@@ -62,4 +62,5 @@ type Report struct {
 	Changes      []Change
 	NewResources []string
 	NewFunctions []string
+	NewTypeCount int
 }
