@@ -146,6 +146,7 @@ To emit machine-readable JSON output:
 ```shell
 $ schema-tools compare -p docker -o v3.0.0 -n v4.0.0 --json
 {
+  "schema_tools_version": "v0.7.1",
   "summary": [ {"category": "...", "count": 1} ],
   "changes": [...],
   "grouped": {
@@ -172,6 +173,7 @@ To emit summary-only JSON (category counts only):
 ```shell
 $ schema-tools compare -p docker -o v3.0.0 -n v4.0.0 --json --summary
 {
+  "schema_tools_version": "v0.7.1",
   "summary": [
     {
       "category": "missing-input",

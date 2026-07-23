@@ -8,18 +8,20 @@ import (
 
 // SummaryJSONOutput is the compare --json --summary payload shape.
 type SummaryJSONOutput struct {
-	Summary      []SummaryItem `json:"summary"`
-	NewTypeCount int           `json:"new_type_count"`
+	SchemaToolsVersion string        `json:"schema_tools_version"`
+	Summary            []SummaryItem `json:"summary"`
+	NewTypeCount       int           `json:"new_type_count"`
 }
 
 // FullJSONOutput is the compare --json payload shape.
 type FullJSONOutput struct {
-	Summary      []SummaryItem  `json:"summary"`
-	Changes      []Change       `json:"changes"`
-	Grouped      GroupedChanges `json:"grouped"`
-	NewResources []string       `json:"new_resources"`
-	NewFunctions []string       `json:"new_functions"`
-	NewTypeCount int            `json:"new_type_count"`
+	SchemaToolsVersion string         `json:"schema_tools_version"`
+	Summary            []SummaryItem  `json:"summary"`
+	Changes            []Change       `json:"changes"`
+	Grouped            GroupedChanges `json:"grouped"`
+	NewResources       []string       `json:"new_resources"`
+	NewFunctions       []string       `json:"new_functions"`
+	NewTypeCount       int            `json:"new_type_count"`
 }
 
 // MarshalJSON produces deterministic output ordering and non-nil slices.
@@ -35,8 +37,9 @@ func (result Result) MarshalJSON() ([]byte, error) {
 func NewSummaryJSONOutput(result Result) SummaryJSONOutput {
 	normalized := normalizeForJSON(result)
 	return SummaryJSONOutput{
-		Summary:      summaryWithoutEntries(normalized.Summary),
-		NewTypeCount: normalized.NewTypeCount,
+		SchemaToolsVersion: normalized.SchemaToolsVersion,
+		Summary:            summaryWithoutEntries(normalized.Summary),
+		NewTypeCount:       normalized.NewTypeCount,
 	}
 }
 
@@ -45,12 +48,13 @@ func NewSummaryJSONOutput(result Result) SummaryJSONOutput {
 func NewFullJSONOutput(result Result) FullJSONOutput {
 	normalized := normalizeForJSON(result)
 	return FullJSONOutput{
-		Summary:      summaryWithoutEntries(normalized.Summary),
-		Changes:      normalized.Changes,
-		Grouped:      normalized.Grouped,
-		NewResources: normalized.NewResources,
-		NewFunctions: normalized.NewFunctions,
-		NewTypeCount: normalized.NewTypeCount,
+		SchemaToolsVersion: normalized.SchemaToolsVersion,
+		Summary:            summaryWithoutEntries(normalized.Summary),
+		Changes:            normalized.Changes,
+		Grouped:            normalized.Grouped,
+		NewResources:       normalized.NewResources,
+		NewFunctions:       normalized.NewFunctions,
+		NewTypeCount:       normalized.NewTypeCount,
 	}
 }
 
@@ -61,13 +65,14 @@ func normalizeForJSON(result Result) Result {
 		normalizedGrouped = groupStructuredChanges(normalizedChanges)
 	}
 	normalized := Result{
-		Summary:       normalizeSummary(result.Summary),
-		Changes:       normalizedChanges,
-		Grouped:       normalizedGrouped,
-		NewResources:  ensureSlice(slices.Clone(result.NewResources)),
-		NewFunctions:  ensureSlice(slices.Clone(result.NewFunctions)),
-		NewTypeCount:  result.NewTypeCount,
-		totalBreaking: result.totalBreaking,
+		SchemaToolsVersion: result.SchemaToolsVersion,
+		Summary:            normalizeSummary(result.Summary),
+		Changes:            normalizedChanges,
+		Grouped:            normalizedGrouped,
+		NewResources:       ensureSlice(slices.Clone(result.NewResources)),
+		NewFunctions:       ensureSlice(slices.Clone(result.NewFunctions)),
+		NewTypeCount:       result.NewTypeCount,
+		totalBreaking:      result.totalBreaking,
 	}
 	return normalized
 }

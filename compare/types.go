@@ -58,12 +58,13 @@ type GroupedChanges struct {
 
 // Result is the structured output of schema comparison.
 type Result struct {
-	Summary       []SummaryItem  `json:"summary"`
-	Changes       []Change       `json:"changes"`
-	Grouped       GroupedChanges `json:"grouped"`
-	NewResources  []string       `json:"new_resources"`
-	NewFunctions  []string       `json:"new_functions"`
-	NewTypeCount  int            `json:"new_type_count"`
-	totalBreaking int
-	displayed     []Change
+	SchemaToolsVersion string         `json:"schema_tools_version"`
+	Summary            []SummaryItem  `json:"summary"`
+	Changes            []Change       `json:"changes"`
+	Grouped            GroupedChanges `json:"grouped"`
+	NewResources       []string       `json:"new_resources"`
+	NewFunctions       []string       `json:"new_functions"`
+	NewTypeCount       int            `json:"new_type_count"`
+	totalBreaking      int
+	displayed          []Change
 }
