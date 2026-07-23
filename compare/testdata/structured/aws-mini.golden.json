@@ -55,9 +55,28 @@
       "location": "inputs",
       "path": "Resources: \"aws:eks/cluster:Cluster\": inputs: \"defaultAddonsToRemoves\"",
       "kind": "missing-input",
-      "severity": "warn",
+      "severity": "error",
       "breaking": true,
       "message": "missing"
+    },
+    {
+      "scope": "resource",
+      "token": "aws:eks/cluster:Cluster",
+      "location": "properties",
+      "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"defaultAddonsToRemoves\"",
+      "kind": "missing-output",
+      "severity": "error",
+      "breaking": true,
+      "message": "missing output \"defaultAddonsToRemoves\""
+    },
+    {
+      "scope": "function",
+      "token": "aws:bedrock/getInferenceProfiles:getInferenceProfiles",
+      "path": "Functions: \"aws:bedrock/getInferenceProfiles:getInferenceProfiles\"",
+      "kind": "signature-changed",
+      "severity": "error",
+      "breaking": true,
+      "message": "signature change (pulumi.InvokeOptions)-\u003eT =\u003e (Args, pulumi.InvokeOptions)-\u003eT"
     },
     {
       "scope": "resource",
@@ -68,16 +87,6 @@
       "severity": "warn",
       "breaking": true,
       "message": "renamed to \"certificateAuthority\" and type changed from \"array\u003c#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\u003e\" to \"#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\""
-    },
-    {
-      "scope": "resource",
-      "token": "aws:eks/cluster:Cluster",
-      "location": "properties",
-      "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"defaultAddonsToRemoves\"",
-      "kind": "missing-output",
-      "severity": "warn",
-      "breaking": true,
-      "message": "missing output \"defaultAddonsToRemoves\""
     },
     {
       "scope": "resource",
@@ -169,15 +178,6 @@
       "message": "token deprecated: prefer \"aws:s3/bucketAcl:BucketAcl\" instead of \"aws:s3/bucketAclV2:BucketAclV2\""
     },
     {
-      "scope": "function",
-      "token": "aws:bedrock/getInferenceProfiles:getInferenceProfiles",
-      "path": "Functions: \"aws:bedrock/getInferenceProfiles:getInferenceProfiles\"",
-      "kind": "signature-changed",
-      "severity": "error",
-      "breaking": true,
-      "message": "signature change (pulumi.InvokeOptions)-\u003eT =\u003e (Args, pulumi.InvokeOptions)-\u003eT"
-    },
-    {
       "scope": "type",
       "token": "aws:lb/GetListenerRuleAction:GetListenerRuleAction",
       "location": "properties",
@@ -255,7 +255,7 @@
             "location": "inputs",
             "path": "Resources: \"aws:eks/cluster:Cluster\": inputs: \"defaultAddonsToRemoves\"",
             "kind": "missing-input",
-            "severity": "warn",
+            "severity": "error",
             "breaking": true,
             "message": "missing"
           }
@@ -265,21 +265,21 @@
             "scope": "resource",
             "token": "aws:eks/cluster:Cluster",
             "location": "properties",
-            "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"certificateAuthorities\"",
-            "kind": "type-changed",
-            "severity": "warn",
+            "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"defaultAddonsToRemoves\"",
+            "kind": "missing-output",
+            "severity": "error",
             "breaking": true,
-            "message": "renamed to \"certificateAuthority\" and type changed from \"array\u003c#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\u003e\" to \"#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\""
+            "message": "missing output \"defaultAddonsToRemoves\""
           },
           {
             "scope": "resource",
             "token": "aws:eks/cluster:Cluster",
             "location": "properties",
-            "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"defaultAddonsToRemoves\"",
-            "kind": "missing-output",
+            "path": "Resources: \"aws:eks/cluster:Cluster\": properties: \"certificateAuthorities\"",
+            "kind": "type-changed",
             "severity": "warn",
             "breaking": true,
-            "message": "missing output \"defaultAddonsToRemoves\""
+            "message": "renamed to \"certificateAuthority\" and type changed from \"array\u003c#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\u003e\" to \"#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority\""
           }
         ]
       },

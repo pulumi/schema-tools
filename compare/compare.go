@@ -38,36 +38,13 @@ func Schemas(oldSchema, newSchema schema.PackageSpec, opts Options) Result {
 }
 
 func selectDisplayedChanges(changes []internalcompare.Change, maxChanges int) []internalcompare.Change {
-	if len(changes) == 0 {
+	if len(changes) == 0 || maxChanges == 0 {
 		return []internalcompare.Change{}
 	}
-	if maxChanges == 0 {
-		return []internalcompare.Change{}
+	if maxChanges < 0 || maxChanges >= len(changes) {
+		return slices.Clone(changes)
 	}
-	displayed := make([]internalcompare.Change, 0, len(changes))
-	emittedEntries := 0
-	withinLimit := func() bool {
-		return maxChanges < 0 || emittedEntries < maxChanges
-	}
-	for _, category := range collectCategories(changes) {
-		if !withinLimit() {
-			break
-		}
-		for _, name := range collectNames(changes, category) {
-			if !withinLimit() {
-				break
-			}
-			nameChanges := changesForName(changes, category, name)
-			for _, change := range nameChanges {
-				if !withinLimit() {
-					break
-				}
-				emittedEntries++
-				displayed = append(displayed, change)
-			}
-		}
-	}
-	return displayed
+	return slices.Clone(changes[:maxChanges])
 }
 
 func ensureSlice(xs []string) []string {
@@ -152,6 +129,7 @@ func sortAndFilterBreaking(changes []internalcompare.Change) []internalcompare.C
 			out = append(out, change)
 		}
 	}
+	slices.SortFunc(out, compareInternalChanges)
 	return out
 }
 
@@ -162,6 +140,7 @@ func sortAndFilterTokenRemaps(changes []internalcompare.Change) []internalcompar
 			out = append(out, change)
 		}
 	}
+	slices.SortFunc(out, compareInternalChanges)
 	return out
 }
 
@@ -177,6 +156,9 @@ func sortAndMergeChanges(first, second []internalcompare.Change) []internalcompa
 }
 
 func compareInternalChanges(a, b internalcompare.Change) int {
+	if d := cmpInt(internalSeveritySortOrder(a.Severity), internalSeveritySortOrder(b.Severity)); d != 0 {
+		return d
+	}
 	if d := strings.Compare(a.Category, b.Category); d != 0 {
 		return d
 	}
@@ -203,45 +185,6 @@ func reasonSortKey(reason *internalcompare.NormalizationReason) string {
 		return ""
 	}
 	return string(reason.Outcome) + "\x00" + reason.Lookup + "\x00" + reason.Token + "\x00" + strings.Join(reason.Candidates, "\x00")
-}
-
-func collectCategories(changes []internalcompare.Change) []string {
-	seen := map[string]struct{}{}
-	categories := make([]string, 0, len(changes))
-	for _, change := range changes {
-		if _, ok := seen[change.Category]; ok {
-			continue
-		}
-		seen[change.Category] = struct{}{}
-		categories = append(categories, change.Category)
-	}
-	return categories
-}
-
-func collectNames(changes []internalcompare.Change, category string) []string {
-	seen := map[string]struct{}{}
-	names := []string{}
-	for _, change := range changes {
-		if change.Category != category {
-			continue
-		}
-		if _, ok := seen[change.Name]; ok {
-			continue
-		}
-		seen[change.Name] = struct{}{}
-		names = append(names, change.Name)
-	}
-	return names
-}
-
-func changesForName(changes []internalcompare.Change, category, name string) []internalcompare.Change {
-	var out []internalcompare.Change
-	for _, change := range changes {
-		if change.Category == category && change.Name == name {
-			out = append(out, change)
-		}
-	}
-	return out
 }
 
 func changePath(change internalcompare.Change) string {
@@ -354,6 +297,9 @@ func sortStructuredChanges(changes []Change) []Change {
 	}
 	out := slices.Clone(changes)
 	slices.SortFunc(out, func(a, b Change) int {
+		if d := cmpInt(severitySortOrder(a.Severity), severitySortOrder(b.Severity)); d != 0 {
+			return d
+		}
 		if d := cmpInt(scopeSortOrder(a.Scope), scopeSortOrder(b.Scope)); d != 0 {
 			return d
 		}
@@ -385,6 +331,32 @@ func cmpInt(a, b int) int {
 		return 1
 	default:
 		return 0
+	}
+}
+
+func internalSeveritySortOrder(severity internalcompare.Severity) int {
+	switch severity {
+	case internalcompare.SeverityDanger:
+		return 0
+	case internalcompare.SeverityWarn:
+		return 1
+	case internalcompare.SeverityInfo:
+		return 2
+	default:
+		return 3
+	}
+}
+
+func severitySortOrder(severity ChangeSeverity) int {
+	switch severity {
+	case SeverityError:
+		return 0
+	case SeverityWarn:
+		return 1
+	case SeverityInfo:
+		return 2
+	default:
+		return 3
 	}
 }
 

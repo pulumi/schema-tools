@@ -28,9 +28,11 @@ func formatName(provider, s string) string {
 
 func kindSeverity(kind ChangeKind, path []string) Severity {
 	switch kind {
-	case ChangeKindMissingResource, ChangeKindMissingFunction, ChangeKindMissingType, ChangeKindSignatureChanged:
+	case ChangeKindMissingResource, ChangeKindMissingFunction, ChangeKindMissingType,
+		ChangeKindMissingInput, ChangeKindMissingOutput, ChangeKindMissingProperty,
+		ChangeKindSignatureChanged:
 		return SeverityDanger
-	case ChangeKindMissingInput, ChangeKindMissingOutput, ChangeKindMissingProperty, ChangeKindTypeChanged:
+	case ChangeKindTypeChanged:
 		return SeverityWarn
 	case ChangeKindOptionalToRequired:
 		if isInputRequiredPath(path) {

@@ -151,6 +151,46 @@ func TestSchemasMaxChangesDoesNotLimitStructuredChanges(t *testing.T) {
 	}
 }
 
+func TestSchemasMaxChangesEqualToTotalIncludesAllChanges(t *testing.T) {
+	oldSchema, newSchema := mustLoadFixtureSchemas(t)
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: 6})
+
+	if got, want := len(result.displayed), 6; got != want {
+		t.Fatalf("displayed change count: got %d want %d", got, want)
+	}
+}
+
+func TestSchemasMaxChangesPrioritizesSeverity(t *testing.T) {
+	oldSchema := schema.PackageSpec{Types: map[string]schema.ComplexTypeSpec{
+		"my-pkg:index:AWarning": {
+			ObjectTypeSpec: schema.ObjectTypeSpec{Properties: map[string]schema.PropertySpec{
+				"changed": {TypeSpec: schema.TypeSpec{Type: "string"}},
+			}},
+		},
+		"my-pkg:index:ZError": {
+			ObjectTypeSpec: schema.ObjectTypeSpec{Properties: map[string]schema.PropertySpec{
+				"removed": {TypeSpec: schema.TypeSpec{Type: "string"}},
+			}},
+		},
+	}}
+	newSchema := schema.PackageSpec{Types: map[string]schema.ComplexTypeSpec{
+		"my-pkg:index:AWarning": {
+			ObjectTypeSpec: schema.ObjectTypeSpec{Properties: map[string]schema.PropertySpec{
+				"changed": {TypeSpec: schema.TypeSpec{Type: "number"}},
+			}},
+		},
+		"my-pkg:index:ZError": {ObjectTypeSpec: schema.ObjectTypeSpec{}},
+	}}
+
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: 1})
+	if got, want := len(result.displayed), 1; got != want {
+		t.Fatalf("displayed change count: got %d want %d", got, want)
+	}
+	if got := result.displayed[0]; got.Token != "my-pkg:index:ZError" || got.Severity != SeverityError {
+		t.Fatalf("expected capped output to retain highest-severity change, got %+v", got)
+	}
+}
+
 func TestSchemasMaxChangesZeroTracksTotalBreakingCountWithoutTruncatingStructured(t *testing.T) {
 	oldSchema, newSchema := mustLoadFixtureSchemas(t)
 	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: 0})

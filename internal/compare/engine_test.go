@@ -197,7 +197,7 @@ func TestAnalyzeSkipsFunctionRequiredToOptionalWhenOutputRemoved(t *testing.T) {
 		Name:        "my-pkg:index:MyFunction",
 		Path:        []string{"outputs", "value"},
 		Kind:        ChangeKindMissingOutput,
-		Severity:    SeverityWarn,
+		Severity:    SeverityDanger,
 		Breaking:    true,
 		Description: "missing output",
 	}
@@ -245,7 +245,7 @@ func TestAnalyzeSkipsFunctionRequiredToOptionalWhenOutputsNil(t *testing.T) {
 		Name:        "my-pkg:index:MyFunction",
 		Path:        []string{"outputs", "value"},
 		Kind:        ChangeKindMissingOutput,
-		Severity:    SeverityWarn,
+		Severity:    SeverityDanger,
 		Breaking:    true,
 		Description: "missing output",
 	}
@@ -296,7 +296,7 @@ func TestAnalyzeSkipsTypeRequiredToOptionalWhenPropertyRemoved(t *testing.T) {
 		Name:        "my-pkg:index:MyType",
 		Path:        []string{"properties", "value"},
 		Kind:        ChangeKindMissingProperty,
-		Severity:    SeverityWarn,
+		Severity:    SeverityDanger,
 		Breaking:    true,
 		Description: "missing",
 	}
