@@ -276,7 +276,7 @@ func TestNewFullJSONOutputStructuredContractKeys(t *testing.T) {
 		t.Fatalf("json.Unmarshal failed: %v", err)
 	}
 
-	mustHave := []string{"summary", "changes", "grouped", "new_resources", "new_functions", "new_type_count"}
+	mustHave := []string{"schema_tools_version", "summary", "changes", "grouped", "new_resources", "new_functions", "new_type_count"}
 	for _, key := range mustHave {
 		if _, ok := payload[key]; !ok {
 			t.Fatalf("expected key %q to be present, got keys=%v", key, sortedKeys(payload))

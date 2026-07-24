@@ -10,6 +10,7 @@ import (
 	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 
 	internalcompare "github.com/pulumi/schema-tools/internal/compare"
+	schematoolsversion "github.com/pulumi/schema-tools/version"
 )
 
 // Schemas computes a structured comparison result for two package specs.
@@ -26,14 +27,15 @@ func Schemas(oldSchema, newSchema schema.PackageSpec, opts Options) Result {
 	summaryChanges := sortAndMergeChanges(breakingChanges, remapChanges)
 
 	result := Result{
-		Summary:       summarize(summaryChanges),
-		Changes:       ensureChangeSlice(structuredChanges),
-		Grouped:       groupStructuredChanges(structuredChanges),
-		NewResources:  ensureSlice(slices.Clone(report.NewResources)),
-		NewFunctions:  ensureSlice(slices.Clone(report.NewFunctions)),
-		NewTypeCount:  report.NewTypeCount,
-		totalBreaking: len(breakingChanges),
-		displayed:     ensureChangeSlice(displayedStructured),
+		SchemaToolsVersion: schematoolsversion.Version,
+		Summary:            summarize(summaryChanges),
+		Changes:            ensureChangeSlice(structuredChanges),
+		Grouped:            groupStructuredChanges(structuredChanges),
+		NewResources:       ensureSlice(slices.Clone(report.NewResources)),
+		NewFunctions:       ensureSlice(slices.Clone(report.NewFunctions)),
+		NewTypeCount:       report.NewTypeCount,
+		totalBreaking:      len(breakingChanges),
+		displayed:          ensureChangeSlice(displayedStructured),
 	}
 	return result
 }

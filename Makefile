@@ -1,5 +1,5 @@
-VERSION:=$(shell git describe --tags)
-LDFLAGS=-ldflags="-X github.com/pulumi/schema-tools/version.Version=$(VERSION)"
+VERSION:=$(shell git describe --tags --dirty 2>/dev/null)
+LDFLAGS:=$(if $(VERSION),-ldflags="-X github.com/pulumi/schema-tools/version.Version=$(VERSION)")
 
 test:
 	go test ./...

@@ -62,6 +62,9 @@ func TestSchemasTracksNewSchemaItems(t *testing.T) {
 	if got, want := result.NewTypeCount, 2; got != want {
 		t.Fatalf("new type count mismatch: got %d want %d", got, want)
 	}
+	if result.SchemaToolsVersion == "" {
+		t.Fatal("expected schema-tools version in result")
+	}
 }
 
 func TestSchemasBuildsSummaryWithEntriesAndPaths(t *testing.T) {
