@@ -4,21 +4,21 @@ Found 19 breaking changes:
 
 #### Resources
 - `🔴` "aws:chime/voiceConnectorOrganization:VoiceConnectorOrganization" missing
-- "aws:cur/reportDefinition:ReportDefinition":
+- `🔴` "aws:cur/reportDefinition:ReportDefinition":
     - required inputs:
         - `🔴` "s3Prefix" input has changed to Required
-- "aws:eks/cluster:Cluster":
+- `🔴` "aws:eks/cluster:Cluster":
     - inputs:
-        - `🟡` "defaultAddonsToRemoves" missing
+        - `🔴` "defaultAddonsToRemoves" missing
     - properties:
+        - `🔴` missing output "defaultAddonsToRemoves"
         - `🟡` "certificateAuthorities" renamed to "certificateAuthority" and type changed from "array<#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority>" to "#/types/aws:eks/ClusterCertificateAuthority:ClusterCertificateAuthority"
-        - `🟡` missing output "defaultAddonsToRemoves"
-- "aws:paymentcryptography/key:Key":
+- `🟡` "aws:paymentcryptography/key:Key":
     - inputs:
         - `🟡` "keyAttributes" type changed from "array<#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes>" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
     - properties:
         - `🟡` "keyAttributes" type changed from "array<#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes>" to "#/types/aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes"
-- "aws:s3/bucket:Bucket":
+- `🟡` "aws:s3/bucket:Bucket":
     - inputs:
         - `🟡` "loggings" renamed to "logging" and type changed from "array<#/types/aws:s3/BucketLogging:BucketLogging>" to "#/types/aws:s3/BucketLogging:BucketLogging"
         - `🟡` "versionings" renamed to "versioning" and type changed from "array<#/types/aws:s3/BucketVersioning:BucketVersioning>" to "#/types/aws:s3/BucketVersioning:BucketVersioning"
@@ -33,14 +33,14 @@ Found 19 breaking changes:
 - `🔴` "aws:bedrock/getInferenceProfiles:getInferenceProfiles" signature change (pulumi.InvokeOptions)->T => (Args, pulumi.InvokeOptions)->T
 
 #### Types
-- "aws:lb/GetListenerRuleAction:GetListenerRuleAction":
+- `🟡` "aws:lb/GetListenerRuleAction:GetListenerRuleAction":
     - properties:
         - `🟡` "forward" renamed to "forwards" and type changed from "#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward" to "array<#/types/aws:lb/GetListenerRuleActionForward:GetListenerRuleActionForward>"
-- "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes":
+- `🟡` "aws:paymentcryptography/KeyKeyAttributes:KeyKeyAttributes":
     - properties:
         - `🟡` "keyModesOfUse" type changed from "string" to "array"
         - `🟡` "keyModesOfUse" had no type but now has "string"
-- "aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption":
+- `🟡` "aws:ssoadmin/getApplicationPortalOption:getApplicationPortalOption":
     - required:
         - `🟡` "signInOptions" property has changed to Required
 

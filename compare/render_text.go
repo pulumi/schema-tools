@@ -153,6 +153,9 @@ func writeGroupedText(write func(string, ...any) error, grouped GroupedChanges) 
 		{title: "Functions", data: grouped.Functions},
 		{title: "Types", data: grouped.Types},
 	}
+	sort.SliceStable(sections, func(i, j int) bool {
+		return severitySortOrder(groupedScopeSeverity(sections[i].data)) < severitySortOrder(groupedScopeSeverity(sections[j].data))
+	})
 	for _, section := range sections {
 		if len(section.data) == 0 {
 			continue
@@ -174,7 +177,7 @@ func writeGroupedText(write func(string, ...any) error, grouped GroupedChanges) 
 				continue
 			}
 
-			if err := write("- %q:\n", token); err != nil {
+			if err := write("- %s %q:\n", severityIcon(groupedTokenSeverity(byLocation)), token); err != nil {
 				return err
 			}
 			for _, location := range locations {
@@ -205,7 +208,14 @@ func sortedTokens(grouped map[string]map[string][]Change) []string {
 	for token := range grouped {
 		tokens = append(tokens, token)
 	}
-	sort.Strings(tokens)
+	sort.Slice(tokens, func(i, j int) bool {
+		left := severitySortOrder(groupedTokenSeverity(grouped[tokens[i]]))
+		right := severitySortOrder(groupedTokenSeverity(grouped[tokens[j]]))
+		if left != right {
+			return left < right
+		}
+		return tokens[i] < tokens[j]
+	})
 	return tokens
 }
 
@@ -214,8 +224,47 @@ func sortedLocations(byLocation map[string][]Change) []string {
 	for location := range byLocation {
 		locations = append(locations, location)
 	}
-	sort.Strings(locations)
+	sort.Slice(locations, func(i, j int) bool {
+		left := severitySortOrder(changesSeverity(byLocation[locations[i]]))
+		right := severitySortOrder(changesSeverity(byLocation[locations[j]]))
+		if left != right {
+			return left < right
+		}
+		return locations[i] < locations[j]
+	})
 	return locations
+}
+
+func groupedScopeSeverity(grouped map[string]map[string][]Change) ChangeSeverity {
+	severity := SeverityInfo
+	for _, byLocation := range grouped {
+		candidate := groupedTokenSeverity(byLocation)
+		if severitySortOrder(candidate) < severitySortOrder(severity) {
+			severity = candidate
+		}
+	}
+	return severity
+}
+
+func groupedTokenSeverity(byLocation map[string][]Change) ChangeSeverity {
+	severity := SeverityInfo
+	for _, changes := range byLocation {
+		candidate := changesSeverity(changes)
+		if severitySortOrder(candidate) < severitySortOrder(severity) {
+			severity = candidate
+		}
+	}
+	return severity
+}
+
+func changesSeverity(changes []Change) ChangeSeverity {
+	severity := SeverityInfo
+	for _, change := range changes {
+		if severitySortOrder(change.Severity) < severitySortOrder(severity) {
+			severity = change.Severity
+		}
+	}
+	return severity
 }
 
 func textChangeMessage(change Change) string {

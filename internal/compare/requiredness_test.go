@@ -178,7 +178,7 @@ func TestAnalyzeRequirednessSkipsRemovedResourceProperty(t *testing.T) {
 		Name:        "my-pkg:index:MyResource",
 		Path:        []string{"properties", "field1"},
 		Kind:        ChangeKindMissingOutput,
-		Severity:    SeverityWarn,
+		Severity:    SeverityDanger,
 		Breaking:    true,
 		Description: `missing output "field1"`,
 	}

@@ -134,14 +134,90 @@ func TestRenderTextGroupsDirectAndNestedChanges(t *testing.T) {
 	if !strings.Contains(text, "#### Functions") {
 		t.Fatalf("expected functions section header, got:\n%s", text)
 	}
-	if !strings.Contains(text, `- "my-pkg:index:MyFunction":`) {
-		t.Fatalf("expected token bullet header, got:\n%s", text)
+	if !strings.Contains(text, "- `🔴` \"my-pkg:index:MyFunction\":") {
+		t.Fatalf("expected propagated token severity, got:\n%s", text)
 	}
 	if !strings.Contains(text, "    - inputs:") {
 		t.Fatalf("expected nested location bucket, got:\n%s", text)
 	}
 	if !strings.Contains(text, `        - `+"`🟢`"+` "arg" input has changed to Required`) {
 		t.Fatalf("expected nested input detail in output, got:\n%s", text)
+	}
+}
+
+func TestRenderTextPropagatesAndSortsSeverity(t *testing.T) {
+	var out bytes.Buffer
+	if err := RenderText(&out, Result{
+		Changes: []Change{
+			{
+				Scope:    ScopeType,
+				Token:    "pkg:index:AWarning",
+				Location: "properties",
+				Path:     `Types: "pkg:index:AWarning": properties: "changed"`,
+				Kind:     "type-changed",
+				Severity: SeverityWarn,
+				Breaking: true,
+				Message:  "type changed",
+			},
+			{
+				Scope:    ScopeType,
+				Token:    "pkg:index:ZError",
+				Location: "properties",
+				Path:     `Types: "pkg:index:ZError": properties: "removed"`,
+				Kind:     "missing-property",
+				Severity: SeverityError,
+				Breaking: true,
+				Message:  "missing",
+			},
+		},
+	}); err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
+
+	text := out.String()
+	errorParent := "- `🔴` \"pkg:index:ZError\":"
+	warningParent := "- `🟡` \"pkg:index:AWarning\":"
+	if !strings.Contains(text, errorParent) || !strings.Contains(text, "`🔴` \"removed\" missing") {
+		t.Fatalf("expected missing property severity on leaf and parent, got:\n%s", text)
+	}
+	if errorIndex, warningIndex := strings.Index(text, errorParent), strings.Index(text, warningParent); errorIndex == -1 || warningIndex == -1 || errorIndex > warningIndex {
+		t.Fatalf("expected error type before warning type, got:\n%s", text)
+	}
+}
+
+func TestRenderTextSortsSectionsBySeverity(t *testing.T) {
+	var out bytes.Buffer
+	if err := RenderText(&out, Result{
+		Changes: []Change{
+			{
+				Scope:    ScopeResource,
+				Token:    "pkg:index:WarningResource",
+				Location: "inputs",
+				Path:     `Resources: "pkg:index:WarningResource": inputs: "changed"`,
+				Kind:     "type-changed",
+				Severity: SeverityWarn,
+				Breaking: true,
+				Message:  "type changed",
+			},
+			{
+				Scope:    ScopeType,
+				Token:    "pkg:index:ErrorType",
+				Location: "properties",
+				Path:     `Types: "pkg:index:ErrorType": properties: "removed"`,
+				Kind:     "missing-property",
+				Severity: SeverityError,
+				Breaking: true,
+				Message:  "missing",
+			},
+		},
+	}); err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
+
+	text := out.String()
+	typesIndex, resourcesIndex := strings.Index(text, "#### Types"), strings.Index(text, "#### Resources")
+	if typesIndex == -1 || resourcesIndex == -1 || typesIndex > resourcesIndex {
+		t.Fatalf("expected error Types section before warning Resources section, got:\n%s", text)
 	}
 }
 
