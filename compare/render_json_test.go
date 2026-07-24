@@ -85,6 +85,7 @@ func TestNewSummaryJSONOutput(t *testing.T) {
 		Grouped:      GroupedChanges{Resources: map[string]map[string][]Change{"pkg:index:Res": {"general": {{Scope: ScopeResource, Token: "pkg:index:Res", Kind: "missing-input"}}}}, Functions: map[string]map[string][]Change{}, Types: map[string]map[string][]Change{}},
 		NewResources: []string{"r1"},
 		NewFunctions: []string{"f1"},
+		NewTypeCount: 1500,
 	}
 
 	data, err := json.Marshal(NewSummaryJSONOutput(result))
@@ -100,6 +101,9 @@ func TestNewSummaryJSONOutput(t *testing.T) {
 	}
 	if !bytes.Contains(data, []byte("missing-input")) {
 		t.Fatalf("expected summary category in summary-only output, got %s", string(data))
+	}
+	if !bytes.Contains(data, []byte(`"new_type_count":1500`)) {
+		t.Fatalf("expected new type count in summary-only output, got %s", string(data))
 	}
 	if bytes.Contains(data, []byte(`"entries"`)) || bytes.Contains(data, []byte("e1")) {
 		t.Fatalf("expected summary-only JSON to omit entry strings, got %s", string(data))
@@ -272,7 +276,7 @@ func TestNewFullJSONOutputStructuredContractKeys(t *testing.T) {
 		t.Fatalf("json.Unmarshal failed: %v", err)
 	}
 
-	mustHave := []string{"summary", "changes", "grouped", "new_resources", "new_functions"}
+	mustHave := []string{"summary", "changes", "grouped", "new_resources", "new_functions", "new_type_count"}
 	for _, key := range mustHave {
 		if _, ok := payload[key]; !ok {
 			t.Fatalf("expected key %q to be present, got keys=%v", key, sortedKeys(payload))

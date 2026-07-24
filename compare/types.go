@@ -63,6 +63,7 @@ type Result struct {
 	Grouped       GroupedChanges `json:"grouped"`
 	NewResources  []string       `json:"new_resources"`
 	NewFunctions  []string       `json:"new_functions"`
+	NewTypeCount  int            `json:"new_type_count"`
 	totalBreaking int
 	displayed     []Change
 }

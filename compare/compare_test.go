@@ -15,13 +15,16 @@ import (
 	"github.com/pulumi/schema-tools/internal/normalize"
 )
 
-func TestSchemasSortsNewResourcesAndFunctions(t *testing.T) {
+func TestSchemasTracksNewSchemaItems(t *testing.T) {
 	oldSchema := schema.PackageSpec{
 		Resources: map[string]schema.ResourceSpec{
 			"my-pkg:index:ExistingResource": {},
 		},
 		Functions: map[string]schema.FunctionSpec{
 			"my-pkg:index:existingFunction": {},
+		},
+		Types: map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:ExistingType": {},
 		},
 	}
 	newSchema := schema.PackageSpec{
@@ -34,6 +37,11 @@ func TestSchemasSortsNewResourcesAndFunctions(t *testing.T) {
 			"my-pkg:index:existingFunction": {},
 			"my-pkg:index:zetaFunction":     {},
 			"my-pkg:module:alphaFunction":   {},
+		},
+		Types: map[string]schema.ComplexTypeSpec{
+			"my-pkg:index:ExistingType": {},
+			"my-pkg:index:NewType":      {},
+			"my-pkg:module:OtherType":   {},
 		},
 	}
 
@@ -50,6 +58,9 @@ func TestSchemasSortsNewResourcesAndFunctions(t *testing.T) {
 	}
 	if got, want := result.NewFunctions, []string{"index.zetaFunction", "module.alphaFunction"}; !slices.Equal(got, want) {
 		t.Fatalf("new functions mismatch: got %v want %v", got, want)
+	}
+	if got, want := result.NewTypeCount, 2; got != want {
+		t.Fatalf("new type count mismatch: got %d want %d", got, want)
 	}
 }
 

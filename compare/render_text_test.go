@@ -38,6 +38,21 @@ func TestRenderTextPreservesNewResourcesAndFunctionsOrder(t *testing.T) {
 	}
 }
 
+func TestRenderTextWithOnlyNewTypesSuppressesEmptyAdditionsMessage(t *testing.T) {
+	var out bytes.Buffer
+	if err := RenderText(&out, Result{NewTypeCount: 1500}); err != nil {
+		t.Fatalf("RenderText failed: %v", err)
+	}
+
+	text := out.String()
+	if !strings.Contains(text, "#### New types: 1500") {
+		t.Fatalf("expected new type count, got:\n%s", text)
+	}
+	if strings.Contains(text, "No new resources/functions/types.") {
+		t.Fatalf("unexpected empty additions message, got:\n%s", text)
+	}
+}
+
 func TestRenderTextOneBreakingChange(t *testing.T) {
 	var out bytes.Buffer
 	if err := RenderText(&out, Result{

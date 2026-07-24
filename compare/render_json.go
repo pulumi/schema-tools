@@ -8,7 +8,8 @@ import (
 
 // SummaryJSONOutput is the compare --json --summary payload shape.
 type SummaryJSONOutput struct {
-	Summary []SummaryItem `json:"summary"`
+	Summary      []SummaryItem `json:"summary"`
+	NewTypeCount int           `json:"new_type_count"`
 }
 
 // FullJSONOutput is the compare --json payload shape.
@@ -18,6 +19,7 @@ type FullJSONOutput struct {
 	Grouped      GroupedChanges `json:"grouped"`
 	NewResources []string       `json:"new_resources"`
 	NewFunctions []string       `json:"new_functions"`
+	NewTypeCount int            `json:"new_type_count"`
 }
 
 // MarshalJSON produces deterministic output ordering and non-nil slices.
@@ -32,7 +34,10 @@ func (result Result) MarshalJSON() ([]byte, error) {
 // shape with category counts only.
 func NewSummaryJSONOutput(result Result) SummaryJSONOutput {
 	normalized := normalizeForJSON(result)
-	return SummaryJSONOutput{Summary: summaryWithoutEntries(normalized.Summary)}
+	return SummaryJSONOutput{
+		Summary:      summaryWithoutEntries(normalized.Summary),
+		NewTypeCount: normalized.NewTypeCount,
+	}
 }
 
 // NewFullJSONOutput normalizes a compare result to the full CLI JSON shape.
@@ -45,6 +50,7 @@ func NewFullJSONOutput(result Result) FullJSONOutput {
 		Grouped:      normalized.Grouped,
 		NewResources: normalized.NewResources,
 		NewFunctions: normalized.NewFunctions,
+		NewTypeCount: normalized.NewTypeCount,
 	}
 }
 
@@ -60,6 +66,7 @@ func normalizeForJSON(result Result) Result {
 		Grouped:       normalizedGrouped,
 		NewResources:  ensureSlice(slices.Clone(result.NewResources)),
 		NewFunctions:  ensureSlice(slices.Clone(result.NewFunctions)),
+		NewTypeCount:  result.NewTypeCount,
 		totalBreaking: result.totalBreaking,
 	}
 	return normalized

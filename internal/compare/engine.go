@@ -16,9 +16,10 @@ import (
 const (
 	scopeResources   = "resources"
 	scopeDatasources = "datasources"
+	scopeTypes       = "types"
 )
 
-// Analyze computes typed changes and newly introduced resources/functions.
+// Analyze computes typed changes and newly introduced resources, functions, and types.
 func Analyze(provider string, oldSchema, newSchema schema.PackageSpec, oldMetadata, newMetadata *normalize.MetadataEnvelope) Report {
 	changes, newResources, newFunctions := buildChanges(provider, oldSchema, newSchema, oldMetadata, newMetadata)
 	sortChanges(changes)
@@ -26,6 +27,7 @@ func Analyze(provider string, oldSchema, newSchema schema.PackageSpec, oldMetada
 		Changes:      changes,
 		NewResources: newResources,
 		NewFunctions: newFunctions,
+		NewTypeCount: countNewTypes(oldSchema.Types, newSchema.Types, oldMetadata, newMetadata),
 	}
 }
 
@@ -36,6 +38,24 @@ func sortedMapKeys[T any](m map[string]T) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func countNewTypes(oldTypes, newTypes map[string]schema.ComplexTypeSpec, oldMetadata, newMetadata *normalize.MetadataEnvelope) int {
+	count := 0
+	for token := range newTypes {
+		if _, exists := oldTypes[token]; exists {
+			continue
+		}
+
+		lookup := normalize.ResolveNewToken(oldMetadata, newMetadata, scopeTypes, token)
+		if lookup.Outcome == normalize.TokenLookupOutcomeResolved {
+			if _, exists := oldTypes[lookup.Token]; exists {
+				continue
+			}
+		}
+		count++
+	}
+	return count
 }
 
 func buildChanges(provider string, oldSchema, newSchema schema.PackageSpec, oldMetadata, newMetadata *normalize.MetadataEnvelope) ([]Change, []string, []string) {

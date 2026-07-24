@@ -47,3 +47,5 @@ Found 19 breaking changes:
 #### New resources:
 
 - `s3/bucketAcl.BucketAcl`
+
+#### New types: 1

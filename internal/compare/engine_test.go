@@ -928,6 +928,22 @@ func TestAnalyzeEmitsTypeChangeForResolvedTypeRefRenameWithMaxItemsTransition(t 
 	}
 }
 
+func TestAnalyzeDoesNotCountResolvedTypeRenameAsNew(t *testing.T) {
+	oldSchema := schema.PackageSpec{Types: map[string]schema.ComplexTypeSpec{
+		"my-pkg:index/v1:WidgetSpec": {},
+	}}
+	newSchema := schema.PackageSpec{Types: map[string]schema.ComplexTypeSpec{
+		"my-pkg:index/v2:WidgetSpec": {},
+	}}
+	oldMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"types":{"tf_widget_spec":{"current":"my-pkg:index/v1:WidgetSpec"}}}}`)
+	newMetadata := mustParseMetadata(t, `{"auto-aliasing":{"version":1,"types":{"tf_widget_spec":{"current":"my-pkg:index/v2:WidgetSpec","past":[{"name":"my-pkg:index/v1:WidgetSpec","inCodegen":false,"majorVersion":1}]}}}}`)
+
+	report := Analyze("my-pkg", oldSchema, newSchema, oldMetadata, newMetadata)
+	if got := report.NewTypeCount; got != 0 {
+		t.Fatalf("expected resolved type rename not to count as new, got %d", got)
+	}
+}
+
 func TestRefArrayBoundaryTypeChangeTextIgnoresRefTokenEquivalence(t *testing.T) {
 	t.Parallel()
 

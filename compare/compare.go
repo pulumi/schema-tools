@@ -31,6 +31,7 @@ func Schemas(oldSchema, newSchema schema.PackageSpec, opts Options) Result {
 		Grouped:       groupStructuredChanges(structuredChanges),
 		NewResources:  ensureSlice(slices.Clone(report.NewResources)),
 		NewFunctions:  ensureSlice(slices.Clone(report.NewFunctions)),
+		NewTypeCount:  report.NewTypeCount,
 		totalBreaking: len(breakingChanges),
 		displayed:     ensureChangeSlice(displayedStructured),
 	}
