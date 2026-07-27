@@ -14,11 +14,25 @@
       "count": 3
     },
     {
+      "category": "required-to-optional",
+      "count": 2
+    },
+    {
       "category": "type-changed",
       "count": 1
     }
   ],
   "changes": [
+    {
+      "scope": "resource",
+      "token": "my-pkg:index:MyResource",
+      "location": "required",
+      "path": "Resources: \"my-pkg:index:MyResource\": required: \"value\"",
+      "kind": "required-to-optional",
+      "severity": "error",
+      "breaking": true,
+      "message": "property is no longer Required"
+    },
     {
       "scope": "resource",
       "token": "my-pkg:index:MyResource",
@@ -76,11 +90,33 @@
       "severity": "warn",
       "breaking": true,
       "message": "property has changed to Required"
+    },
+    {
+      "scope": "type",
+      "token": "my-pkg:index:MyType",
+      "location": "required",
+      "path": "Types: \"my-pkg:index:MyType\": required: \"field\"",
+      "kind": "required-to-optional",
+      "severity": "warn",
+      "breaking": true,
+      "message": "property is no longer Required"
     }
   ],
   "grouped": {
     "resources": {
       "my-pkg:index:MyResource": {
+        "required": [
+          {
+            "scope": "resource",
+            "token": "my-pkg:index:MyResource",
+            "location": "required",
+            "path": "Resources: \"my-pkg:index:MyResource\": required: \"value\"",
+            "kind": "required-to-optional",
+            "severity": "error",
+            "breaking": true,
+            "message": "property is no longer Required"
+          }
+        ],
         "required inputs": [
           {
             "scope": "resource",
@@ -161,6 +197,16 @@
             "severity": "warn",
             "breaking": true,
             "message": "property has changed to Required"
+          },
+          {
+            "scope": "type",
+            "token": "my-pkg:index:MyType",
+            "location": "required",
+            "path": "Types: \"my-pkg:index:MyType\": required: \"field\"",
+            "kind": "required-to-optional",
+            "severity": "warn",
+            "breaking": true,
+            "message": "property is no longer Required"
           }
         ]
       }

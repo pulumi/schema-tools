@@ -262,12 +262,12 @@ func TestCompareSchemasFixtureTextOutput(t *testing.T) {
 	assert.NoError(t, compare.RenderText(&out, result))
 
 	text := out.String()
-	assert.Contains(t, text, "Found 6 breaking changes:")
+	assert.Contains(t, text, "Found 8 breaking changes:")
 	assert.Contains(t, text, `"my-pkg:index:RemovedResource" missing`)
 	assert.Contains(t, text, `"my-pkg:index:removedFunction" missing`)
 	assert.Contains(t, text, `type changed from "string" to "integer"`)
 	assert.Contains(t, text, `input has changed to Required`)
-	assert.NotContains(t, text, `property is no longer Required`)
+	assert.Contains(t, text, `property is no longer Required`)
 }
 
 func TestRenderCompareOutputFixtureJSON(t *testing.T) {
@@ -304,6 +304,7 @@ func TestRenderCompareOutputFixtureJSON(t *testing.T) {
 			"missing-function":     1,
 			"missing-resource":     1,
 			"optional-to-required": 3,
+			"required-to-optional": 2,
 			"type-changed":         1,
 		}))
 		assert.Equal(t, result.Changes, payload.Changes)
@@ -335,6 +336,7 @@ func TestRenderCompareOutputFixtureJSON(t *testing.T) {
 			"missing-function":     1,
 			"missing-resource":     1,
 			"optional-to-required": 3,
+			"required-to-optional": 2,
 			"type-changed":         1,
 		}, countsByCategory)
 	})
