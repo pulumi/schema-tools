@@ -200,6 +200,7 @@ func buildChanges(provider string, oldSchema, newSchema schema.PackageSpec, oldM
 				"signature change (Args, pulumi.InvokeOptions)->T => (pulumi.InvokeOptions)->T"))
 		}
 
+		// TODO(https://github.com/pulumi/schema-tools/issues/121): Compare object-shaped ReturnType values from JSON-loaded schemas.
 		if f.Outputs != nil {
 			for _, propName := range sortedMapKeys(f.Outputs.Properties) {
 				prop := f.Outputs.Properties[propName]

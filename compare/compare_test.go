@@ -75,6 +75,7 @@ func TestSchemasBuildsSummaryWithEntriesAndPaths(t *testing.T) {
 		"missing-function",
 		"missing-resource",
 		"optional-to-required",
+		"required-to-optional",
 		"type-changed",
 	}
 	gotCategories := make([]string, 0, len(result.Summary))
@@ -112,7 +113,7 @@ func TestSchemasFixtureBuildsStructuredGroupedProjection(t *testing.T) {
 	oldSchema, newSchema := mustLoadFixtureSchemas(t)
 	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1})
 
-	if got, want := len(result.Changes), 6; got != want {
+	if got, want := len(result.Changes), 8; got != want {
 		t.Fatalf("unexpected change count: got %d want %d", got, want)
 	}
 	if got := countGroupedLeaves(result.Grouped); got != len(result.Changes) {
@@ -123,6 +124,60 @@ func TestSchemasFixtureBuildsStructuredGroupedProjection(t *testing.T) {
 	}
 	if _, ok := result.Grouped.Resources["my-pkg:index:RemovedResource"]["general"]; !ok {
 		t.Fatalf("expected grouped resources general entry for RemovedResource, got %+v", result.Grouped.Resources["my-pkg:index:RemovedResource"])
+	}
+}
+
+func TestSchemasIncludesRequiredToOptionalOutputs(t *testing.T) {
+	property := schema.PropertySpec{TypeSpec: schema.TypeSpec{Type: "string"}}
+	oldSchema := schema.PackageSpec{
+		Name: "my-pkg",
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{"value": property},
+					Required:   []string{"value"},
+				},
+			},
+		},
+		Functions: map[string]schema.FunctionSpec{
+			"my-pkg:index:MyFunction": {
+				Outputs: &schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{"value": property},
+					Required:   []string{"value"},
+				},
+			},
+		},
+	}
+	newSchema := schema.PackageSpec{
+		Name: "my-pkg",
+		Resources: map[string]schema.ResourceSpec{
+			"my-pkg:index:MyResource": {
+				ObjectTypeSpec: schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{"value": property},
+				},
+			},
+		},
+		Functions: map[string]schema.FunctionSpec{
+			"my-pkg:index:MyFunction": {
+				Outputs: &schema.ObjectTypeSpec{
+					Properties: map[string]schema.PropertySpec{"value": property},
+				},
+			},
+		},
+	}
+
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: -1})
+
+	if got, want := result.totalBreaking, 2; got != want {
+		t.Fatalf("unexpected breaking count: got %d want %d", got, want)
+	}
+	if got, want := len(result.Changes), 2; got != want {
+		t.Fatalf("unexpected change count: got %d want %d", got, want)
+	}
+	for _, change := range result.Changes {
+		if change.Kind != "required-to-optional" || !change.Breaking || change.Severity != SeverityError {
+			t.Fatalf("unexpected required-to-optional change: %+v", change)
+		}
 	}
 }
 
@@ -157,7 +212,7 @@ func TestSchemasMaxChangesDoesNotLimitStructuredChanges(t *testing.T) {
 	oldSchema, newSchema := mustLoadFixtureSchemas(t)
 	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: 1})
 
-	if got, want := len(result.Changes), 6; got != want {
+	if got, want := len(result.Changes), 8; got != want {
 		t.Fatalf("unexpected structured change count: got %d want %d", got, want)
 	}
 	if got := countGroupedLeaves(result.Grouped); got != len(result.Changes) {
@@ -167,9 +222,9 @@ func TestSchemasMaxChangesDoesNotLimitStructuredChanges(t *testing.T) {
 
 func TestSchemasMaxChangesEqualToTotalIncludesAllChanges(t *testing.T) {
 	oldSchema, newSchema := mustLoadFixtureSchemas(t)
-	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: 6})
+	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: 8})
 
-	if got, want := len(result.displayed), 6; got != want {
+	if got, want := len(result.displayed), 8; got != want {
 		t.Fatalf("displayed change count: got %d want %d", got, want)
 	}
 }
@@ -209,13 +264,13 @@ func TestSchemasMaxChangesZeroTracksTotalBreakingCountWithoutTruncatingStructure
 	oldSchema, newSchema := mustLoadFixtureSchemas(t)
 	result := Schemas(oldSchema, newSchema, Options{Provider: "my-pkg", MaxChanges: 0})
 
-	if got, want := len(result.Changes), 6; got != want {
+	if got, want := len(result.Changes), 8; got != want {
 		t.Fatalf("expected full structured changes with max-changes=0, got %d want %d", got, want)
 	}
 	if isGroupedEmpty(result.Grouped) {
 		t.Fatalf("expected grouped structured changes with max-changes=0")
 	}
-	if got, want := result.totalBreaking, 6; got != want {
+	if got, want := result.totalBreaking, 8; got != want {
 		t.Fatalf("unexpected total breaking count: got %d want %d", got, want)
 	}
 }
@@ -591,6 +646,7 @@ func expectedFixtureSummaryCounts() map[string]int {
 		"missing-function":     1,
 		"missing-resource":     1,
 		"optional-to-required": 3,
+		"required-to-optional": 2,
 		"type-changed":         1,
 	}
 }
@@ -607,6 +663,10 @@ func expectedFixtureSummaryEntries() map[string][]string {
 			`Functions: "my-pkg:index:MyFunction": inputs: required: "arg" input has changed to Required`,
 			`Resources: "my-pkg:index:MyResource": required inputs: "count" input has changed to Required`,
 			`Types: "my-pkg:index:MyType": required: "count" property has changed to Required`,
+		},
+		"required-to-optional": {
+			`Resources: "my-pkg:index:MyResource": required: "value" property is no longer Required`,
+			`Types: "my-pkg:index:MyType": required: "field" property is no longer Required`,
 		},
 		"type-changed": {
 			`Types: "my-pkg:index:MyType": properties: "field" type changed from "string" to "integer"`,

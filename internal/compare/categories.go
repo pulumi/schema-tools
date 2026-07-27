@@ -26,7 +26,7 @@ func formatName(provider, s string) string {
 	return strings.ReplaceAll(strings.TrimPrefix(s, fmt.Sprintf("%s:", provider)), ":", ".")
 }
 
-func kindSeverity(kind ChangeKind, path []string) Severity {
+func kindSeverity(kind ChangeKind, category string, path []string) Severity {
 	switch kind {
 	case ChangeKindMissingResource, ChangeKindMissingFunction, ChangeKindMissingType,
 		ChangeKindMissingInput, ChangeKindMissingOutput, ChangeKindMissingProperty,
@@ -39,7 +39,14 @@ func kindSeverity(kind ChangeKind, path []string) Severity {
 			return SeverityDanger
 		}
 		return SeverityWarn
-	case ChangeKindRequiredToOptional, ChangeKindNewResource, ChangeKindNewFunction:
+	case ChangeKindRequiredToOptional:
+		// Known output positions are critical because optionality changes the generated result shape.
+		// Shared types stay warnings because this layer does not track whether they are used as inputs or outputs.
+		if isOutputRequiredPath(category, path) {
+			return SeverityDanger
+		}
+		return SeverityWarn
+	case ChangeKindNewResource, ChangeKindNewFunction:
 		return SeverityInfo
 	case ChangeKindTokenRemapped:
 		return SeverityWarn
@@ -51,12 +58,10 @@ func kindBreaking(kind ChangeKind) bool {
 	switch kind {
 	case ChangeKindNewResource, ChangeKindNewFunction:
 		return false
-	case ChangeKindRequiredToOptional:
-		return false
 	case ChangeKindMissingResource, ChangeKindMissingFunction, ChangeKindMissingType,
 		ChangeKindMissingInput, ChangeKindMissingOutput, ChangeKindMissingProperty,
-		ChangeKindTypeChanged, ChangeKindOptionalToRequired, ChangeKindTokenRemapped,
-		ChangeKindSignatureChanged:
+		ChangeKindTypeChanged, ChangeKindOptionalToRequired, ChangeKindRequiredToOptional,
+		ChangeKindTokenRemapped, ChangeKindSignatureChanged:
 		return true
 	}
 	panic("unsupported change kind breaking mapping")
@@ -68,7 +73,7 @@ func newChange(category, name string, path []string, kind ChangeKind, descriptio
 		Name:        name,
 		Path:        path,
 		Kind:        kind,
-		Severity:    kindSeverity(kind, path),
+		Severity:    kindSeverity(kind, category, path),
 		Breaking:    kindBreaking(kind),
 		Description: description,
 	}
@@ -79,4 +84,15 @@ func isInputRequiredPath(path []string) bool {
 		return false
 	}
 	return path[0] == "required inputs" || (len(path) >= 2 && path[0] == "inputs" && path[1] == "required")
+}
+
+func isOutputRequiredPath(category string, path []string) bool {
+	switch category {
+	case resourcesCategory:
+		return len(path) > 0 && path[0] == "required"
+	case functionsCategory:
+		return len(path) >= 2 && path[0] == "outputs" && path[1] == "required"
+	default:
+		return false
+	}
 }
